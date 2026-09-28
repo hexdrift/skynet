@@ -281,17 +281,19 @@ export function DashboardView() {
       getDashboardStats({
         data: effectiveData,
         filteredItems,
-        counts,
+        // Demo jobs come without server counts; the real ones would show a
+        // new user zeros above a table full of demo runs.
+        counts: demoJobs ? null : counts,
         analyticsData: effectiveAnalytics,
         activeTab,
       }),
-    [effectiveData, filteredItems, counts, effectiveAnalytics, activeTab],
+    [effectiveData, filteredItems, counts, demoJobs, effectiveAnalytics, activeTab],
   );
 
   // Owner/Role columns and the shared stat card only appear once the caller
   // actually collaborates — a solo user's control panel stays unchanged.
   const hasShared =
-    (counts?.shared ?? 0) > 0 ||
+    (!demoJobs && (counts?.shared ?? 0) > 0) ||
     (Array.isArray(effectiveData?.items) && effectiveData.items.some((j) => Boolean(j.role))) ||
     false;
 

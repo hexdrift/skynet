@@ -24,6 +24,7 @@ import {
   type DatasetSummary,
 } from "@/shared/lib/api";
 import type {
+  ModelCatalogResponse,
   ModelConfig,
   SplitFractions,
   ValidateCodeResponse,
@@ -37,6 +38,7 @@ import type {
 import { parseDatasetFile, type ParsedDataset } from "@/shared/lib/parse-dataset";
 import type { ValidationResult as EditorValidationResult } from "@/shared/ui/code-editor";
 import { registerTutorialHook } from "@/features/tutorial";
+import { getModelCatalog } from "@/shared/lib/model-catalog";
 import { useByokKeys } from "@/features/byok";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { useWizardStateOptional } from "@/features/agent-panel";
@@ -92,6 +94,12 @@ const DEFAULT_TARGET_SCORE = "100";
 // 1x1 is GEPA's classic single-mutation sampling. Left at the default the
 // wizard sends nothing, so the server-wide GEPA_PXN_* settings still apply.
 const DEFAULT_PXN = "1";
+
+// The tour's model pick: the catalog's first available model. Custom BYOK
+// connections are skipped because they belong to one account's keys.
+function demoModelName(catalog: ModelCatalogResponse): string | null {
+  return catalog.models.find((m) => m.available && !m.byok_provider)?.value ?? null;
+}
 
 function prepareModelConfig(config: ModelConfig): ModelConfig {
   const { base_url: _baseUrl, ...fields } = config;
@@ -430,6 +438,14 @@ export function useSubmitWizard() {
               }
             : null,
         );
+      }),
+      registerTutorialHook("setDemoModels", () => {
+        void getModelCatalog().then((c) => {
+          const name = demoModelName(c);
+          if (!name) return;
+          setModelConfig({ ...emptyModelConfig(), name });
+          setSecondModelConfig({ ...emptyModelConfig(), name });
+        });
       }),
       registerTutorialHook("setSignatureCode", (code) => {
         setSignatureCode(code);

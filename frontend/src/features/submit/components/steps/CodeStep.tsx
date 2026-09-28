@@ -360,7 +360,7 @@ export function CodeStep({ w, part }: { w: SubmitWizardContext; part: "module" |
                 </HelpTip>
               </h3>
             </div>
-            <div className="space-y-4 px-4 py-4 sm:px-6">
+            <div className="space-y-4 px-4 py-4 sm:px-6" data-tutorial="code-editors">
               <div
                 className={cn(
                   "space-y-2 transition-opacity duration-300",

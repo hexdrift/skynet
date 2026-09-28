@@ -213,6 +213,23 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
     () => registerTutorialQuery("hasTaggerData", () => parsedRows.length > 0),
     [parsedRows],
   );
+  useEffect(
+    () => registerTutorialQuery("taggerAssistAvailable", () => assistAvailable),
+    [assistAvailable],
+  );
+  // Finishing or leaving the guide must not strand its fake rows in a real
+  // setup, one click from starting a run on them.
+  useEffect(() => {
+    const onExit = () => {
+      if (file?.name !== "demo_dataset.csv") return;
+      setFile(null);
+      setParsedRows([]);
+      setParsedCols([]);
+      setInputCols([]);
+    };
+    window.addEventListener("tutorial-exited", onExit);
+    return () => window.removeEventListener("tutorial-exited", onExit);
+  }, [file]);
 
   const handleFile = useCallback(async (f: File) => {
     setError(null);
@@ -404,7 +421,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   };
 
   const steps = [
-    <Card key="data">
+    <Card key="data" data-tutorial="tagger-data">
       <CardHeader>
         <CardTitle className="text-lg">
           <HelpTip text={tip("tagger.upload_file")}>

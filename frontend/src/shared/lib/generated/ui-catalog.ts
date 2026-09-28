@@ -1359,7 +1359,23 @@ export type MessageKey =
   | "auto.features.tutorial.components.concepts.guide.literal.348"
   | "auto.features.tutorial.components.concepts.guide.literal.349"
   | "auto.features.tutorial.components.concepts.guide.literal.35"
+  | "auto.features.tutorial.components.concepts.guide.literal.350"
+  | "auto.features.tutorial.components.concepts.guide.literal.351"
+  | "auto.features.tutorial.components.concepts.guide.literal.352"
+  | "auto.features.tutorial.components.concepts.guide.literal.353"
+  | "auto.features.tutorial.components.concepts.guide.literal.354"
+  | "auto.features.tutorial.components.concepts.guide.literal.355"
+  | "auto.features.tutorial.components.concepts.guide.literal.356"
+  | "auto.features.tutorial.components.concepts.guide.literal.357"
+  | "auto.features.tutorial.components.concepts.guide.literal.358"
+  | "auto.features.tutorial.components.concepts.guide.literal.359"
   | "auto.features.tutorial.components.concepts.guide.literal.36"
+  | "auto.features.tutorial.components.concepts.guide.literal.360"
+  | "auto.features.tutorial.components.concepts.guide.literal.361"
+  | "auto.features.tutorial.components.concepts.guide.literal.362"
+  | "auto.features.tutorial.components.concepts.guide.literal.363"
+  | "auto.features.tutorial.components.concepts.guide.literal.364"
+  | "auto.features.tutorial.components.concepts.guide.literal.365"
   | "auto.features.tutorial.components.concepts.guide.literal.37"
   | "auto.features.tutorial.components.concepts.guide.literal.38"
   | "auto.features.tutorial.components.concepts.guide.literal.39"
@@ -2795,6 +2811,10 @@ export type MessageKey =
   | "tutorial.step.artifact.title"
   | "tutorial.step.code.body"
   | "tutorial.step.code.title"
+  | "tutorial.step.dataset_actions.body"
+  | "tutorial.step.dataset_actions.title"
+  | "tutorial.step.dataset_add.body"
+  | "tutorial.step.dataset_add.title"
   | "tutorial.step.dataset_library.body"
   | "tutorial.step.dataset_library.title"
   | "tutorial.step.react_tools.body"
@@ -2803,6 +2823,11 @@ export type MessageKey =
   | "tutorial.step.result_actions.title"
   | "tutorial.step.settings_providers.body"
   | "tutorial.step.settings_providers.title"
+  | "tutorial.step.sidebar_nav.body"
+  | "tutorial.step.sidebar_nav.title"
+  | "tutorial.step.tagger_data.body"
+  | "tutorial.step.tagger_task.body"
+  | "tutorial.step.tagger_task.title"
   | "tutorial.step.workflow_canvas.body"
   | "tutorial.step.workflow_canvas.title"
   | "tutorial.track.data.desc"
@@ -4282,7 +4307,23 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.348": "הריצה שהושלמה מתעדת את ציוני הבסיס והתוכנית שנבחרה, את גדלי החלוקות, תוצאות לכל דוגמה, לוגים, שימוש בטוקנים, פעילות מודלים, זמן ריצה ועלות. אפשר לבדוק או לייצא את התוכנית השמורה, או להריץ אותה דרך ממשק ה-API להגשה.",
   "auto.features.tutorial.components.concepts.guide.literal.349": "לשונית השימוש מתאימה את עצמה לתוכנית השמורה: טפסים עבור מודולים וזרימות עבודה סטנדרטיות, וצ'אט אינטראקטיבי עם שיחות כלים, כרטיסי אישור ומצב אמון עבור ReAct. פקדי שיתוף יכולים להעניק גישה לצופה או לעורך מבלי לשנות את התוכנית.",
   "auto.features.tutorial.components.concepts.guide.literal.35": "שיפור שנראה טוב על חמש דוגמאות לא בהכרח יחזיק על מאות דוגמאות, מקרי קצה ונתונים חדשים.",
+  "auto.features.tutorial.components.concepts.guide.literal.350": "הכלים שסביב הריצה",
+  "auto.features.tutorial.components.concepts.guide.literal.351": "סוכן, נתונים, מעקב וסביבת העבודה",
+  "auto.features.tutorial.components.concepts.guide.literal.352": "האופטימיזציה עצמה היא רק חלק מהעבודה. אלה הכלים שעוזרים להכין נתונים, להגדיר ריצה, לעקוב אחריה ולהשתמש בתוצאה.",
+  "auto.features.tutorial.components.concepts.guide.literal.353": "הסוכן",
+  "auto.features.tutorial.components.concepts.guide.literal.354": "חלון הסוכן זמין בכל דף. אפשר לבקש ממנו לטעון דאטאסט, למלא את האשף, לבדוק את חלוקת הנתונים, ולהשהות, להמשיך או להריץ מחדש אופטימיזציה. כל פעולה שלו מופיעה בשיחה, כך שקל לעקוב אחרי מה שעשה.",
+  "auto.features.tutorial.components.concepts.guide.literal.355": "האשף",
+  "auto.features.tutorial.components.concepts.guide.literal.356": "הגדרת ריצה עוברת ארבעה שלבים: מטרה, הערכה, אופטימיזציה וסקירה. ההתקדמות נשמרת אוטומטית כטיוטה, וכשחוזרים לאשף אפשר להמשיך מאותו שלב או להתחיל מחדש.",
+  "auto.features.tutorial.components.concepts.guide.literal.357": "נתונים ותיוג",
+  "auto.features.tutorial.components.concepts.guide.literal.358": "ספריית הדאטאסטים שומרת קובצי CSV, ‏JSON ו-Excel לשימוש חוזר, עם עריכה בגיליון ושיתוף הרשאות. בדף התיוג מתייגים שורות ידנית, עם קו-פיילוט או באוטופיילוט. כשסיוע ה-AI פעיל אפשר גם ליצור דאטאסט סינתטי מתוך ריאיון קצר על המשימה.",
+  "auto.features.tutorial.components.concepts.guide.literal.359": "מעקב אחרי ריצות",
   "auto.features.tutorial.components.concepts.guide.literal.36": "הפתרון של Skynet:",
+  "auto.features.tutorial.components.concepts.guide.literal.360": "בדף הריצה הלשוניות מפרידות בין הציונים והמסלול (סקירה), הרצה על קלט חדש (שימוש), הנתונים, הקוד, התוצר, הלוגים ופעילות המודלים. אפשר להשהות ריצה פעילה: היא נשמרת בנקודת ביקורת ועוברת לסטטוס",
+  "auto.features.tutorial.components.concepts.guide.literal.361": ". כשממשיכים אותה היא חוזרת לעבוד מאותה נקודה, ואפשר גם להריץ אותה מחדש מההתחלה.",
+  "auto.features.tutorial.components.concepts.guide.literal.362": "חיפוש ולוח הבקרה",
+  "auto.features.tutorial.components.concepts.guide.literal.363": "דף החיפוש מוצא ריצות לפי משימה, מודל או אופטימייזר, גם לפי משמעות ולא רק לפי מילים מדויקות, ופאנל המסננים מצמצם לפי תאריך, סוג ריצה, מודול, מודל ואופטימייזר. בלוח הבקרה לחיצה על עמודה או פלח בגרף מסננת לפיהם את שאר הנתונים.",
+  "auto.features.tutorial.components.concepts.guide.literal.364": "אחסון",
+  "auto.features.tutorial.components.concepts.guide.literal.365": "דף האחסון מראה כמה מהמכסה בשימוש ומה תופס מקום: דאטאסטים, אופטימיזציות, שיחות עם הסוכן וקבצים זמניים. משם מוחקים פריטים שכבר לא צריך. כשעוברים את המכסה השמירה נחסמת עד שמפנים מקום.",
   "auto.features.tutorial.components.concepts.guide.literal.37": "מגדירים משימה, דאטאסט ופונקציית מדידה, ונותנים לאופטימיזר לחפש פרומפט טוב יותר בתהליך מדיד, מתועד וחוזר על עצמו",
   "auto.features.tutorial.components.concepts.guide.literal.38": ".",
   "auto.features.tutorial.components.concepts.guide.literal.39": "החלקים של תוכנית DSPy",
@@ -4416,7 +4457,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.steps.literal.28": "נתונים ותיוג",
   "auto.features.tutorial.lib.steps.literal.29": "טופס הגדרת תיוג",
   "auto.features.tutorial.lib.steps.literal.3": "משלוח מהיר, אריזה טובה",
-  "auto.features.tutorial.lib.steps.literal.30": "אפשר להתחיל מקובץ CSV, ‏JSON או Excel, או להשתמש בדאטאסט שמור. בוחרים עמודת טקסט אחת או יותר, מצב תיוג ידני, קו-פיילוט או אוטופיילוט, ומתארים את המשימה כשצריך. מפגשי התיוג נשמרים, ניתנים לשיתוף לצפייה או לעריכה, ואת התיוג המוגמר אפשר להעביר ישירות לספריית הדאטאסטים.",
+  "auto.features.tutorial.lib.steps.literal.30": "אפשר להתחיל מקובץ CSV, ‏JSON או Excel, להשתמש בדאטאסט שמור, או לבחור «יצירת דאטאסט סינתטי» כדי לבנות שורות מתוך ריאיון קצר. בוחרים עמודת טקסט אחת או יותר, מצב תיוג ידני, קו-פיילוט או אוטופיילוט, ומתארים את המשימה כשצריך. מפגשי התיוג נשמרים, ניתנים לשיתוף לצפייה או לעריכה, ואת התיוג המוגמר אפשר להעביר ישירות לספריית הדאטאסטים.",
   "auto.features.tutorial.lib.steps.literal.31": "דרכים לתייג",
   "auto.features.tutorial.lib.steps.literal.32": "במצב ידני כל החלטה נשארת אצלך. קו-פיילוט מראיין אותך, בונה רובריקה ועובד לצדך עד שהוא מגיע לסף הבדיקה. אוטופיילוט מתייג את השורות שנותרו ומסמן מקרים לא ודאיים לבדיקה. מפגשי תיוג בסיוע AI מציגים הערכת עלות מראש, שומרים מקור ורמת ביטחון, ומסתיימים בסבב בדיקה לפני ייצוא או שמירה בספרייה.",
   "auto.features.tutorial.lib.steps.literal.33": "זהו!",
@@ -4449,7 +4490,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.steps.template.23": "פונקציה שמחזירה {p1} בין 0 ל-1 לכל תשובה. היא מגדירה מה נחשב ״תשובה טובה״, וה{p2} מנסה לשפר את ה{p3} הזה לאורך הריצה.",
   "auto.features.tutorial.lib.steps.template.24": "בחירת מודלים",
   "auto.features.tutorial.lib.steps.template.25": "{p1} מייצר תשובות ו{p2} מנתח שגיאות ומציע שיפורים. כל תפקיד מוגדר בנפרד, כולל מודל, מאמץ חשיבה, temperature ומספר טוקני פלט מרבי.",
-  "auto.features.tutorial.lib.steps.template.26": "הסיכום מרכז את המשימה, ה{p1}, ה{p2} לפי תפקיד, ה{p3}, טווח הקרדיטים המשוער ותקרת עלות קשיחה אם הוגדרה. כדאי לבדוק את הכרטיסים לפני השליחה; עריכה מחזירה ישירות לכל חלק.",
+  "auto.features.tutorial.lib.steps.template.26": "הסיכום מרכז את המשימה, ה{p1} ומיפוי העמודות, חלוקת הנתונים, ה{p2} לפי תפקיד, הגדרות ה{p3} והקוד. כדאי לבדוק את הכרטיסים לפני השליחה; עריכה מחזירה ישירות לכל חלק.",
   "auto.features.tutorial.lib.steps.template.27": "שליחת אופטימיזציה",
   "auto.features.tutorial.lib.steps.template.28": "זה הכפתור שמפעיל את הריצה. אחרי הלחיצה המערכת מאמתת את הקלט, מחלקת את הנתונים, מריצה {p1}, ואז מפעילה את ה{p2}. אפשר לעקוב אחרי ההתקדמות בזמן אמת בדף התוצאות.",
   "auto.features.tutorial.lib.steps.template.29": "אחרי שליחת {p1} מגיעים לדף התוצאות. בראש הדף מופיעים שם ה{p2}, התיאור, סטטוס הריצה והזמן שעבר. כפתור שכפול יוצר {p3} חדשה עם אותן הגדרות. בזמן ריצה פעילה מופיע כפתור ביטול, ולאחר סיום או כישלון מופיע כפתור מחיקה.",
@@ -5718,6 +5759,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.artifact.title": "בדיקה וייצוא של התוצאה",
   "tutorial.step.code.body": "לשונית Code שומרת את מה שנכנס לריצה. בריצת מודול יחיד מופיעים ה-Signature והמדד; בריצת workflow מופיעים תוכנית ה-DSPy המהודרת, המדד והגרף לקריאה בלבד. הפלט המשופר נמצא בנפרד ב-Artifact.",
   "tutorial.step.code.title": "קוד מקור ו-workflow",
+  "tutorial.step.dataset_actions.body": "מסמנים את התיבה של דאטאסט כדי לפעול עליו. סמל התגית שולח אותו לתיוג, סמל הטבלה עורך את השורות שלו, סמל האנשים קובע מי יכול לראות אותו, והעיפרון משנה את שמו. אפשר לסמן כמה דאטאסטים יחד ולמחוק אותם בבת אחת.",
+  "tutorial.step.dataset_actions.title": "עבודה עם דאטאסט",
+  "tutorial.step.dataset_add.body": "מוסיפים נתונים פעם אחת ומשתמשים בהם בכל ריצה: לוחצים על «העלאת דאטאסט» כדי להעלות קובץ CSV, ‏JSON או Excel, או גוררים את הקובץ לרשימה. שדה החיפוש מסנן את הספרייה לפי שם.",
+  "tutorial.step.dataset_add.title": "הוספת דאטאסט",
   "tutorial.step.dataset_library.body": "מעלים CSV, ‏JSON או Excel פעם אחת ומשתמשים בו בכל מקום. אפשר לחפש בספרייה, לבדוק שורות ואופטימיזציות מקושרות, לערוך בגיליון עם שמירה אוטומטית וביטול, לשתף הרשאת צפייה או עריכה, או לשכפל לספרייה האישית דאטאסט ששיתפו איתך.",
   "tutorial.step.dataset_library.title": "ספריית דאטאסטים לשימוש חוזר",
   "tutorial.step.react_tools.body": "ReAct מתאים למשימות שדורשות כלים. כאן בוחרים מקורות כלים מורשים ומגבלת איטרציות; כללי האישור עדיין חלים בזמן הריצה. בלשונית Usage ‏Skynet מציג חשיבה, פעולות, תצפיות ותשובה סופית כפעילות מובנית.",
@@ -5726,6 +5771,11 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.result_actions.title": "שיתוף או שימוש חוזר בריצה",
   "tutorial.step.settings_providers.body": "שומרים ומאמתים מפתח ספק פעם אחת; המפתח הסודי מוצפן, ורק גרסה מוסווית שלו נשלחת בחזרה לדפדפן. לאחר האימות אפשר להעביר כל בורר מודל למצב BYOK ולבחור מודלים הזמינים דרך החיבור הזה.",
   "tutorial.step.settings_providers.title": "ניהול ספקי BYOK",
+  "tutorial.step.sidebar_nav.body": "בסרגל הצד עוברים בין הדפים. לחיצה על ‎⌘K או Ctrl+K מכל מקום פותחת חיפוש שקופץ לכל דף, פעולה או הגדרה.",
+  "tutorial.step.sidebar_nav.title": "התמצאות באפליקציה",
+  "tutorial.step.tagger_data.body": "בוחרים את השורות לתיוג: מעלים קובץ CSV, ‏JSON או Excel, או בוחרים דאטאסט שמור מהספרייה. אחר כך מסמנים את עמודות הטקסט לתיוג.",
+  "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך, או תשובה כתובה.",
+  "tutorial.step.tagger_task.title": "הגדרת המשימה",
   "tutorial.step.workflow_canvas.body": "בוחרים Workflow כשהמשימה דורשת כמה צעדים מחוברים. אפשר לבנות את הגרף ידנית או לבקש מסוכן הקוד ליצור ולעדכן אותו, להגדיר כל צומת, לחבר כלים לפי הצורך ולהריץ קלט לדוגמה לפני השליחה.",
   "tutorial.step.workflow_canvas.title": "בניית workflow רב-שלבי",
   "tutorial.track.data.desc": "העלאה, עריכה, תיוג, שיתוף ושימוש חוזר בדאטאסטים.",
@@ -5734,7 +5784,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.track.quick.name": "התחלה מהירה",
   "tutorial.track.results.desc": "קריאת ציונים, מסלולים, לוגים, קוד, תוצרים וייצוא.",
   "tutorial.track.results.name": "שימוש בתוצאה",
-  "tutorial.track.workspace.desc": "ניווט, חיפוש, שיתוף פעולה, ניהול עלויות והגדרת החשבון.",
+  "tutorial.track.workspace.desc": "ניווט, חיפוש, מעקב אחרי ריצות, עבודה עם הסוכן והגדרת החשבון.",
   "tutorial.track.workspace.name": "סביבת עבודה והגדרות",
   "usage.action.export": "ייצוא",
   "usage.action.refresh": "רענון",

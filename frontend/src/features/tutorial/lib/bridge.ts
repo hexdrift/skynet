@@ -21,7 +21,8 @@
  */
 import type { ParsedDataset } from "@/shared/lib/parse-dataset";
 import type { PaginatedJobsResponse } from "@/shared/types/api";
-import type { DashboardAnalytics, PublicDashboardPoint } from "@/shared/lib/api";
+import type { DashboardAnalytics, DatasetSummary, PublicDashboardPoint } from "@/shared/lib/api";
+import type { TutorialTrack } from "./steps";
 
 /**
  * The set of hooks the tutorial system can invoke. Every hook is a
@@ -103,6 +104,14 @@ export interface TutorialHooks {
    * instead of jumping to the completed state.
    */
   replayDemoSimulation: () => void;
+  /** Jump the demo optimization straight to its finished state. */
+  finishDemoSimulation: () => void;
+  /** Pick the demo generation and reflection models in the submit wizard. */
+  setDemoModels: () => void;
+  /** Overlay demo cards on the dataset library, or clear them with null. */
+  setDemoDatasets: (datasets: DatasetSummary[] | null) => void;
+  /** Replace the dataset library's selection. */
+  setSelectedDatasetIds: (ids: string[]) => void;
 }
 
 /**
@@ -114,6 +123,10 @@ export interface TutorialQueries {
   hasDashboardData: () => boolean;
   /** Check if the tagger setup has data loaded. */
   hasTaggerData: () => boolean;
+  /** Whether the tagger setup offers AI assist (mode picker, synthetic data). */
+  taggerAssistAvailable: () => boolean;
+  /** The guide currently running, or null when none is. */
+  activeTutorialTrack: () => TutorialTrack | null;
 }
 
 const registry: Partial<TutorialHooks> = {};

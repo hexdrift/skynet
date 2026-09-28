@@ -11,6 +11,7 @@ import {
   TreeStructure,
   Lightbulb,
   Compass,
+  SquaresFour,
 } from "@/shared/ui/icons";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
@@ -65,14 +66,20 @@ const SECTIONS: readonly SectionMeta[] = perLocale(() => [
     Icon: TreeStructure,
   },
   {
-    id: "tips",
+    id: "app",
     num: "6",
+    title: msg("auto.features.tutorial.components.concepts.guide.literal.350"),
+    Icon: SquaresFour,
+  },
+  {
+    id: "tips",
+    num: "7",
     title: msg("auto.features.tutorial.components.concepts.guide.literal.6"),
     Icon: Lightbulb,
   },
   {
     id: "glossary",
-    num: "7",
+    num: "8",
     title: msg("auto.features.tutorial.components.concepts.guide.literal.7"),
     Icon: Compass,
   },
@@ -173,6 +180,7 @@ export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
             <SectionParameters />
             <SectionTaskDefinition />
             <SectionWorkflow />
+            <SectionApp />
             <SectionTips />
             <SectionGlossary />
           </div>
@@ -991,6 +999,43 @@ function SectionWorkflow() {
   );
 }
 
+function SectionApp() {
+  return (
+    <GuideSection
+      id="app"
+      num="6"
+      title={msg("auto.features.tutorial.components.concepts.guide.literal.350")}
+      kicker={msg("auto.features.tutorial.components.concepts.guide.literal.351")}
+    >
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.352")}</p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.353")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.354")}</p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.355")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.356")}</p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.357")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.358")}</p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.359")}</SubHeading>
+      <p>
+        {msg("auto.features.tutorial.components.concepts.guide.literal.360")}{" "}
+        <InlineCode>
+          {msg("auto.features.tutorial.components.concepts.guide.literal.295")}
+        </InlineCode>
+        {msg("auto.features.tutorial.components.concepts.guide.literal.361")}
+      </p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.362")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.363")}</p>
+
+      <SubHeading>{msg("auto.features.tutorial.components.concepts.guide.literal.364")}</SubHeading>
+      <p>{msg("auto.features.tutorial.components.concepts.guide.literal.365")}</p>
+    </GuideSection>
+  );
+}
+
 function SectionTips() {
   const problems: Array<[string, React.ReactNode]> = [
     [
@@ -1013,7 +1058,7 @@ function SectionTips() {
   return (
     <GuideSection
       id="tips"
-      num="6"
+      num="7"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.6")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.220")}
     >
@@ -1134,7 +1179,7 @@ function SectionGlossary() {
   return (
     <GuideSection
       id="glossary"
-      num="7"
+      num="8"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.7")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.252")}
     >

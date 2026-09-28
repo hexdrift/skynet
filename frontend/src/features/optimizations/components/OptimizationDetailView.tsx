@@ -64,6 +64,7 @@ import {
   DEMO_TRAJECTORY_PREVIEW_LAYOUT,
   buildDemoOptimizationPayload,
   buildGridDemoJob,
+  finishDemoSimulation,
   resetDemoSimulation,
   startDemoSimulation,
 } from "@/features/tutorial/lib/demo-data";
@@ -306,6 +307,15 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
       registerTutorialHook("replayDemoSimulation", () => {
         resetDemoSimulation();
         setDemoReplayKey((k) => k + 1);
+      }),
+    [],
+  );
+  // Re-running the simulation effect clears the pending replay timers, and a
+  // completed simulation starts straight at the finished run.
+  useEffect(
+    () =>
+      registerTutorialHook("finishDemoSimulation", () => {
+        if (finishDemoSimulation()) setDemoReplayKey((k) => k + 1);
       }),
     [],
   );

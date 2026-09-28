@@ -31,6 +31,7 @@ import { DATASET_UPLOAD_ACCEPT, parseDatasetFile } from "@/shared/lib/parse-data
 import { track, TelemetryEvent } from "@/shared/lib/telemetry";
 import { cn } from "@/shared/lib/utils";
 import { ListPageSkeleton } from "@/shared/ui/list-page-skeleton";
+import { registerTutorialHook } from "@/features/tutorial";
 import { useDatasets } from "../hooks/use-datasets";
 import { DatasetCard } from "./DatasetCard";
 import { DatasetDetailDialog } from "./DatasetDetailDialog";
@@ -45,7 +46,11 @@ import { DatasetShareDialog } from "./DatasetShareDialog";
  * preview and the reverse link to every optimization that used the dataset.
  */
 export function DatasetsView() {
-  const { datasets, loading, error, refetch } = useDatasets();
+  const { datasets: fetchedDatasets, loading, error, refetch } = useDatasets();
+  // Demo overlay the guided tour injects, so a new account still has a card to
+  // select; background refetches can never overwrite it.
+  const [demoDatasets, setDemoDatasets] = React.useState<DatasetSummary[] | null>(null);
+  const datasets = demoDatasets ?? fetchedDatasets;
   const searchParams = useSearchParams();
   const router = useRouter();
   const [search, setSearch] = React.useState("");
@@ -62,6 +67,21 @@ export function DatasetsView() {
   const [renameOpen, setRenameOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const deepLinkedRef = React.useRef(false);
+
+  React.useEffect(() => registerTutorialHook("setDemoDatasets", setDemoDatasets), []);
+  React.useEffect(
+    () => registerTutorialHook("setSelectedDatasetIds", (ids) => setSelectedIds(new Set(ids))),
+    [],
+  );
+  React.useEffect(() => {
+    const onExit = () => {
+      setDemoDatasets(null);
+      setSelectedIds(new Set());
+      setAnchorId(null);
+    };
+    window.addEventListener("tutorial-exited", onExit);
+    return () => window.removeEventListener("tutorial-exited", onExit);
+  }, []);
 
   // Drop selections that stopped resolving to an owned dataset (deleted in
   // another tab, or ownership changed), so the bar never counts ghosts.
@@ -184,7 +204,7 @@ export function DatasetsView() {
     [uploading, refetch],
   );
 
-  if (loading) {
+  if (loading && !demoDatasets) {
     return (
       <div className="pb-16" data-tutorial="datasets-library">
         <DataHubTabs active="datasets" />
@@ -208,7 +228,10 @@ export function DatasetsView() {
       />
 
       {datasets.length > 0 && (
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <div
+          className="flex flex-col gap-2.5 sm:flex-row sm:items-center"
+          data-tutorial="datasets-add"
+        >
           <SearchField
             value={search}
             onValueChange={setSearch}
@@ -247,7 +270,7 @@ export function DatasetsView() {
           dragging ? "border-[#3D2E22]/50 bg-[#3D2E22]/[0.03]" : "border-transparent",
         )}
       >
-        {error ? (
+        {error && !demoDatasets ? (
           <EmptyState icon={Database} title={msg("datasets.error")} />
         ) : datasets.length === 0 ? (
           <EmptyState

@@ -8,16 +8,19 @@
 
 import {
   resetDemoSimulation,
+  DEMO_DATASET_ID,
   DEMO_METRIC_CODE,
   DEMO_OPTIMIZATION_ID,
   DEMO_SIGNATURE_CODE,
   getCachedDemoDashboardAnalytics,
   getCachedDemoDashboardJobs,
   getCachedDemoExplorePoints,
+  getDemoDatasets,
 } from "./demo-data";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
+import { PHONE_MEDIA_QUERY } from "@/shared/lib/device-class";
 import { TUTORIAL_SUBMIT_SPLASH_MS } from "./tutorial-timing";
 import { WIZARD_STAGE } from "@/features/submit";
 
@@ -128,6 +131,34 @@ function waitForElement(selector: string, timeoutMs = 5000): Promise<boolean> {
   });
 }
 
+/**
+ * Wait until an element's rect is unchanged across two consecutive frames, so
+ * a spring-in (e.g. the selection bar) is measured at its resting position.
+ */
+function waitForStableRect(selector: string, timeoutMs = 2000): Promise<void> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    let prev: DOMRect | null = null;
+    const check = () => {
+      const rect = document.querySelector(selector)?.getBoundingClientRect() ?? null;
+      const stable =
+        !!rect &&
+        !!prev &&
+        rect.x === prev.x &&
+        rect.y === prev.y &&
+        rect.width === prev.width &&
+        rect.height === prev.height;
+      if (stable || Date.now() - start > timeoutMs) {
+        resolve();
+        return;
+      }
+      prev = rect;
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+}
+
 /** Show a splash screen identical to the real submit animation */
 function showSubmitSplash(): Promise<void> {
   callTutorialHook("showTutorialSplash");
@@ -195,7 +226,8 @@ function setOptimizerName(name: string) {
 }
 
 async function ensureTagger() {
-  if (!window.location.pathname.startsWith("/tagger")) {
+  // A saved session (/tagger/[id]) never shows setup, so leave it for the plain page.
+  if (window.location.pathname !== "/tagger") {
     navigateTo("/tagger");
     await waitForHook("setTaggerStartingNew");
     // Force the sessions chooser into setup; no-op if already in setup
@@ -219,11 +251,15 @@ async function ensureExplore() {
   callTutorialHook("setDemoExplorePoints", getCachedDemoExplorePoints());
 }
 
+/** Open /datasets with a demo card, so a new account's empty library still shows the controls. */
 async function ensureDatasets() {
   if (window.location.pathname !== "/datasets") {
     navigateTo("/datasets");
     await waitForElement("[data-tutorial='datasets-library']");
   }
+  await waitForHook("setDemoDatasets");
+  callTutorialHook("setDemoDatasets", getDemoDatasets());
+  await waitForElement("[data-tutorial='datasets-add']");
 }
 
 async function openSettingsTab(tab: string) {
@@ -236,6 +272,9 @@ async function openSettingsTab(tab: string) {
 function closeSettings() {
   callTutorialHook("setSettingsTab", null);
 }
+
+/** Whether the agent panel was already open before the tour showed it. */
+let agentPanelWasOpen = false;
 
 function setGeneralistPanelOpen(open: boolean) {
   callTutorialHook("setGeneralistPanelOpen", open);
@@ -286,32 +325,66 @@ function injectSampleDataset() {
 
 const tutorialSteps: TutorialStep[] = perLocale(() => [
   {
-    id: "dd-dataset-library",
-    title: msg("tutorial.step.dataset_library.title"),
-    description: msg("tutorial.step.dataset_library.body"),
-    target: "[data-tutorial='datasets-library']",
+    id: "dd-dataset-add",
+    title: msg("tutorial.step.dataset_add.title"),
+    description: msg("tutorial.step.dataset_add.body"),
+    target: "[data-tutorial='datasets-add']",
     placement: "bottom",
     beforeShow: ensureDatasets,
     tracks: DATA_ONLY,
-    readingTimeSec: 10,
+    readingTimeSec: 9,
+  },
+  {
+    id: "dd-dataset-actions",
+    title: msg("tutorial.step.dataset_actions.title"),
+    description: msg("tutorial.step.dataset_actions.body"),
+    target: "[data-tutorial='datasets-selection']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureDatasets();
+      await waitForHook("setSelectedDatasetIds");
+      callTutorialHook("setSelectedDatasetIds", [DEMO_DATASET_ID]);
+      await waitForElement("[data-tutorial='datasets-selection']");
+      await waitForStableRect("[data-tutorial='datasets-selection']");
+    },
+    afterHide: () => {
+      callTutorialHook("setSelectedDatasetIds", []);
+    },
+    tracks: DATA_ONLY,
+    readingTimeSec: 9,
   },
   {
     id: "dd-tagger-setup",
     title: msg("auto.features.tutorial.lib.steps.literal.29"),
-    description: msg("auto.features.tutorial.lib.steps.literal.30"),
-    target: "[data-tutorial='tagger-setup']",
+    // The synthetic-dataset option only renders with AI assist on.
+    get description() {
+      return queryTutorialHook("taggerAssistAvailable") === false
+        ? msg("tutorial.step.tagger_data.body")
+        : msg("auto.features.tutorial.lib.steps.literal.30");
+    },
+    target: "[data-tutorial='tagger-data']",
     placement: "auto",
     beforeShow: async () => {
       await ensureTagger();
       injectDemoTaggerData(0);
     },
     tracks: DATA_ONLY,
-    readingTimeSec: 8,
+    readingTimeSec: 10,
   },
   {
     id: "dd-tagger-modes",
-    title: msg("auto.features.tutorial.lib.steps.literal.31"),
-    description: msg("auto.features.tutorial.lib.steps.literal.32"),
+    // With AI assist off, the same anchor sits on the task card instead of the
+    // mode picker, so the copy is chosen once setup has mounted.
+    get title() {
+      return queryTutorialHook("taggerAssistAvailable") === false
+        ? msg("tutorial.step.tagger_task.title")
+        : msg("auto.features.tutorial.lib.steps.literal.31");
+    },
+    get description() {
+      return queryTutorialHook("taggerAssistAvailable") === false
+        ? msg("tutorial.step.tagger_task.body")
+        : msg("auto.features.tutorial.lib.steps.literal.32");
+    },
     target: "[data-tutorial='tagger-modes']",
     placement: "auto",
     beforeShow: async () => {
@@ -320,7 +393,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await waitForElement("[data-tutorial='tagger-modes']");
     },
     tracks: DATA_ONLY,
-    readingTimeSec: 9,
+    readingTimeSec: 12,
   },
   {
     id: "dd-data-upload",
@@ -329,15 +402,16 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       p1: TERMS.examplePlural,
       p2: TERMS.optimization,
     })} ${formatMsg("auto.features.tutorial.lib.steps.template.18", { p1: TERMS.model })}`,
-    target: "[data-tutorial='dataset-upload']",
+    target: "[data-tutorial='wizard-step-2']",
     placement: "left",
     beforeShow: async () => {
       await ensureSubmit();
       injectSampleDataset();
       setWizardStep(WIZARD_STAGE.evaluation);
+      await waitForElement("[data-tutorial='dataset-upload']");
     },
     tracks: QUICK_ONLY,
-    readingTimeSec: 7,
+    readingTimeSec: 14,
   },
   {
     id: "dd-code-setup",
@@ -349,7 +423,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       p2: TERMS.optimizer,
       p3: TERMS.score,
     })}`,
-    target: "[data-tutorial='signature-editor']",
+    target: "[data-tutorial='code-editors']",
     placement: "top",
     beforeShow: async () => {
       await ensureSubmit();
@@ -359,10 +433,10 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       callTutorialHook("chooseModule", "predict");
       callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
       callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
-      await waitForElement("[data-tutorial='signature-editor']");
+      await waitForElement("[data-tutorial='code-editors']");
     },
     tracks: QUICK_ONLY,
-    readingTimeSec: 12,
+    readingTimeSec: 13,
   },
 
   {
@@ -377,14 +451,16 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     placement: "bottom",
     beforeShow: async () => {
       await ensureSubmit();
+      callTutorialHook("setDemoModels");
       setWizardStep(WIZARD_STAGE.optimization);
+      await waitForElement("[data-tutorial='model-catalog']");
     },
     tracks: QUICK_ONLY,
-    readingTimeSec: 7,
+    readingTimeSec: 8,
   },
   {
     id: "dd-review",
-    title: msg("auto.features.tutorial.lib.steps.literal.21"),
+    title: msg("auto.features.tutorial.lib.steps.template.27"),
     description: formatMsg("auto.features.tutorial.lib.steps.template.26", {
       p1: TERMS.dataset,
       p2: TERMS.modelPlural,
@@ -395,42 +471,11 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     beforeShow: async () => {
       await ensureSubmit();
       setOptimizerName("gepa");
+      callTutorialHook("setDemoModels");
       setWizardStep(WIZARD_STAGE.review);
     },
     tracks: QUICK_ONLY,
-    readingTimeSec: 5,
-  },
-  {
-    id: "dd-result-actions",
-    title: msg("tutorial.step.result_actions.title"),
-    description: msg("tutorial.step.result_actions.body"),
-    target: "[data-tutorial='result-actions']",
-    placement: "left",
-    beforeShow: async () => {
-      await ensureDemoDetail();
-      setDetailTab("overview");
-      await waitForElement("[data-tutorial='result-actions']");
-    },
-    tracks: RESULTS_ONLY,
-    readingTimeSec: 9,
-  },
-  {
-    id: "dd-pipeline",
-    title: msg("auto.features.tutorial.lib.steps.literal.23"),
-    description: formatMsg("auto.features.tutorial.lib.steps.template.30", {
-      p1: TERMS.optimization,
-      p2: TERMS.baselineScore,
-      p3: TERMS.optimization,
-      p4: TERMS.optimization,
-    }),
-    target: "[data-tutorial='pipeline-stages']",
-    placement: "bottom",
-    beforeShow: async () => {
-      await ensureDemoDetail();
-      setDetailTab("overview");
-    },
-    tracks: RESULTS_ONLY,
-    readingTimeSec: 8,
+    readingTimeSec: 12,
   },
   {
     id: "dd-scores",
@@ -443,16 +488,24 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     target: "[data-tutorial='score-cards']",
     placement: "bottom",
     beforeShow: async () => {
+      // Only the quick start just "submitted" the demo run; the results guide
+      // opens on the finished run instead of replaying a submission.
       const onDetail = window.location.pathname === `/optimizations/${DEMO_OPTIMIZATION_ID}`;
-      if (!onDetail) {
+      if (!onDetail && queryTutorialHook("activeTutorialTrack") === "quick") {
         resetDemoSimulation();
         await showSubmitSplash();
       }
       await ensureDemoDetail();
+      // Other guides describe a finished run; without this the page replays
+      // the run live and the optimized card shows a dash.
+      if (queryTutorialHook("activeTutorialTrack") !== "quick") {
+        callTutorialHook("finishDemoSimulation");
+      }
       setDetailTab("overview");
+      await waitForElement("[data-tutorial='score-cards']");
     },
-    tracks: QUICK_ONLY,
-    readingTimeSec: 5,
+    tracks: QUICK_AND_RESULTS,
+    readingTimeSec: 7,
   },
   {
     id: "dd-trajectory",
@@ -467,6 +520,10 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       // landing on a completed graph with no explanation of its branches.
       callTutorialHook("replayDemoSimulation");
       await waitForElement("[data-tutorial='trajectory-panel']");
+    },
+    // The replay hides the Artifact tab until it ends, so skip to the result.
+    afterHide: () => {
+      callTutorialHook("finishDemoSimulation");
     },
     tracks: RESULTS_ONLY,
     readingTimeSec: 12,
@@ -483,8 +540,8 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       setDetailTab("playground");
       await waitForElement("[data-tutorial='serve-playground']");
     },
-    tracks: QUICK_ONLY,
-    readingTimeSec: 12,
+    tracks: QUICK_AND_RESULTS,
+    readingTimeSec: 9,
   },
   {
     id: "dd-code",
@@ -498,7 +555,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await waitForElement("[data-tutorial='code-sources']");
     },
     tracks: RESULTS_ONLY,
-    readingTimeSec: 9,
+    readingTimeSec: 11,
   },
   {
     id: "dd-artifact",
@@ -527,7 +584,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       p7: TERMS.score,
     }),
     target: "[data-tutorial='data-table']",
-    placement: "top",
+    placement: "bottom",
     offsetY: 0,
     beforeShow: async () => {
       await ensureDemoDetail();
@@ -535,7 +592,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await waitForElement("[data-tutorial='data-table']");
     },
     tracks: RESULTS_ONLY,
-    readingTimeSec: 9,
+    readingTimeSec: 13,
   },
   {
     id: "dd-logs",
@@ -549,21 +606,34 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await waitForElement("[data-tutorial='live-logs']");
     },
     tracks: RESULTS_ONLY,
-    readingTimeSec: 6,
+    readingTimeSec: 9,
   },
   {
-    id: "dd-kpis",
-    title: msg("auto.features.tutorial.lib.steps.literal.6"),
-    description: msg("auto.features.tutorial.lib.steps.literal.7"),
-    target: "[data-tutorial='dashboard-kpis']",
-    placement: "bottom",
+    id: "dd-result-actions",
+    title: msg("tutorial.step.result_actions.title"),
+    description: msg("tutorial.step.result_actions.body"),
+    target: "[data-tutorial='result-actions']",
+    placement: "left",
+    beforeShow: async () => {
+      await ensureDemoDetail();
+      setDetailTab("overview");
+      await waitForElement("[data-tutorial='result-actions']");
+    },
+    tracks: RESULTS_ONLY,
+    readingTimeSec: 9,
+  },
+  {
+    id: "dd-sidebar-nav",
+    title: msg("tutorial.step.sidebar_nav.title"),
+    description: msg("tutorial.step.sidebar_nav.body"),
+    target: "[data-tutorial='sidebar-nav']",
+    placement: "right",
     beforeShow: async () => {
       await ensureDashboard();
-      injectDemoDashboardData();
-      setTab("jobs");
+      await waitForElement("[data-tutorial='sidebar-nav']");
     },
     tracks: WORKSPACE_ONLY,
-    readingTimeSec: 4,
+    readingTimeSec: 6,
   },
   {
     id: "dd-table",
@@ -583,7 +653,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await waitForElement("[data-tutorial='dashboard-table']");
     },
     tracks: WORKSPACE_ONLY,
-    readingTimeSec: 6,
+    readingTimeSec: 11,
   },
   {
     id: "dd-analytics",
@@ -593,17 +663,17 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       p2: TERMS.optimization,
       p3: TERMS.optimization,
     }),
-    target: "[data-tutorial='dashboard-stats']",
+    target: "[data-tutorial='analytics-content']",
     placement: "bottom",
     beforeShow: async () => {
       await ensureDashboard();
       injectDemoDashboardData();
       setTab("analytics");
-      await waitForElement("[data-tutorial='dashboard-stats']");
+      await waitForElement("[data-tutorial='analytics-content']");
       await new Promise((r) => setTimeout(r, 250));
     },
     tracks: WORKSPACE_ONLY,
-    readingTimeSec: 5,
+    readingTimeSec: 9,
   },
   {
     id: "dd-explore",
@@ -615,7 +685,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await ensureExplore();
     },
     tracks: WORKSPACE_ONLY,
-    readingTimeSec: 14,
+    readingTimeSec: 11,
   },
   {
     id: "dd-agent-panel",
@@ -624,12 +694,12 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     target: "[data-tutorial='agent-panel']",
     placement: "left",
     beforeShow: async () => {
-      await ensureDashboard();
+      agentPanelWasOpen = isElementVisible("[data-tutorial='agent-panel']");
       setGeneralistPanelOpen(true);
       await waitForElement("[data-tutorial='agent-panel']");
     },
     afterHide: () => {
-      setGeneralistPanelOpen(false);
+      if (!agentPanelWasOpen) setGeneralistPanelOpen(false);
     },
     tracks: WORKSPACE_ONLY,
     readingTimeSec: 10,
@@ -643,16 +713,26 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     beforeShow: () => openSettingsTab("providers"),
     afterHide: closeSettings,
     tracks: WORKSPACE_ONLY,
-    readingTimeSec: 9,
+    readingTimeSec: 12,
   },
 ]);
 
 const AGENT_PANEL_STEP_IDS = new Set(["dd-agent-panel"]);
+// Phones render neither these detail tabs, the dashboard table nor the
+// sidebar (they get bottom tabs), so the steps would only stall on a
+// missing target before being skipped.
+const DESKTOP_ONLY_STEP_IDS = new Set(["dd-code", "dd-data-tab", "dd-table", "dd-sidebar-nav"]);
+
+function isPhoneViewport(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(PHONE_MEDIA_QUERY).matches;
+}
 
 function getVisibleSteps(): TutorialStep[] {
   const generalist = isGeneralistAgentEnabled();
+  const phone = isPhoneViewport();
   return tutorialSteps.filter((s) => {
     if (!generalist && AGENT_PANEL_STEP_IDS.has(s.id)) return false;
+    if (phone && DESKTOP_ONLY_STEP_IDS.has(s.id)) return false;
     return true;
   });
 }

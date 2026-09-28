@@ -9,7 +9,7 @@ import { getLoadedTrack } from "../lib/steps-loader";
 import { SpotlightMask } from "./spotlight-mask";
 import { TutorialPopover } from "./tutorial-popover";
 import { AnimatedWordmark } from "@/shared/ui/animated-wordmark";
-import { isTutorialNavigating, registerTutorialHook } from "../lib/bridge";
+import { isTutorialNavigating, registerTutorialHook, registerTutorialQuery } from "../lib/bridge";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import type { TutorialStep } from "../lib/steps";
 import { TUTORIAL_SUBMIT_SPLASH_MS } from "../lib/tutorial-timing";
@@ -59,6 +59,11 @@ export function TutorialOverlay() {
       }
     };
   }, [router]);
+
+  React.useEffect(
+    () => registerTutorialQuery("activeTutorialTrack", () => state.activeTrack),
+    [state.activeTrack],
+  );
 
   const targetRef = React.useRef<Element | null>(null);
   const lastRectRef = React.useRef<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -111,6 +116,13 @@ export function TutorialOverlay() {
           { p: "left" as const, s: rect.left },
         ];
         p = spaces.sort((a, b) => b.s - a.s)[0]!.p;
+      }
+      // Side placements are written for LTR; in RTL the same panel docks to
+      // the opposite edge, so flip to the side that actually has room.
+      if (p === "left" && rect.left < pw + gap && vw - rect.right > rect.left) {
+        p = "right";
+      } else if (p === "right" && vw - rect.right < pw + gap && rect.left > vw - rect.right) {
+        p = "left";
       }
 
       let top = 0,
@@ -185,6 +197,26 @@ export function TutorialOverlay() {
     );
   }, [currentStep, calculatePosition]);
 
+  const handleExit = React.useCallback(() => {
+    exitTutorial();
+    // Always return to the dashboard so the user never lands on a page
+    // still showing fake tutorial data (demo optimization, demo grid,
+    // demo grid, etc.). The dashboard clears its demo overlay via
+    // the `tutorial-exited` event.
+    if (window.location.pathname !== "/") {
+      router.push("/");
+    }
+  }, [exitTutorial, router]);
+
+  // Finishing a track must leave the demo page the same way exiting does,
+  // or the user is stranded on a sample run that is not in their sidebar.
+  const finishTrack = React.useCallback(() => {
+    completeTrack();
+    if (window.location.pathname !== "/") {
+      router.push("/");
+    }
+  }, [completeTrack, router]);
+
   React.useEffect(() => {
     if (!state.isVisible || !currentStep) return;
     setIsTransitioning(true);
@@ -256,7 +288,12 @@ export function TutorialOverlay() {
         console.warn(
           `[tutorial] step "${currentStep.id}" target not found: ${currentStep.target} — skipping ${goingBack ? "backward" : "forward"}`,
         );
+        const track = state.activeTrack ? getLoadedTrack(state.activeTrack) : undefined;
+        const isLast = !!track && state.currentStepIndex >= track.steps.length - 1;
+        // Skipping forward past the last step would complete the track
+        // silently and leave the user on a half-set-up page with demo data.
         if (goingBack) prevStep();
+        else if (isLast) handleExit();
         else nextStep();
         return;
       }
@@ -377,10 +414,12 @@ export function TutorialOverlay() {
     state.isVisible,
     state.lastDirection,
     state.currentStepIndex,
+    state.activeTrack,
     currentStep,
     updatePositions,
     nextStep,
     prevStep,
+    handleExit,
   ]);
 
   // Detect manual navigation away from the active step's expected route
@@ -419,7 +458,7 @@ export function TutorialOverlay() {
 
     autoPlayTimerRef.current = setTimeout(() => {
       autoPlayTimerRef.current = null;
-      if (isLast) completeTrack();
+      if (isLast) finishTrack();
       else nextStep();
     }, duration);
 
@@ -436,19 +475,8 @@ export function TutorialOverlay() {
     state.currentStepIndex,
     currentStep,
     nextStep,
-    completeTrack,
+    finishTrack,
   ]);
-
-  const handleExit = React.useCallback(() => {
-    exitTutorial();
-    // Always return to the dashboard so the user never lands on a page
-    // still showing fake tutorial data (demo optimization, demo grid,
-    // demo grid, etc.). The dashboard clears its demo overlay via
-    // the `tutorial-exited` event.
-    if (window.location.pathname !== "/") {
-      router.push("/");
-    }
-  }, [exitTutorial, router]);
 
   React.useEffect(() => {
     if (!state.isVisible || !stepReady) return;
@@ -476,15 +504,35 @@ export function TutorialOverlay() {
       } else if (e.key === "Backspace" || e.key === backKey) {
         e.preventDefault();
         prevStep();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        handleExit();
       }
     };
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state.isVisible, stepReady, nextStep, prevStep, handleExit]);
+  }, [state.isVisible, stepReady, nextStep, prevStep]);
+
+  // Escape stays live while a step is still loading: its beforeShow and target
+  // wait can take seconds, and the popover's close button isn't rendered yet,
+  // so without this the user is stuck under the dim overlay.
+  React.useEffect(() => {
+    if (!state.isVisible) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const tgt = e.target as HTMLElement | null;
+      if (tgt) {
+        const tag = tgt.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tgt.isContentEditable) {
+          return;
+        }
+      }
+      e.preventDefault();
+      handleExit();
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state.isVisible, handleExit]);
 
   // Splash must render independently of tutorial visibility
   const splashPortal = showSplash
@@ -529,7 +577,7 @@ export function TutorialOverlay() {
   const isLast = displayedStepIndex === track.steps.length - 1;
 
   const handleNext = () => {
-    if (isLast) completeTrack();
+    if (isLast) finishTrack();
     else nextStep();
   };
 
