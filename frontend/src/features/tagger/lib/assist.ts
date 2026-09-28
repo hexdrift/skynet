@@ -4,6 +4,7 @@ import type {
   AssistPrediction,
   AssistState,
   DataRow,
+  DatasetSpec,
   ReviewRound,
   TaggerConfig,
 } from "./types";
@@ -12,6 +13,8 @@ import type {
 export const REVIEW_BATCH_SIZE = 20;
 /** Auto-tagged rows below this confidence are flagged for the optional pass. */
 export const FLAG_CONFIDENCE = 0.75;
+/** Rows a synthetic dataset gets when the interview names no count. */
+export const DEFAULT_SYNTHETIC_ROWS = 30;
 /** Freetext agreement threshold on the token-overlap similarity. */
 const FREETEXT_MATCH = 0.85;
 
@@ -74,7 +77,11 @@ function tokenSimilarity(a: string, b: string): number {
  * Whether a final label agrees with the AI's prediction. Exact match for
  * binary, set equality for multiclass, fuzzy token overlap for freetext.
  */
-export function labelsAgree(mode: AnnotationMode, final: Annotation, predicted: Annotation): boolean {
+export function labelsAgree(
+  mode: AnnotationMode,
+  final: Annotation,
+  predicted: Annotation,
+): boolean {
   if (final === undefined || predicted === undefined) return false;
   if (mode === "multiclass") {
     const a = Array.isArray(final) ? [...final].sort() : [];
@@ -167,4 +174,21 @@ export function initialAssistState(mode: "copilot" | "autopilot"): AssistState {
     provenance: {},
     rounds: [],
   };
+}
+
+/**
+ * The dataset a synthetic session generates on launch. The interview's final
+ * turn normally carries it; when the model finished without one, the user's
+ * own answers stand in as the brief so the contract card never strands the
+ * launch on a spec that will not arrive.
+ */
+export function pendingDatasetSpec(assist: AssistState): DatasetSpec | null {
+  if (assist.datasetSpec) return assist.datasetSpec;
+  const brief = assist.interview.turns
+    .filter((turn) => turn.role === "user")
+    .map((turn) => turn.content.trim())
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 2000);
+  return brief.length >= 3 ? { brief, columns: [], rows: DEFAULT_SYNTHETIC_ROWS } : null;
 }

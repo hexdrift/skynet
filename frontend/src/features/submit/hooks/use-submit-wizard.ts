@@ -42,19 +42,28 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { useWizardStateOptional } from "@/features/agent-panel";
 import { readPref, useUserPrefs } from "@/features/settings";
 
-import { STEPS, emptyModelConfig, defaultSplit, defaultReactConfig } from "../constants";
+import { emptyModelConfig, defaultSplit, defaultReactConfig } from "../constants";
 import type { ReactConfig, ColumnRole } from "../constants";
+import {
+  LAST_WIZARD_STAGE,
+  WIZARD_STAGE,
+  restoreTarget,
+  stageAt,
+  type WizardStageId,
+} from "../lib/wizard-steps";
+import { stageIssue, type WizardIssue } from "../lib/stage-issue";
+import { beginValidationToast } from "../lib/validation-toast";
+import { focusField } from "../lib/focus-field";
+import { cloneWorkflowSpec } from "../lib/clone-workflow";
 import { buildSignatureTemplate } from "../lib/build-signature";
 import { buildMetricTemplate } from "../lib/build-metric";
 import { buildOptimizerKwargs } from "../lib/build-kwargs";
 import {
-  saveWizardDraft,
-  readWizardDraft,
-  clearWizardDraft,
-  stashWizardDraftForReload,
+  isMeaningfulProgramDraft,
+  scrubDraftSecrets,
   type WizardDraftData,
-} from "../lib/wizard-draft";
-import { LOCALE_RELOAD_EVENT } from "@/shared/lib/locale";
+} from "../lib/draft-record";
+import { suggestedDspyRunName } from "../lib/run-name";
 import { useCodeAgent } from "@/shared/hooks/use-code-agent";
 import { useCodeInterview } from "@/shared/hooks/use-code-interview";
 import {
@@ -70,8 +79,10 @@ import {
   useModelCatalog,
   useRecentModelConfigs,
 } from "./use-submit-wizard-data";
+import { useWizardDrafts } from "./use-wizard-drafts";
 
 const COLUMN_ROLES = new Set<string>(["input", "output", "ignore"]);
+const WIZARD_ISSUE_TOAST = "wizard-issue";
 
 // GEPA field defaults — the optimizer disclosure stays collapsed only while
 // every field still matches them.
@@ -114,24 +125,29 @@ export function useSubmitWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const { keys: byokKeys } = useByokKeys();
+  const { keys: byokKeys, loading: byokLoading } = useByokKeys();
   const { prefs } = useUserPrefs();
-  const advancedMode = prefs.advancedMode || readPref("advancedMode");
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
   const [furthestReachedStep, setFurthestReachedStep] = useState(0);
+  // A restored draft or a clone applies its fields first and its stage one
+  // render later, so the prerequisite walk (below validateStep) checks the
+  // restored state rather than the empty initial one.
+  const [pendingRestore, setPendingRestore] = useState<{
+    stage: WizardStageId;
+    furthest: WizardStageId;
+  } | null>(null);
   const [summaryTab, setSummaryTab] = useState(0);
   const [summaryCodeTab, setSummaryCodeTab] = useState<string>("signature");
 
   const [jobType, setOptimizationType] = useState<"run" | "grid_search">("run");
-  const effectiveJobType = advancedMode ? jobType : "run";
   const [isPrivate, setIsPrivate] = useState(true);
 
   const username = session?.user?.name ?? "";
   const [jobName, setJobName] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [moduleName, setModuleName] = useState("predict");
-  // The code step opens on the picker and the step will not advance until a
+  // The Goal stage opens on the picker and the wizard will not advance until a
   // module is committed — `moduleName` is only the carousel's starting slide
   // until then, never an implicit choice. While the picker is open
   // (moduleChosen=false) the editors and the agent's seed pass wait. Flows
@@ -214,6 +230,7 @@ export function useSubmitWizard() {
     if (changedNodeId) {
       pulseClearRef.current = setTimeout(() => setAgentPulseNodeId(null), 1600);
     }
+    return laid;
   }, []);
 
   const [signatureCode, setSignatureCode] = useState(() => buildSignatureTemplate({}));
@@ -221,6 +238,19 @@ export function useSubmitWizard() {
 
   const [parsedDataset, setParsedDataset] = useState<ParsedDataset | null>(null);
   const [datasetFileName, setDatasetFileName] = useState<string | null>(null);
+  // Suggested without a model call; the name follows it until the user types one.
+  const suggestedName = useMemo(
+    () => suggestedDspyRunName(signatureCode, datasetFileName),
+    [signatureCode, datasetFileName],
+  );
+  const [jobNameTouched, setJobNameTouched] = useState(false);
+  useEffect(() => {
+    if (!jobNameTouched) setJobName(suggestedName);
+  }, [jobNameTouched, suggestedName]);
+  const editJobName = useCallback((value: string) => {
+    setJobNameTouched(true);
+    setJobName(value);
+  }, []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // A by-reference submit (source_dataset_id) is only valid while the on-screen
   // rows are still the ones we loaded from the library. Every other dataset
@@ -242,7 +272,7 @@ export function useSubmitWizard() {
 
   // Seed the starter graph when the workflow module is selected, and keep
   // re-seeding from the dataset's column roles for as long as the graph is
-  // pristine (the module is often picked on the Basics step, before the
+  // pristine (the module is picked on the Goal stage, before the
   // dataset exists). An edited graph is never clobbered.
   useEffect(() => {
     if (!isWorkflow) return;
@@ -271,26 +301,6 @@ export function useSubmitWizard() {
 
   const [generationModels, setGenerationModels] = useState<ModelConfig[]>([emptyModelConfig()]);
   const [reflectionModels, setReflectionModels] = useState<ModelConfig[]>([emptyModelConfig()]);
-
-  useEffect(() => {
-    if (advancedMode || jobType === "run") return;
-    const firstGeneration = generationModels.find((model) => model.name.trim());
-    const firstReflection = reflectionModels.find((model) => model.name.trim());
-    if (firstGeneration && !modelConfig.name.trim()) {
-      setModelConfig({ ...emptyModelConfig(), ...firstGeneration });
-    }
-    if (firstReflection && !secondModelConfig?.name?.trim()) {
-      setSecondModelConfig({ ...emptyModelConfig(), ...firstReflection });
-    }
-    setOptimizationType("run");
-  }, [
-    advancedMode,
-    generationModels,
-    jobType,
-    modelConfig.name,
-    reflectionModels,
-    secondModelConfig,
-  ]);
 
   const [split, setSplit] = useState<SplitFractions>(defaultSplit);
 
@@ -358,37 +368,25 @@ export function useSubmitWizard() {
   const [optimizationTypeOpen, setOptimizationTypeOpen] = useState(false);
   const [optimizerSettingsOpen, setOptimizerSettingsOpen] = useState(false);
   useEffect(() => {
-    if (prefs.expandAdvanced && advancedMode) {
+    if (prefs.expandAdvanced) {
       setOptimizationTypeOpen(true);
       setOptimizerSettingsOpen(true);
     }
-  }, [advancedMode, prefs.expandAdvanced]);
+  }, [prefs.expandAdvanced]);
   useEffect(() => {
-    if (advancedMode && jobType !== "run") setOptimizationTypeOpen(true);
-  }, [advancedMode, jobType]);
+    if (jobType !== "run") setOptimizationTypeOpen(true);
+  }, [jobType]);
+  // The search budget sits beside the depth control, so only the tuning knobs
+  // inside the disclosure count as customized.
+  const optimizerSettingsCustomized =
+    reflectionMinibatchSize !== DEFAULT_REFLECTION_MINIBATCH ||
+    !useMerge ||
+    targetScore !== DEFAULT_TARGET_SCORE ||
+    pxnParents !== DEFAULT_PXN ||
+    pxnProposals !== DEFAULT_PXN;
   useEffect(() => {
-    if (!advancedMode) return;
-    if (
-      reflectionMinibatchSize !== DEFAULT_REFLECTION_MINIBATCH ||
-      maxFullEvals !== DEFAULT_MAX_FULL_EVALS ||
-      maxMetricCalls !== "" ||
-      !useMerge ||
-      targetScore !== DEFAULT_TARGET_SCORE ||
-      pxnParents !== DEFAULT_PXN ||
-      pxnProposals !== DEFAULT_PXN
-    ) {
-      setOptimizerSettingsOpen(true);
-    }
-  }, [
-    advancedMode,
-    reflectionMinibatchSize,
-    maxFullEvals,
-    maxMetricCalls,
-    useMerge,
-    targetScore,
-    pxnParents,
-    pxnProposals,
-  ]);
+    if (optimizerSettingsCustomized) setOptimizerSettingsOpen(true);
+  }, [optimizerSettingsCustomized]);
   const [shuffle, setShuffle] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitPhase, setSubmitPhase] = useState<"idle" | "sending" | "splash" | "done">("idle");
@@ -398,6 +396,9 @@ export function useSubmitWizard() {
   // sequential `setStep((s) => s + 1)` calls advance the wizard twice.
   const [advancing, setAdvancing] = useState(false);
   const advancingRef = useRef(false);
+  // Each Next press gets its own validation toast id, so a late result from
+  // an earlier press can't rewrite the current attempt's toast.
+  const validationAttemptRef = useRef(0);
 
   // Memoise validation results per (kind, code, mapping, sample_row,
   // optimizer) tuple. Storing the in-flight promise itself also dedupes
@@ -472,17 +473,27 @@ export function useSubmitWizard() {
   }, [wizardCtx]);
   const submittedRef = useRef(false);
 
-  // Mirror the full serializable wizard snapshot into a ref every commit so the
-  // unmount cleanup below parks the *latest* values — a []-deps cleanup would
-  // otherwise close over the first render's state.
-  const draftRef = useRef<WizardDraftData | null>(null);
+  // The durable draft (see use-wizard-drafts): this mount hydrates once from
+  // the snapshot the entry chose, then publishes every commit back with its
+  // secrets scrubbed. The saver skips identical snapshots and debounces the
+  // rest, so publishing per commit costs nothing when nothing changed.
+  const drafts = useWizardDrafts();
+  const draftsRef = useRef(drafts);
   useEffect(() => {
-    draftRef.current = {
-      step,
-      furthestReachedStep,
+    draftsRef.current = drafts;
+  }, [drafts]);
+  const [draftSnapshot] = useState(() => drafts.takeSnapshot());
+  // Publishing waits for the mount restore, so the blank first render never
+  // overwrites the snapshot it is about to hydrate from.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (!hydratedRef.current || submittedRef.current) return;
+    const d: WizardDraftData = {
+      stage: stageAt(step),
+      furthestStage: stageAt(furthestReachedStep),
       summaryTab,
       summaryCodeTab,
-      jobType: effectiveJobType,
+      jobType,
       isPrivate,
       jobName,
       jobDescription,
@@ -495,6 +506,8 @@ export function useSubmitWizard() {
       metricCode,
       signatureManuallyEdited,
       metricManuallyEdited,
+      signatureValidation,
+      metricValidation,
       parsedDataset,
       datasetFileName,
       columnRoles,
@@ -504,6 +517,7 @@ export function useSubmitWizard() {
       generationModels,
       reflectionModels,
       split,
+      splitMode,
       seed,
       autoLevel,
       reflectionMinibatchSize,
@@ -515,45 +529,31 @@ export function useSubmitWizard() {
       pxnProposals,
       shuffle,
     };
+    draftsRef.current.publish(scrubDraftSecrets(d), isMeaningfulProgramDraft(d));
   });
 
-  // A locale switch reloads the page (see LocaleProvider), which would lose
-  // this in-memory form. Stash the live snapshot for that one hop so the user
-  // comes back to the same step in the new language instead of a blank wizard.
+  // Stage boundaries write at once instead of waiting out the debounce.
   useEffect(() => {
-    const onLocaleReload = () => {
-      const d = draftRef.current;
-      if (
-        d &&
-        (d.step > 0 ||
-          d.parsedDataset !== null ||
-          d.datasetFileName !== null ||
-          d.jobName.trim() !== "")
-      ) {
-        stashWizardDraftForReload(d);
-      }
-    };
-    window.addEventListener(LOCALE_RELOAD_EVENT, onLocaleReload);
-    return () => window.removeEventListener(LOCALE_RELOAD_EVENT, onLocaleReload);
-  }, []);
+    if (hydratedRef.current) draftsRef.current.flush();
+  }, [step]);
 
-  // Restore a parked draft on mount so switching to another sidebar tab and
-  // coming back lands the user on the same step with inputs intact. Skipped when
-  // a clone/share URL owns hydration — that flow populates the form itself.
-  const restoredRef = useRef(false);
+  // Restore the chosen draft on mount. Skipped when a clone/share URL owns
+  // hydration — that flow populates the form itself and becomes the draft.
   useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
     if (searchParams.get("clone") || searchParams.get("shareToken")) return;
-    const d = readWizardDraft();
+    const d = draftSnapshot;
     if (!d) return;
-    setStep(d.step);
-    setFurthestReachedStep(d.furthestReachedStep);
     setSummaryTab(d.summaryTab);
     setSummaryCodeTab(d.summaryCodeTab);
-    setOptimizationType(advancedMode ? d.jobType : "run");
+    setOptimizationType(d.jobType);
     setIsPrivate(d.isPrivate);
     setJobName(d.jobName);
+    setJobNameTouched(
+      d.jobName.trim() !== "" &&
+        d.jobName !== suggestedDspyRunName(d.signatureCode, d.datasetFileName),
+    );
     setJobDescription(d.jobDescription);
     setModuleName(d.moduleName);
     setModuleChosen(d.moduleChosen);
@@ -568,6 +568,8 @@ export function useSubmitWizard() {
     setMetricCode(d.metricCode);
     setSignatureManuallyEdited(d.signatureManuallyEdited);
     setMetricManuallyEdited(d.metricManuallyEdited);
+    setSignatureValidation(d.signatureValidation ?? null);
+    setMetricValidation(d.metricValidation ?? null);
     setParsedDataset(d.parsedDataset);
     setDatasetFileName(d.datasetFileName);
     setColumnRoles(d.columnRoles);
@@ -577,6 +579,10 @@ export function useSubmitWizard() {
     setGenerationModels(d.generationModels);
     setReflectionModels(d.reflectionModels);
     setSplit(d.split);
+    if (d.splitMode) {
+      splitModeRef.current = d.splitMode;
+      setSplitModeState(d.splitMode);
+    }
     setSeed(d.seed);
     setAutoLevel(d.autoLevel);
     setReflectionMinibatchSize(d.reflectionMinibatchSize);
@@ -587,56 +593,43 @@ export function useSubmitWizard() {
     setPxnParents(d.pxnParents ?? DEFAULT_PXN);
     setPxnProposals(d.pxnProposals ?? DEFAULT_PXN);
     setShuffle(d.shuffle);
-    if (!advancedMode && d.jobType === "grid_search") {
-      const firstGeneration = d.generationModels.find((model) => model.name.trim());
-      const firstReflection = d.reflectionModels.find((model) => model.name.trim());
-      if (firstGeneration) setModelConfig({ ...emptyModelConfig(), ...firstGeneration });
-      if (firstReflection) setSecondModelConfig({ ...emptyModelConfig(), ...firstReflection });
-    }
-  }, [advancedMode]);
+    setPendingRestore({ stage: d.stage, furthest: d.furthestStage });
+  }, []);
 
   useEffect(
     () => () => {
       if (submittedRef.current) {
-        // A submit leaves on purpose: reset the shared agent state and drop any
-        // draft parked on an earlier nav-away, rather than parking this form to
-        // restore later.
+        // A submit leaves on purpose: reset the shared agent state (the draft
+        // was consumed at submit time) rather than keeping this form around.
         wizardCtxRef.current?.reset();
-        clearWizardDraft();
         return;
       }
-      // Park a half-filled form (skip a pristine one) so the round-trip restores.
-      const d = draftRef.current;
-      if (
-        d &&
-        (d.step > 0 ||
-          d.parsedDataset !== null ||
-          d.datasetFileName !== null ||
-          d.jobName.trim() !== "")
-      ) {
-        saveWizardDraft(d);
-      } else {
-        clearWizardDraft();
-      }
+      // Leaving mid-setup: write the latest snapshot now so the round-trip
+      // restores it.
+      draftsRef.current.flush();
     },
     [],
   );
 
+  // The agent's graph as seated on the canvas; the outgoing push skips it so
+  // a layout-only copy is never echoed back as a user override.
+  const agentWorkflowRef = useRef<WorkflowSpec | null>(null);
   // Incoming: apply agent patches to local state whenever the pulse bumps.
   useEffect(() => {
     if (!sharedState || agentPulseKeys.length === 0) return;
     for (const key of agentPulseKeys) {
       if (key === "job_name" && typeof sharedState.job_name === "string") {
+        // An agent-given name is decided: the form's own suggestion must not
+        // overwrite it when the code or dataset changes later.
         setJobName(sharedState.job_name);
+        setJobNameTouched(true);
       } else if (key === "job_description" && typeof sharedState.job_description === "string") {
         setJobDescription(sharedState.job_description);
       } else if (
         key === "job_type" &&
         (sharedState.job_type === "run" || sharedState.job_type === "grid_search")
       ) {
-        setOptimizationType(
-          sharedState.job_type === "grid_search" && !advancedMode ? "run" : sharedState.job_type,
-        );
+        setOptimizationType(sharedState.job_type);
       } else if (key === "optimizer_name" && typeof sharedState.optimizer_name === "string") {
         setOptimizerName(sharedState.optimizer_name);
       } else if (key === "module_name" && typeof sharedState.module_name === "string") {
@@ -648,13 +641,23 @@ export function useSubmitWizard() {
           typeof rc.mcpUrl === "string" ? { ...prev, mcpUrl: rc.mcpUrl } : prev,
         );
       } else if (key === "signature_code" && typeof sharedState.signature_code === "string") {
+        // Agent-authored code is written for the module already in play (the
+        // predict default when none was named), so the picker never re-asks.
         setSignatureCode(sharedState.signature_code);
         setSignatureManuallyEdited(true);
         setSignatureValidation(null);
+        setModuleChosen(true);
       } else if (key === "metric_code" && typeof sharedState.metric_code === "string") {
         setMetricCode(sharedState.metric_code);
         setMetricManuallyEdited(true);
         setMetricValidation(null);
+        setModuleChosen(true);
+      } else if (key === "workflow" && sharedState.workflow) {
+        // A panel-authored graph is the program: seat it on the canvas as the
+        // workflow module instead of dropping it on the floor.
+        setModuleName("workflow");
+        setModuleChosen(true);
+        agentWorkflowRef.current = applyAgentWorkflow(sharedState.workflow, null);
       } else if (key === "column_roles" && sharedState.column_roles) {
         setColumnRoles((prev) => {
           const next = { ...prev };
@@ -729,7 +732,7 @@ export function useSubmitWizard() {
         }
       }
     }
-  }, [advancedMode, agentPulseTick]);
+  }, [agentPulseTick]);
 
   // Outgoing: push relevant local state back into the shared context so the
   // agent's tool-gate (dataset_ready, columns_configured, model_configured)
@@ -864,6 +867,24 @@ export function useSubmitWizard() {
     }
   }, [jobName, wizardCtx]);
 
+  // The canvas is the program for a workflow run: the agent submits what it
+  // sees here, so canvas edits reach it and a non-workflow module clears it.
+  // Keyed on local state only: re-running on the context's own change would
+  // land in the same commit as an agent pulse, before the pulse's module and
+  // graph are seated, and clear or overwrite the graph the agent just sent.
+  useEffect(() => {
+    const ctx = wizardCtxRef.current;
+    if (!ctx) return;
+    const spec = isWorkflow ? workflowSpec : null;
+    if (spec) {
+      if (spec !== agentWorkflowRef.current && ctx.state.workflow !== spec) {
+        ctx.setField("workflow", spec, "user");
+      }
+    } else if (ctx.state.workflow != null) {
+      ctx.clearField("workflow");
+    }
+  }, [isWorkflow, workflowSpec]);
+
   useEffect(() => {
     if (!wizardCtx) return;
     if (wizardCtx.state.signature_code !== signatureCode) {
@@ -911,8 +932,8 @@ export function useSubmitWizard() {
     if (s.job_description !== jobDescription) {
       wizardCtx.setField("job_description", jobDescription, "user");
     }
-    if (s.job_type !== effectiveJobType) {
-      wizardCtx.setField("job_type", effectiveJobType, "user");
+    if (s.job_type !== jobType) {
+      wizardCtx.setField("job_type", jobType, "user");
     }
     if (s.optimizer_name !== optimizerName) {
       wizardCtx.setField("optimizer_name", optimizerName, "user");
@@ -933,22 +954,19 @@ export function useSubmitWizard() {
       wizardCtx.setField("is_private", isPrivate, "user");
     }
     const parsedTargetScore =
-      advancedMode && optimizerName.toLowerCase() === "gepa"
-        ? parseTargetScore(targetScore)
-        : undefined;
+      optimizerName.toLowerCase() === "gepa" ? parseTargetScore(targetScore) : undefined;
     if (s.target_score !== parsedTargetScore) {
       wizardCtx.setField("target_score", parsedTargetScore, "user");
     }
   }, [
     jobDescription,
-    effectiveJobType,
+    jobType,
     optimizerName,
     moduleName,
     splitMode,
     seed,
     shuffle,
     isPrivate,
-    advancedMode,
     targetScore,
     wizardCtx,
   ]);
@@ -1012,14 +1030,12 @@ export function useSubmitWizard() {
     if (!wizardCtx) return;
     const kw = buildOptimizerKwargs({
       autoLevel,
-      maxFullEvals: advancedMode ? maxFullEvals : DEFAULT_MAX_FULL_EVALS,
-      maxMetricCalls: advancedMode ? maxMetricCalls : "",
-      reflectionMinibatchSize: advancedMode
-        ? reflectionMinibatchSize
-        : DEFAULT_REFLECTION_MINIBATCH,
-      useMerge: advancedMode ? useMerge : true,
-      pxnParents: advancedMode ? pxnParents : DEFAULT_PXN,
-      pxnProposals: advancedMode ? pxnProposals : DEFAULT_PXN,
+      maxFullEvals,
+      maxMetricCalls,
+      reflectionMinibatchSize,
+      useMerge,
+      pxnParents,
+      pxnProposals,
     });
     const shared = wizardCtx.state.optimizer_kwargs ?? {};
     const kwEntries = Object.entries(kw);
@@ -1030,7 +1046,6 @@ export function useSubmitWizard() {
       wizardCtx.setField("optimizer_kwargs", kw, "user");
     }
   }, [
-    advancedMode,
     autoLevel,
     maxFullEvals,
     maxMetricCalls,
@@ -1190,20 +1205,28 @@ export function useSubmitWizard() {
           ? (jobData.grid_result.pair_results.find((p) => p.pair_index === clonePairIndex) ?? null)
           : null;
       setOptimizationType(
-        clonePair
-          ? "run"
-          : advancedMode && optimization_type === "grid_search"
-            ? "grid_search"
-            : "run",
+        clonePair ? "run" : optimization_type === "grid_search" ? "grid_search" : "run",
       );
 
       const displayName = jobData?.name || payload.name;
-      if (displayName) setJobName(String(displayName));
+      if (displayName) {
+        setJobName(String(displayName));
+        setJobNameTouched(true);
+      }
       if (payload.description) setJobDescription(String(payload.description));
       if (payload.module_name) setModuleName(String(payload.module_name));
       // A clone is a complete prior submission — its module (absent = the
       // predict default) is already decided, so the picker never reopens.
       setModuleChosen(true);
+      // A workflow run stores its graph, not a top-level signature. Restore it
+      // as a settled (non-pristine) spec so the starter-graph seed effect
+      // leaves the cloned canvas alone instead of re-seeding it from scratch.
+      const workflow = cloneWorkflowSpec(payload);
+      if (workflow) {
+        replaceWorkflowSpec(workflow);
+        workflowPristineRef.current = false;
+        setWorkflowTouched(true);
+      }
       if (payload.optimizer_name) setOptimizerName(String(payload.optimizer_name));
       if (payload.signature_code) {
         setSignatureCode(String(payload.signature_code));
@@ -1265,11 +1288,13 @@ export function useSubmitWizard() {
         | undefined;
       if (sf) {
         setSplit({ train: sf.train ?? 0.7, val: sf.val ?? 0.15, test: sf.test ?? 0.15 });
-        // Cloned splits are intentional — pin the wizard to manual so the
-        // auto-profile effect doesn't clobber them when the dataset reloads.
-        splitModeRef.current = "manual";
-        setSplitModeState("manual");
       }
+      // A clone starts where every new optimization does: on the saved split
+      // preference, so the recommendation applies unless the user prefers
+      // manual selection (which keeps the cloned fractions).
+      const cloneSplitMode = readPref("wizardSplitMode");
+      splitModeRef.current = cloneSplitMode;
+      setSplitModeState(cloneSplitMode);
 
       if (payload.shuffle != null) setShuffle(Boolean(payload.shuffle));
       if (payload.seed != null) setSeed(Number(payload.seed));
@@ -1321,13 +1346,6 @@ export function useSubmitWizard() {
 
         const rm = payload.reflection_models as ModelConfig[] | undefined;
         if (rm?.length) setReflectionModels(rm.map((m) => ({ ...emptyModelConfig(), ...m })));
-
-        if (!advancedMode && optimization_type === "grid_search") {
-          const firstGeneration = gm?.find((model) => model.name?.trim());
-          const firstReflection = rm?.find((model) => model.name?.trim());
-          if (firstGeneration) setModelConfig({ ...emptyModelConfig(), ...firstGeneration });
-          if (firstReflection) setSecondModelConfig({ ...emptyModelConfig(), ...firstReflection });
-        }
       }
 
       const optKw = payload.optimizer_kwargs as Record<string, unknown> | undefined;
@@ -1361,7 +1379,9 @@ export function useSubmitWizard() {
           ts.mcp_url != null ? { ...prev, mcpUrl: String(ts.mcp_url) } : prev,
         );
       }
-      toast.success(msg("submit.clone.success"));
+      // A clone is a complete prior submission: open it on Review, walked back
+      // to the first stage that no longer holds.
+      setPendingRestore({ stage: "review", furthest: "review" });
     };
 
     // Share / public clone: hydrate from the scrubbed composite — token-gated for
@@ -1403,10 +1423,10 @@ export function useSubmitWizard() {
         toast.error(msg("submit.clone.failed"));
       })
       .finally(() => setCloneLoading(false));
-  }, [advancedMode]);
+  }, []);
 
   const goNext = () => {
-    if (step < STEPS.length - 1) {
+    if (step < LAST_WIZARD_STAGE) {
       setDirection(1);
       setStep((s) => {
         const next = s + 1;
@@ -1429,19 +1449,13 @@ export function useSubmitWizard() {
 
   const currentColumnMapping = () => buildColumnMapping(columnRoles);
 
-  const validateTargetScore = (showToast: boolean): boolean => {
-    if (!advancedMode || optimizerName.toLowerCase() !== "gepa" || !targetScore.trim()) return true;
-    if (parseTargetScore(targetScore) == null) {
-      if (showToast) toast.error(msg("submit.validation.target_score_invalid"));
-      return false;
-    }
-    const effectiveFractions =
-      splitModeRef.current === "auto" && splitPlan ? splitPlan.fractions : split;
-    if (effectiveFractions.val <= 0) {
-      if (showToast) toast.error(msg("submit.validation.target_score_requires_val"));
-      return false;
-    }
-    return true;
+  const effectiveSplitFractions = () =>
+    splitModeRef.current === "auto" && splitPlan ? splitPlan.fractions : split;
+
+  const targetScoreState = (): "ok" | "invalid" | "requires_val" => {
+    if (optimizerName.toLowerCase() !== "gepa" || !targetScore.trim()) return "ok";
+    if (parseTargetScore(targetScore) == null) return "invalid";
+    return effectiveSplitFractions().val <= 0 ? "requires_val" : "ok";
   };
 
   useDatasetProfiling({
@@ -1469,141 +1483,107 @@ export function useSubmitWizard() {
     [splitPlan],
   );
 
-  /** Validates a wizard step; optionally surfaces toast errors. */
-  const validateStep = (s: number, showToast = false): boolean => {
-    switch (s) {
-      case 0:
-        if (!username.trim()) {
-          if (showToast) toast.error(msg("submit.validation.username_required"));
-          return false;
-        }
-        if (!jobName.trim()) {
-          if (showToast) toast.error(msg("submit.validation.name_required"));
-          return false;
-        }
-        return true;
-      case 1: {
-        if (!parsedDataset || parsedDataset.rowCount === 0) {
-          if (showToast) toast.error(msg("submit.validation.dataset_required"));
-          return false;
-        }
-        const m = currentColumnMapping();
-        if (Object.keys(m.inputs).length === 0) {
-          if (showToast) toast.error(msg("submit.validation.input_column_required"));
-          return false;
-        }
-        if (Object.keys(m.outputs).length === 0) {
-          if (showToast) toast.error(msg("submit.validation.output_column_required"));
-          return false;
-        }
-        return true;
-      }
-      case 2: {
-        if (datasetValidation && datasetValidation.errors.length > 0) {
-          if (showToast) toast.error(msg("submit.validation.split_too_small"));
-          return false;
-        }
-        return validateTargetScore(showToast);
-      }
-      case 3: {
-        if (moduleSelectionRequired) {
-          if (showToast) toast.error(msg("submit.validation.module_required"));
-          return false;
-        }
-        // Tool-using runs (react, or a workflow with react/mcp nodes) need a
-        // live tool endpoint; the tool config lives on this step now that the
-        // module is only decided here.
-        const needsTools =
-          isReact || (isWorkflow && !!workflowSpec && workflowUsesTools(workflowSpec));
-        if (needsTools && !reactConfig.mcpUrl.trim()) {
-          if (showToast) toast.error(msg("submit.validation.mcp_url_required"));
-          return false;
-        }
-        if (isWorkflow) {
-          if (!workflowSpec) return false;
-          if (validateWorkflowSpec(workflowSpec, workflowIssueText).length > 0) {
-            if (showToast) toast.error(msg("submit.validation.workflow_invalid"));
-            return false;
-          }
-        } else {
-          if (!signatureCode.trim()) {
-            if (showToast) toast.error(msg("submit.validation.signature_required"));
-            return false;
-          }
-          if (!signatureValidation || signatureValidation.errors.length > 0) {
-            return false;
-          }
-        }
-        if (!metricCode.trim()) {
-          if (showToast) toast.error(msg("submit.validation.metric_required"));
-          return false;
-        }
-        if (!metricValidation || metricValidation.errors.length > 0) {
-          return false;
-        }
-        return true;
-      }
-      case 4: {
-        if (byokKeys.length === 0) {
-          if (showToast) toast.error(msg("submit.validation.api_key_required"));
-          return false;
-        }
-        if (effectiveJobType === "run") {
-          if (!modelConfig.name.trim()) {
-            if (showToast) toast.error(msg("submit.validation.model_required"));
-            return false;
-          }
-          const secondModel = secondModelConfig;
-          if (!secondModel?.name?.trim()) {
-            if (showToast) toast.error(msg("submit.validation.reflection_model_required"));
-            return false;
-          }
-        }
-        if (effectiveJobType === "grid_search") {
-          if (generationModels.every((m) => !m.name.trim())) {
-            if (showToast) toast.error(msg("submit.validation.generation_model_required"));
-            return false;
-          }
-          if (reflectionModels.every((m) => !m.name.trim())) {
-            if (showToast) toast.error(msg("submit.validation.reflection_models_required"));
-            return false;
-          }
-        }
-        // Vision gate: if any input column is image-typed, every chosen
-        // generation model must support vision. Mirrors the backend's
-        // ``submission.vision_required`` rejection so we fail fast in the UI
-        // instead of waiting for a 400 from /run.
-        const imageInputs = Object.entries(columnKinds)
-          .filter(([col, kind]) => kind === "image" && columnRoles[col] === "input")
-          .map(([col]) => col);
-        if (imageInputs.length > 0 && catalog?.models?.length) {
-          const visionByValue = new Map(catalog.models.map((m) => [m.value, m.supports_vision]));
-          const isVision = (id: string): boolean => visionByValue.get(id) ?? false;
-          const candidates: string[] =
-            effectiveJobType === "run"
-              ? [modelConfig.name].filter((n) => n.trim())
-              : generationModels.map((m) => m.name).filter((n) => n.trim());
-          const offenders = candidates.filter((id) => !isVision(id));
-          if (offenders.length > 0) {
-            if (showToast) {
-              toast.error(
-                formatMsg("submit.validation.vision_required", {
-                  fields: imageInputs.join(", "),
-                  model: offenders.join(", "),
-                }),
-              );
-            }
-            return false;
-          }
-        }
-        return true;
-      }
-      default:
-        return true;
-    }
+  const imageInputColumns = () =>
+    Object.entries(columnKinds)
+      .filter(([col, kind]) => kind === "image" && columnRoles[col] === "input")
+      .map(([col]) => col);
+
+  // Chosen generation models the catalog marks as text-only. Empty until the
+  // catalog loads, so a slow catalog never holds the stage.
+  const nonVisionModels = (): string[] => {
+    if (!catalog?.models?.length) return [];
+    const visionByValue = new Map(catalog.models.map((m) => [m.value, m.supports_vision]));
+    const candidates =
+      jobType === "run" ? [modelConfig.name] : generationModels.map((m) => m.name);
+    return candidates.filter((name) => name.trim() && !(visionByValue.get(name) ?? false));
   };
 
+  /** The first problem on stage `s`, read from the live wizard state. */
+  const issueAt = (s: number, structureOnly: boolean): WizardIssue | null => {
+    const mapping = currentColumnMapping();
+    const imageInputs = imageInputColumns();
+    return stageIssue(
+      stageAt(s),
+      {
+        username,
+        // A blank name falls back to the suggestion at submit time.
+        jobName: jobName.trim() || suggestedName,
+        moduleSelectionRequired,
+        datasetRowCount: parsedDataset?.rowCount ?? 0,
+        inputColumnCount: Object.keys(mapping.inputs).length,
+        outputColumnCount: Object.keys(mapping.outputs).length,
+        needsTools: isReact || (isWorkflow && !!workflowSpec && workflowUsesTools(workflowSpec)),
+        mcpUrl: reactConfig.mcpUrl,
+        isWorkflow,
+        workflowIssueCount: workflowSpec
+          ? validateWorkflowSpec(workflowSpec, workflowIssueText).length
+          : null,
+        signatureCode,
+        signatureErrors: signatureValidation ? signatureValidation.errors.length : null,
+        metricCode,
+        metricErrors: metricValidation ? metricValidation.errors.length : null,
+        splitErrors: datasetValidation ? datasetValidation.errors.length : null,
+        targetScore: targetScoreState(),
+        // Unknown until the saved keys load, so a draft or clone restored on
+        // mount is not held back on Optimization by an empty first fetch.
+        hasApiKey: byokLoading ? null : byokKeys.length > 0,
+        jobType,
+        modelName: modelConfig.name,
+        reflectionModelName: secondModelConfig?.name ?? "",
+        generationModelNames: generationModels.map((m) => m.name),
+        reflectionModelNames: reflectionModels.map((m) => m.name),
+        imageInputs,
+        nonVisionModels: imageInputs.length > 0 ? nonVisionModels() : [],
+      },
+      structureOnly,
+    );
+  };
+
+  // One error toast for the stage's problem, rewritten in place while the user
+  // keeps pressing Next, with focus moved to the control that fixes it.
+  const reportIssue = (issue: WizardIssue) => {
+    const text = issue.params ? formatMsg(issue.key, issue.params) : msg(issue.key);
+    if (toast.isActive(WIZARD_ISSUE_TOAST)) {
+      toast.update(WIZARD_ISSUE_TOAST, { render: text, type: "error" });
+    } else {
+      toast.error(text, { toastId: WIZARD_ISSUE_TOAST });
+    }
+    if (issue.fieldId) focusField(issue.fieldId);
+  };
+
+  /**
+   * Validates a wizard stage; optionally surfaces its problem as a toast and
+   * focuses the field. `structureOnly` skips the checks that need server
+   * evidence, which may still be in flight or stale in this render.
+   */
+  const validateStep = (s: number, showToast = false, structureOnly = false): boolean => {
+    const issue = issueAt(s, structureOnly);
+    if (issue && showToast) reportIssue(issue);
+    return issue === null;
+  };
+
+  // Restore a draft (or a clone) to the stage it was on only when every
+  // earlier stage still holds; see restoreTarget.
+  useEffect(() => {
+    if (!pendingRestore) return;
+    setPendingRestore(null);
+    const { open, reachable } = restoreTarget(
+      pendingRestore.stage,
+      pendingRestore.furthest,
+      (i) => validateStep(i, false, true),
+    );
+    setStep(open);
+    setFurthestReachedStep((prev) => Math.max(prev, reachable));
+  }, [pendingRestore, validateStep]);
+
   const maxReachableStep = furthestReachedStep;
+
+  // Mirrors `step` for `advance`, whose server checks outlive the render that
+  // started them.
+  const stepRef = useRef(step);
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   const validateBlock = async (
     kind: "signature" | "metric",
@@ -1666,9 +1646,13 @@ export function useSubmitWizard() {
     }
   };
 
-  const handleValidateCode = async (): Promise<boolean> => {
+  const reportError = (text: string) => {
+    toast.error(text);
+  };
+
+  const handleValidateCode = async (report = reportError): Promise<boolean> => {
     if (!parsedDataset || parsedDataset.rowCount === 0) {
-      toast.error(msg("submit.validation.dataset_before_code"));
+      report(msg("submit.validation.dataset_before_code"));
       return false;
     }
     try {
@@ -1679,24 +1663,23 @@ export function useSubmitWizard() {
       const sigOk = !sigRes || sigRes.errors.length === 0;
       const metOk = !metRes || metRes.errors.length === 0;
       if (sigOk && metOk) return true;
-      toast.error(msg("submit.validation.code_has_errors"));
+      report(msg("submit.validation.code_has_errors"));
       return false;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("submit.code_validation_failed"));
+      report(err instanceof Error ? err.message : msg("submit.code_validation_failed"));
       return false;
     }
   };
 
-  const handleValidateDataset = async (): Promise<boolean> => {
+  const handleValidateDataset = async (report = reportError): Promise<boolean> => {
     if (!parsedDataset || parsedDataset.rowCount === 0) {
-      toast.error(msg("submit.validation.dataset_required"));
+      report(msg("submit.validation.dataset_required"));
       return false;
     }
-    const effectiveFractions =
-      splitModeRef.current === "auto" && splitPlan ? splitPlan.fractions : split;
+    const effectiveFractions = effectiveSplitFractions();
     const sum = effectiveFractions.train + effectiveFractions.val + effectiveFractions.test;
     if (Math.abs(sum - 1) > 0.001) {
-      toast.error(msg("submit.validation.split_must_sum_to_one"));
+      report(msg("submit.validation.split_must_sum_to_one"));
       return false;
     }
     try {
@@ -1706,50 +1689,93 @@ export function useSubmitWizard() {
       });
       setDatasetValidation(result);
       if (result.errors.length === 0) return true;
-      toast.error(msg("submit.validation.split_too_small"));
+      report(msg("submit.validation.split_too_small"));
       return false;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : msg("submit.validation.split_too_small"));
+      report(err instanceof Error ? err.message : msg("submit.validation.split_too_small"));
       return false;
     }
   };
 
-  const handleNext = async () => {
+  // Forward moves — Next and later stages in the stepper — stop on the first
+  // stage before the target that shows a problem, landing there with it
+  // surfaced. Crossing Evaluation also runs its server checks (split sizes,
+  // then code) under one toast.
+  const advance = async (target: number) => {
     if (advancingRef.current) return;
+    for (let i = 0; i < target; i++) {
+      if (!validateStep(i, true, true)) {
+        if (i !== step) goTo(i);
+        return;
+      }
+    }
+    toast.dismiss(WIZARD_ISSUE_TOAST);
+    if (step > WIZARD_STAGE.evaluation || target <= WIZARD_STAGE.evaluation) {
+      goTo(target);
+      return;
+    }
     advancingRef.current = true;
     setAdvancing(true);
+    const from = step;
     try {
-      if (step === 2 && parsedDataset && parsedDataset.rowCount > 0) {
-        const passed = await handleValidateDataset();
-        if (!passed) return;
-      }
-      if (
-        step === 3 &&
+      const checkCode =
         !moduleSelectionRequired &&
-        signatureCode.trim() &&
-        parsedDataset &&
-        metricCode.trim()
-      ) {
-        const passed = await handleValidateCode();
-        if (!passed) return;
+        (isWorkflow || !!signatureCode.trim()) &&
+        !!parsedDataset &&
+        !!metricCode.trim();
+      // One toast per attempt carries every phase and always ends in a
+      // terminal state.
+      const t = beginValidationToast(
+        toast,
+        `wizard-validate-${++validationAttemptRef.current}`,
+        msg("submit.validation.toast.running"),
+      );
+      // A stepper jump back while a check runs wins over this move.
+      const moved = () => {
+        if (stepRef.current === from) return false;
+        t.dismiss();
+        return true;
+      };
+      t.phase(msg("submit.validation.toast.checking_split"));
+      if (!(await handleValidateDataset(t.fail))) {
+        if (moved()) return;
+        if (from !== WIZARD_STAGE.evaluation) goTo(WIZARD_STAGE.evaluation);
+        focusField("data-splits");
+        return;
       }
-      if (validateStep(step, true)) goNext();
+      if (moved()) return;
+      if (checkCode) {
+        t.phase(msg("submit.validation.toast.checking_code"));
+        const codeOk = await handleValidateCode(t.fail);
+        if (moved()) return;
+        if (!codeOk) {
+          if (from !== WIZARD_STAGE.evaluation) goTo(WIZARD_STAGE.evaluation);
+          return;
+        }
+      }
+      // The results those calls stored reach state only on the next render,
+      // so this closure can't re-read them; both just passed.
+      t.succeed(msg("submit.validation.toast.passed"));
+      goTo(target);
     } finally {
       advancingRef.current = false;
       setAdvancing(false);
     }
   };
 
+  const handleNext = async () => {
+    if (step < LAST_WIZARD_STAGE) await advance(step + 1);
+  };
+
+  // Going back — the Back button or an earlier stage in the stepper — is
+  // never held. Going forward is allowed up to the furthest stage already
+  // reached, through the same checks as Next.
   const handleTabClick = (idx: number) => {
     if (idx <= step) {
       goTo(idx);
       return;
     }
-    if (idx <= maxReachableStep) {
-      goTo(idx);
-      return;
-    }
-    validateStep(step, true);
+    if (idx <= maxReachableStep) void advance(idx);
   };
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1852,77 +1878,35 @@ export function useSubmitWizard() {
   const splitSum = +(split.train + split.val + split.test).toFixed(4);
 
   const handleSubmit = async () => {
-    if (!username.trim()) {
-      toast.error(msg("submit.validation.username_required"));
-      goTo(0);
-      return;
-    }
-    if (!parsedDataset || parsedDataset.rowCount === 0) {
-      toast.error(msg("submit.validation.dataset_required_short"));
-      goTo(1);
-      return;
-    }
-    if (isWorkflow) {
-      if (!workflowSpec || validateWorkflowSpec(workflowSpec, workflowIssueText).length > 0) {
-        toast.error(msg("submit.validation.workflow_invalid"));
-        goTo(3);
+    // Every stage's local checks, in order — including the run name, which
+    // lives on Review — landing on the first stage that shows a problem.
+    for (let i = 0; i <= LAST_WIZARD_STAGE; i++) {
+      if (!validateStep(i, true, true)) {
+        if (i !== step) goTo(i);
         return;
       }
-    } else if (!signatureCode.trim()) {
-      toast.error(msg("submit.validation.signature_required"));
-      goTo(3);
-      return;
     }
-    if (!metricCode.trim()) {
-      toast.error(msg("submit.validation.metric_required"));
-      goTo(3);
-      return;
-    }
-    if (!validateTargetScore(true)) {
-      goTo(2);
-      return;
-    }
+    // Evaluation just passed, so the dataset is loaded.
+    if (!parsedDataset) return;
     const needsToolSource =
       isReact || (isWorkflow && !!workflowSpec && workflowUsesTools(workflowSpec));
-    if (needsToolSource && !reactConfig.mcpUrl.trim()) {
-      toast.error(msg("submit.validation.mcp_url_required"));
-      // The tool-source config lives on the code step (it appears once the
-      // module choice reveals a tool-using run).
-      goTo(3);
-      return;
-    }
-
     const columnMapping = currentColumnMapping();
-    if (Object.keys(columnMapping.inputs).length === 0) {
-      toast.error(msg("submit.validation.input_column_required"));
-      goTo(1);
-      return;
-    }
-    if (Object.keys(columnMapping.outputs).length === 0) {
-      toast.error(msg("submit.validation.output_column_required"));
-      goTo(1);
-      return;
-    }
 
     setSubmitting(true);
     setSubmitPhase("sending");
     try {
-      const pxnEligible = advancedMode && optimizerName.toLowerCase() === "gepa";
+      const pxnEligible = optimizerName.toLowerCase() === "gepa";
       const optKw = buildOptimizerKwargs({
         autoLevel,
-        maxFullEvals: advancedMode ? maxFullEvals : DEFAULT_MAX_FULL_EVALS,
-        maxMetricCalls: advancedMode ? maxMetricCalls : "",
-        reflectionMinibatchSize: advancedMode
-          ? reflectionMinibatchSize
-          : DEFAULT_REFLECTION_MINIBATCH,
-        useMerge: advancedMode ? useMerge : true,
+        maxFullEvals,
+        maxMetricCalls,
+        reflectionMinibatchSize,
+        useMerge,
         pxnParents: pxnEligible ? pxnParents : DEFAULT_PXN,
         pxnProposals: pxnEligible ? pxnProposals : DEFAULT_PXN,
       });
       const parsedTargetScore =
-        advancedMode && optimizerName.toLowerCase() === "gepa"
-          ? parseTargetScore(targetScore)
-          : undefined;
+        optimizerName.toLowerCase() === "gepa" ? parseTargetScore(targetScore) : undefined;
       // Submit by reference when the on-screen rows are still the library dataset
       // we loaded — the server inlines the rows and records the link back to it.
       // Any other dataset source replaced the object identity, so fall back to
@@ -1932,7 +1916,7 @@ export function useSubmitWizard() {
           ? librarySourceRef.current.id
           : null;
       const base = {
-        name: jobName.trim() || undefined,
+        name: jobName.trim() || suggestedName || undefined,
         description: jobDescription.trim() || undefined,
         username: username.trim(),
         module_name: moduleName,
@@ -1974,10 +1958,10 @@ export function useSubmitWizard() {
       };
 
       let result;
-      if (effectiveJobType === "run") {
+      if (jobType === "run") {
         if (!modelConfig.name.trim()) {
           toast.error(msg("submit.validation.model_required"));
-          goTo(4);
+          goTo(WIZARD_STAGE.optimization);
           setSubmitting(false);
           setSubmitPhase("idle");
           return;
@@ -2001,14 +1985,14 @@ export function useSubmitWizard() {
         const validRef = reflectionModels.filter((m) => m.name.trim()).map(prepareModelConfig);
         if (validGen.length === 0) {
           toast.error(msg("submit.validation.generation_model_required"));
-          goTo(4);
+          goTo(WIZARD_STAGE.optimization);
           setSubmitting(false);
           setSubmitPhase("idle");
           return;
         }
         if (validRef.length === 0) {
           toast.error(msg("submit.validation.reflection_models_required"));
-          goTo(4);
+          goTo(WIZARD_STAGE.optimization);
           setSubmitting(false);
           setSubmitPhase("idle");
           return;
@@ -2027,6 +2011,7 @@ export function useSubmitWizard() {
       // Mark the submit so the unmount cleanup clears the shared wizard state
       // once navigation tears this form down.
       submittedRef.current = true;
+      draftsRef.current.consumed();
       const jobUrl = `/optimizations/${result.optimization_id}`;
       setSubmitPhase("splash");
       // Collapse sidebar before navigating so the job page opens with full width
@@ -2111,11 +2096,11 @@ export function useSubmitWizard() {
   // interview could still happen — otherwise the pre-warm seed (which fires
   // from earlier steps) would generate code before the user ever saw a
   // question. ``interviewEligible`` additionally requires a role-mapped
-  // dataset and that the user has moved past the data step (``step >= 2``),
-  // so the opening question — which costs an LLM call — pre-warms the moment
-  // dataset setup is done and is already answered-ready by the time the code
-  // step opens. Pre-existing code work (clone pre-fill, manual edits, a
-  // touched canvas) rules the interview out.
+  // dataset and that the user has reached the Evaluation stage, so the
+  // opening question — which costs an LLM call — pre-warms the moment the
+  // dataset's columns are mapped, above the code editors on the same stage.
+  // Pre-existing code work (clone pre-fill, manual edits, a touched canvas)
+  // rules the interview out.
   const interviewPossible =
     codeAssistMode === "auto" &&
     !signatureManuallyEdited &&
@@ -2124,7 +2109,7 @@ export function useSubmitWizard() {
   const interviewEligible =
     interviewPossible &&
     !moduleSelectionRequired &&
-    step >= 2 &&
+    step >= WIZARD_STAGE.evaluation &&
     !!parsedDataset &&
     parsedDataset.rowCount > 0 &&
     Object.values(columnRoles).some((r) => r === "input") &&
@@ -2173,7 +2158,7 @@ export function useSubmitWizard() {
     seedEnabled: !moduleSelectionRequired && (!interviewPossible || interview.resolved),
     interviewBrief: interview.confirmedBrief,
     // The conversation rides through the locale-switch reload alongside the
-    // wizard draft (see wizard-draft.ts).
+    // wizard draft (see use-wizard-drafts.tsx).
     reloadPersistKey: "submit-code-agent",
   });
   useEffect(() => {
@@ -2199,13 +2184,14 @@ export function useSubmitWizard() {
     validateStep,
     handleNext,
     handleTabClick,
-    jobType: effectiveJobType,
+    jobType,
     setOptimizationType,
     isPrivate,
     setIsPrivate,
     username,
     jobName,
-    setJobName,
+    setJobName: editJobName,
+    suggestedName,
     jobDescription,
     setJobDescription,
     moduleName,
@@ -2234,6 +2220,7 @@ export function useSubmitWizard() {
     setOptimizationTypeOpen,
     optimizerSettingsOpen,
     setOptimizerSettingsOpen,
+    optimizerSettingsCustomized,
     signatureCode,
     setSignatureCode,
     setSignatureManuallyEdited,

@@ -12,6 +12,7 @@ import {
   CaretLeft,
   CaretRight,
   Books,
+  Sparkle,
 } from "@/shared/ui/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/shared/ui/primitives/button";
@@ -160,10 +161,18 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const [libraryName, setLibraryName] = useState<string | null>(null);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The third data source: no file at all. Nothing is configured here — the
+  // interview asks what data is wanted and the rows are written from its
+  // answers — so it needs the assistant, and it rules out the manual flow.
+  const [synthetic, setSynthetic] = useState(false);
 
   const { prefs } = useUserPrefs();
   const assistAvailable = isTaggerAssistEnabled() && prefs.taggerAssist;
-  const effectiveAssistMode = assistAvailable ? assistMode : "manual";
+  const effectiveAssistMode = assistAvailable
+    ? synthetic && assistMode === "manual"
+      ? "copilot"
+      : assistMode
+    : "manual";
   // Assisted flows leave the answer style to the interview, so only manual
   // flows get the task-definition step (interface + question/categories).
   const needsTaskStep = effectiveAssistMode === "manual";
@@ -209,6 +218,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
     setError(null);
     setFile(f);
     setLibraryName(null);
+    setSynthetic(false);
     try {
       const { columns, rows } = await parseDatasetFile(f);
       setParsedRows(rows as DataRow[]);
@@ -232,6 +242,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
       setParsedRows(detail.rows as DataRow[]);
       setParsedCols(detail.columns);
       setFile(null);
+      setSynthetic(false);
       setLibraryName(name || msg("tagger.setup.library_fallback_name"));
       const roles = detail.column_schema?.column_roles ?? {};
       const inputs = detail.columns.filter((c) => roles[c] === "input");
@@ -285,7 +296,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   // task step), so gate on the step's id rather than its index.
   const validateStep = (s: number): boolean => {
     const id = activeSteps[s]?.id;
-    if (id === "data") return parsedRows.length > 0 && inputCols.length > 0;
+    if (id === "data") return synthetic || (parsedRows.length > 0 && inputCols.length > 0);
     if (id === "assist") return assistAvailable;
     if (id === "task") {
       if (!mode) return false;
@@ -300,8 +311,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   // only — a fully-defined task. Assisted flows define the task (including the
   // answer style) in the interview instead.
   const canStart = (): boolean =>
-    parsedRows.length > 0 &&
-    inputCols.length > 0 &&
+    (synthetic || (parsedRows.length > 0 && inputCols.length > 0)) &&
     (effectiveAssistMode !== "manual" ||
       (!!mode &&
         (mode !== "binary" || question.trim().length > 0) &&
@@ -339,6 +349,25 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
 
   const handleStart = () => {
     if (!canStart()) return;
+    // A synthetic session is created empty: the interview specifies the data
+    // and the rows (and their input columns) land when the contract is
+    // confirmed.
+    if (synthetic) {
+      onStart(
+        {
+          mode: "freetext",
+          modeProvisional: true,
+          inputColumns: [],
+          synthetic: true,
+          assistMode: effectiveAssistMode,
+          sourceName: msg("tagger.setup.synthetic_source_name"),
+        },
+        [],
+        [],
+        effectiveAssistMode,
+      );
+      return;
+    }
     const mapped: DataRow[] = parsedRows.map((row, i) => {
       const fields = inputCols.map((col) => ({ column: col, value: row[col] }));
       // ``text`` stays as a flat string for CSV export / search / single-col
@@ -389,7 +418,9 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           onDragOver={(e) => e.preventDefault()}
           className={cn(
             "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-all duration-300 group",
-            file ? "border-primary/40 bg-primary/5" : "hover:border-primary/50 hover:bg-muted/30",
+            file || libraryName || synthetic
+              ? "border-primary/40 bg-primary/5"
+              : "hover:border-primary/50 hover:bg-muted/30",
           )}
         >
           <UploadSimple className="size-8 text-muted-foreground group-hover:text-primary/70 transition-colors duration-300" />
@@ -409,6 +440,13 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
               <p className="text-sm text-muted-foreground">
                 {formatMsg("datasets.count.rows", { count: parsedRows.length })}
               </p>
+            </div>
+          ) : synthetic ? (
+            <div className="text-center">
+              <p className="font-medium text-foreground" dir="auto">
+                {msg("tagger.setup.synthetic_source_name")}
+              </p>
+              <p className="text-sm text-muted-foreground">{msg("tagger.setup.synthetic_hint")}</p>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -455,6 +493,44 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           onOpenChange={setPickerOpen}
           onPick={(ds) => void loadLibraryDataset(ds.id, ds.name)}
         />
+
+        {assistAvailable && (
+          <>
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">
+                {msg("tagger.setup.library_or")}
+              </span>
+              <Separator className="flex-1" />
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              aria-pressed={synthetic}
+              onClick={() => {
+                if (synthetic) {
+                  setSynthetic(false);
+                  return;
+                }
+                setError(null);
+                setFile(null);
+                setLibraryName(null);
+                setParsedRows([]);
+                setParsedCols([]);
+                setInputCols([]);
+                setSynthetic(true);
+              }}
+              className={cn(
+                "w-full justify-center gap-2",
+                synthetic && "border-primary/40 bg-primary/5 text-primary",
+              )}
+            >
+              <Sparkle className="size-4" />
+              {msg("tagger.setup.synthetic_pick")}
+            </Button>
+          </>
+        )}
 
         {parsedCols.length > 0 && (
           <>
@@ -628,16 +704,19 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {ASSIST_OPTIONS.map((opt) => {
-            const selected = assistMode === opt.mode;
+            const selected = effectiveAssistMode === opt.mode;
+            const unavailable = synthetic && opt.mode === "manual";
             return (
               <button
                 key={opt.mode}
                 type="button"
                 aria-pressed={selected}
+                disabled={unavailable}
                 onClick={() => setAssistMode(opt.mode)}
                 className={cn(
                   "flex min-w-0 flex-col gap-0.5 rounded-xl border p-3.5 text-start transition-all cursor-pointer",
                   "hover:border-primary/40 hover:bg-primary/5",
+                  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/50 disabled:hover:bg-transparent",
                   selected ? "border-primary bg-primary/10 shadow-sm" : "border-border/50",
                 )}
               >
@@ -656,7 +735,9 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                     </Badge>
                   )}
                 </span>
-                <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                <span className="text-xs text-muted-foreground">
+                  {unavailable ? msg("tagger.setup.synthetic_manual_hint") : opt.desc}
+                </span>
               </button>
             );
           })}

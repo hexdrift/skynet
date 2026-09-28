@@ -6,6 +6,7 @@ import { Plus, ArrowCounterClockwise, Trash } from "@/shared/ui/icons";
 
 import { Button } from "@/shared/ui/primitives/button";
 import { RetryIconButton } from "@/shared/ui/retry-icon-button";
+import { TooltipButton } from "@/shared/ui/tooltip-button";
 import {
   AgentThread,
   ChatTranscript,
@@ -198,15 +199,17 @@ function BriefCard({ interview }: { interview: CodeInterviewState }) {
             </Button>
           </div>
         ))}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setDirectives((prev) => [...prev, ""])}
-          className="mt-1 gap-1.5 self-start"
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          {msg("submit.code.interview.brief.add")}
-        </Button>
+        <TooltipButton tooltip={msg("submit.code.interview.brief.add")} side="top">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDirectives((prev) => [...prev, ""])}
+            aria-label={msg("submit.code.interview.brief.add")}
+            className="mt-1 w-full"
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+          </Button>
+        </TooltipButton>
       </div>
       <div className="border-t border-border/40 p-4 shrink-0">
         <Button onClick={() => interview.confirm(cleaned)} className="w-full">

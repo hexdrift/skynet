@@ -19,6 +19,7 @@ import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
 import { TUTORIAL_SUBMIT_SPLASH_MS } from "./tutorial-timing";
+import { WIZARD_STAGE } from "@/features/submit";
 
 /**
  * The short end-to-end path plus three focused workflow guides.
@@ -333,7 +334,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     beforeShow: async () => {
       await ensureSubmit();
       injectSampleDataset();
-      setWizardStep(1);
+      setWizardStep(WIZARD_STAGE.evaluation);
     },
     tracks: QUICK_ONLY,
     readingTimeSec: 7,
@@ -353,7 +354,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     beforeShow: async () => {
       await ensureSubmit();
       injectSampleDataset();
-      setWizardStep(3);
+      setWizardStep(WIZARD_STAGE.evaluation);
       callTutorialHook("setCodeAssistMode", "manual");
       callTutorialHook("chooseModule", "predict");
       callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
@@ -376,7 +377,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     placement: "bottom",
     beforeShow: async () => {
       await ensureSubmit();
-      setWizardStep(4);
+      setWizardStep(WIZARD_STAGE.optimization);
     },
     tracks: QUICK_ONLY,
     readingTimeSec: 7,
@@ -389,12 +390,12 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       p2: TERMS.modelPlural,
       p3: TERMS.optimizer,
     }),
-    target: "[data-tutorial='wizard-step-6']",
+    target: "[data-tutorial='wizard-stage-review']",
     placement: "bottom",
     beforeShow: async () => {
       await ensureSubmit();
       setOptimizerName("gepa");
-      setWizardStep(5);
+      setWizardStep(WIZARD_STAGE.review);
     },
     tracks: QUICK_ONLY,
     readingTimeSec: 5,

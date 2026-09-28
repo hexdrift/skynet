@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { CaretDown } from "@/shared/ui/icons";
 import {
   Card,
@@ -16,17 +18,16 @@ import { Segmented } from "@/shared/ui/segmented";
 import { cn } from "@/shared/lib/utils";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
-import { useUserPrefs } from "@/features/settings";
 
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
+import { Disclosure } from "../Disclosure";
 import { TOUCH_FIELD } from "@/shared/ui/touch";
 
 export function BasicsStep({ w }: { w: SubmitWizardContext }) {
-  const { prefs } = useUserPrefs();
-  const advanced = prefs.advancedMode;
   const {
     jobName,
     setJobName,
+    suggestedName,
     jobDescription,
     setJobDescription,
     jobType,
@@ -36,6 +37,12 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
     optimizationTypeOpen,
     setOptimizationTypeOpen,
   } = w;
+  // The description is optional, so it folds away until someone asks for it;
+  // one that already has text (restored draft, clone, agent) stays visible.
+  const [descriptionOpen, setDescriptionOpen] = useState(() => jobDescription.trim() !== "");
+  useEffect(() => {
+    if (jobDescription.trim() !== "") setDescriptionOpen(true);
+  }, [jobDescription]);
 
   return (
     <Card
@@ -53,20 +60,26 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
       </CardHeader>
       <CardContent className="space-y-4 px-4 sm:px-6">
         <div className="space-y-2">
-          <Label>
+          <Label htmlFor="job-name">
             {msg("auto.features.submit.components.steps.basicsstep.3")}
             {TERMS.optimization}
           </Label>
           <Input
-            placeholder={msg("auto.features.submit.components.steps.basicsstep.literal.1")}
+            id="job-name"
+            placeholder={
+              suggestedName || msg("auto.features.submit.components.steps.basicsstep.literal.1")
+            }
             value={jobName}
             onChange={(e) => setJobName(e.target.value)}
             className={TOUCH_FIELD}
           />
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>{msg("auto.features.submit.components.steps.basicsstep.4")}</Label>
+        <Disclosure
+          id="job-description-panel"
+          label={msg("auto.features.submit.components.steps.basicsstep.4")}
+          open={descriptionOpen}
+          onOpenChange={setDescriptionOpen}
+          trailing={
             <span
               className={cn(
                 "text-[0.625rem] tabular-nums transition-colors",
@@ -78,9 +91,11 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
               {jobDescription.length}
               {msg("auto.features.submit.components.steps.basicsstep.5")}
             </span>
-          </div>
+          }
+        >
           <Textarea
             data-tutorial="job-description"
+            aria-label={msg("auto.features.submit.components.steps.basicsstep.4")}
             value={jobDescription}
             onChange={(e) => {
               if (e.target.value.length <= 280) setJobDescription(e.target.value);
@@ -90,7 +105,7 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             })}
             rows={4}
           />
-        </div>
+        </Disclosure>
         <div className="space-y-3">
           <Label>{msg("submit.basics.privacy.label")}</Label>
           <Segmented<"private" | "public">
@@ -112,61 +127,59 @@ export function BasicsStep({ w }: { w: SubmitWizardContext }) {
             ]}
           />
         </div>
-        {advanced && <Separator />}
-        {advanced && (
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setOptimizationTypeOpen(!optimizationTypeOpen)}
-              aria-expanded={optimizationTypeOpen}
-              className="flex w-full cursor-pointer items-center justify-between gap-2"
-            >
-              <span className="flex items-baseline gap-2">
-                <span className="text-sm leading-none font-medium">
-                  {msg("auto.features.submit.components.steps.basicsstep.6")}
-                  {TERMS.optimization}
-                </span>
-                {!optimizationTypeOpen && (
-                  <span className="text-xs text-muted-foreground">
-                    {jobType === "run" ? TERMS.optimizationTypeRun : TERMS.optimizationTypeGrid}
-                  </span>
-                )}
+        <Separator />
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setOptimizationTypeOpen(!optimizationTypeOpen)}
+            aria-expanded={optimizationTypeOpen}
+            className="flex w-full cursor-pointer items-center justify-between gap-2"
+          >
+            <span className="flex items-baseline gap-2">
+              <span className="text-sm leading-none font-medium">
+                {msg("auto.features.submit.components.steps.basicsstep.6")}
+                {TERMS.optimization}
               </span>
-              <CaretDown
-                className={cn(
-                  "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
-                  optimizationTypeOpen && "rotate-180",
-                )}
+              {!optimizationTypeOpen && (
+                <span className="text-xs text-muted-foreground">
+                  {jobType === "run" ? TERMS.optimizationTypeRun : TERMS.optimizationTypeGrid}
+                </span>
+              )}
+            </span>
+            <CaretDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
+                optimizationTypeOpen && "rotate-180",
+              )}
+            />
+          </button>
+          {optimizationTypeOpen && (
+            <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
+              <Segmented<"run" | "grid_search">
+                segmentClassName="sm:px-4"
+                value={jobType}
+                onChange={setOptimizationType}
+                options={[
+                  {
+                    value: "run",
+                    label: TERMS.optimizationTypeRun,
+                    desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.2", {
+                      p1: TERMS.optimization,
+                      p2: TERMS.model,
+                    }),
+                  },
+                  {
+                    value: "grid_search",
+                    label: TERMS.optimizationTypeGrid,
+                    desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.3", {
+                      p1: TERMS.optimizationTypeGrid,
+                    }),
+                  },
+                ]}
               />
-            </button>
-            {optimizationTypeOpen && (
-              <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
-                <Segmented<"run" | "grid_search">
-                  segmentClassName="sm:px-4"
-                  value={jobType}
-                  onChange={setOptimizationType}
-                  options={[
-                    {
-                      value: "run",
-                      label: TERMS.optimizationTypeRun,
-                      desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.2", {
-                        p1: TERMS.optimization,
-                        p2: TERMS.model,
-                      }),
-                    },
-                    {
-                      value: "grid_search",
-                      label: TERMS.optimizationTypeGrid,
-                      desc: formatMsg("auto.features.submit.components.steps.basicsstep.template.3", {
-                        p1: TERMS.optimizationTypeGrid,
-                      }),
-                    },
-                  ]}
-                />
-              </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

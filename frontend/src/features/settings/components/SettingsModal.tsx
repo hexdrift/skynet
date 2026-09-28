@@ -31,7 +31,6 @@ import {
   ArrowCounterClockwise,
   HardDrives,
   Shield,
-  FadersHorizontal,
   ShieldCheck,
   Sparkle,
   Table as TableIcon,
@@ -388,17 +387,6 @@ function AccountTab() {
 
       {!isPhone && (
         <>
-          <SettingsRow
-            icon={FadersHorizontal}
-            label={msg("settings.account.advanced_mode.label")}
-            description={msg("settings.account.advanced_mode.description")}
-          >
-            <Switch
-              checked={prefs.advancedMode}
-              onCheckedChange={(v) => setPref("advancedMode", v)}
-            />
-          </SettingsRow>
-
           <SettingsRow
             icon={Sparkle}
             label={msg("settings.account.expand_advanced.label")}

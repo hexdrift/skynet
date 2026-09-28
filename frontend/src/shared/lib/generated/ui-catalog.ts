@@ -997,7 +997,6 @@ export type MessageKey =
   | "auto.features.submit.components.steps.paramsstep.6"
   | "auto.features.submit.components.steps.paramsstep.7"
   | "auto.features.submit.components.steps.paramsstep.8"
-  | "auto.features.submit.components.steps.paramsstep.9"
   | "auto.features.submit.components.steps.paramsstep.literal.1"
   | "auto.features.submit.components.steps.paramsstep.literal.2"
   | "auto.features.submit.components.steps.paramsstep.literal.3"
@@ -1045,10 +1044,6 @@ export type MessageKey =
   | "auto.features.submit.components.submitnav.2"
   | "auto.features.submit.components.submitnav.3"
   | "auto.features.submit.components.submitnav.4"
-  | "auto.features.submit.constants.literal.1"
-  | "auto.features.submit.constants.literal.2"
-  | "auto.features.submit.constants.literal.3"
-  | "auto.features.submit.constants.literal.4"
   | "auto.features.submit.hooks.use.code.agent.literal.1"
   | "auto.features.submit.hooks.use.code.agent.literal.2"
   | "auto.features.submit.hooks.use.code.agent.literal.3"
@@ -1541,7 +1536,6 @@ export type MessageKey =
   | "auto.features.tutorial.lib.steps.literal.9"
   | "auto.features.tutorial.lib.steps.template.1"
   | "auto.features.tutorial.lib.steps.template.14"
-  | "auto.features.tutorial.lib.steps.template.15"
   | "auto.features.tutorial.lib.steps.template.16"
   | "auto.features.tutorial.lib.steps.template.17"
   | "auto.features.tutorial.lib.steps.template.18"
@@ -1872,7 +1866,6 @@ export type MessageKey =
   | "optimization.storage_label"
   | "optimization.workflow.hint"
   | "optimizations.datatab.description"
-  | "optimizations.datatab.description_simple"
   | "optimizations.detail.title"
   | "optimizations.duration.lt_0_1s"
   | "optimizations.duration.seconds"
@@ -1919,8 +1912,6 @@ export type MessageKey =
   | "settings.about.reset_all.label"
   | "settings.about.reset_all.success"
   | "settings.about.version.label"
-  | "settings.account.advanced_mode.description"
-  | "settings.account.advanced_mode.label"
   | "settings.account.expand_advanced.description"
   | "settings.account.expand_advanced.label"
   | "settings.account.lite.description"
@@ -2307,7 +2298,6 @@ export type MessageKey =
   | "submit.basics.privacy.public"
   | "submit.basics.privacy.public_desc"
   | "submit.clone.failed"
-  | "submit.clone.success"
   | "submit.code.agent.tool.metric.title"
   | "submit.code.agent.tool.signature.title"
   | "submit.code.interview.brief.add"
@@ -2352,9 +2342,16 @@ export type MessageKey =
   | "submit.dataset.library_picker_title"
   | "submit.dataset.library_search"
   | "submit.dataset.library_search_empty"
+  | "submit.depth.custom"
+  | "submit.draft.reset_failed"
+  | "submit.draft.restore.continue"
+  | "submit.draft.restore.failed"
+  | "submit.draft.restore.gone"
+  | "submit.draft.restore.retry"
+  | "submit.draft.restore.start_new"
+  | "submit.draft.restore.summary"
+  | "submit.draft.restore.title"
   | "submit.metric_calls"
-  | "submit.metric_calls.clear"
-  | "submit.metric_calls.hint"
   | "submit.modelpicker.purpose.all"
   | "submit.modelpicker.purpose.aria"
   | "submit.modelpicker.purpose.multilingual"
@@ -2371,6 +2368,8 @@ export type MessageKey =
   | "submit.module.tagline.react"
   | "submit.module.tagline.workflow"
   | "submit.nav.validating"
+  | "submit.optimizer_settings.customized"
+  | "submit.optimizer_settings.defaults"
   | "submit.pxn.batch_hint"
   | "submit.pxn.parents"
   | "submit.pxn.proposals"
@@ -2386,11 +2385,13 @@ export type MessageKey =
   | "submit.react.tools_list_label"
   | "submit.react.tools_next"
   | "submit.react.tools_prev"
+  | "submit.split.adjust_hint"
+  | "submit.split.adjust_toggle"
+  | "submit.split.empty"
+  | "submit.split.example_count"
   | "submit.split.label_test"
   | "submit.split.label_train"
   | "submit.split.label_val"
-  | "submit.split.mode_auto"
-  | "submit.split.mode_manual"
   | "submit.split.rationale.large"
   | "submit.split.rationale.medium"
   | "submit.split.rationale.small"
@@ -2398,6 +2399,11 @@ export type MessageKey =
   | "submit.split.rationale_aria"
   | "submit.split.rationale_title"
   | "submit.split.recommended_title"
+  | "submit.split.step_desc"
+  | "submit.stage.evaluation"
+  | "submit.stage.goal"
+  | "submit.stage.optimization"
+  | "submit.stage.review"
   | "submit.submit_failed"
   | "submit.summary.estimate_capped"
   | "submit.summary.estimate_cost"
@@ -2427,6 +2433,10 @@ export type MessageKey =
   | "submit.validation.split_too_small"
   | "submit.validation.target_score_invalid"
   | "submit.validation.target_score_requires_val"
+  | "submit.validation.toast.checking_code"
+  | "submit.validation.toast.checking_split"
+  | "submit.validation.toast.passed"
+  | "submit.validation.toast.running"
   | "submit.validation.username_required"
   | "submit.validation.vision_required"
   | "submit.validation.workflow_invalid"
@@ -2489,6 +2499,10 @@ export type MessageKey =
   | "tagger.assist.retry"
   | "tagger.assist.review.predicting"
   | "tagger.assist.rubric.answer_style"
+  | "tagger.assist.rubric.dataset_hint"
+  | "tagger.assist.rubric.dataset_rows"
+  | "tagger.assist.rubric.dataset_title"
+  | "tagger.assist.rubric.generating"
   | "tagger.assist.rubric.guide_hint"
   | "tagger.assist.rubric.guide_title"
   | "tagger.assist.rubric.rule_add"
@@ -2509,6 +2523,7 @@ export type MessageKey =
   | "tagger.assist.setup.recommended"
   | "tagger.assist.setup.step_label"
   | "tagger.assist.setup.title"
+  | "tagger.assist.synthesize_error"
   | "tagger.library.name_cancel"
   | "tagger.library.name_label"
   | "tagger.library.name_save"
@@ -2569,6 +2584,10 @@ export type MessageKey =
   | "tagger.setup.library_loading"
   | "tagger.setup.library_or"
   | "tagger.setup.library_pick"
+  | "tagger.setup.synthetic_hint"
+  | "tagger.setup.synthetic_manual_hint"
+  | "tagger.setup.synthetic_pick"
+  | "tagger.setup.synthetic_source_name"
   | "tagger.upload.parse_failed"
   | "tooltip.analytics.dataset_size_vs_improvement"
   | "tooltip.analytics.improvement_per_minute"
@@ -3861,13 +3880,12 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.steps.paramsstep.14": "מקסימום סבבי הערכה",
   "auto.features.submit.components.steps.paramsstep.15": "מיזוג מועמדים",
   "auto.features.submit.components.steps.paramsstep.16": "עצירה כשהציון באימות מגיע ל־",
-  "auto.features.submit.components.steps.paramsstep.2": "חלוקת הדאטאסט והגדרות החיפוש",
+  "auto.features.submit.components.steps.paramsstep.2": "הגדרות החיפוש",
   "auto.features.submit.components.steps.paramsstep.4": "חלוקת ",
   "auto.features.submit.components.steps.paramsstep.5": "סכום: ",
   "auto.features.submit.components.steps.paramsstep.6": "אימון",
   "auto.features.submit.components.steps.paramsstep.7": "אימות",
   "auto.features.submit.components.steps.paramsstep.8": "בדיקה",
-  "auto.features.submit.components.steps.paramsstep.9": "הגדרות נוספות",
   "auto.features.submit.components.steps.paramsstep.literal.1": "קל",
   "auto.features.submit.components.steps.paramsstep.literal.2": "בינוני",
   "auto.features.submit.components.steps.paramsstep.literal.3": "מעמיק",
@@ -3915,10 +3933,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.submit.components.submitnav.2": "המשך/המשיכי",
   "auto.features.submit.components.submitnav.3": "נשלח…",
   "auto.features.submit.components.submitnav.4": "שלח/י ",
-  "auto.features.submit.constants.literal.1": "פרטים בסיסיים",
-  "auto.features.submit.constants.literal.2": "פרמטרים",
-  "auto.features.submit.constants.literal.3": "קוד",
-  "auto.features.submit.constants.literal.4": "סיכום ושליחה",
   "auto.features.submit.hooks.use.code.agent.literal.1": "חושב…",
   "auto.features.submit.hooks.use.code.agent.literal.2": "כותב פרומפט (Signature)…",
   "auto.features.submit.hooks.use.code.agent.literal.3": "כותב פונקציית מדידה…",
@@ -4411,7 +4425,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.steps.literal.9": "סטטיסטיקות",
   "auto.features.tutorial.lib.steps.template.1": "טבלת {p1}",
   "auto.features.tutorial.lib.steps.template.14": "אלה שלבי ההגשה: פרטים בסיסיים, {p1}, פרמטרים, קוד, {p2}, סיכום ושליחה.",
-  "auto.features.tutorial.lib.steps.template.15": "בשלב הראשון נותנים ל{p1} שם והקשר, בוחרים את רמת הפרטיות, ובמצב מתקדם בוחרים {p2} יחיד או {p3} אחת שבודקת כמה זוגות מודלים על אותה משימה.",
   "auto.features.tutorial.lib.steps.template.16": "העלאת {p1}",
   "auto.features.tutorial.lib.steps.template.17": "אפשר להעלות CSV, ‏JSON או Excel, להדביק JSON או לבחור דאטאסט שמור מהספרייה. כל שורה היא דוגמה שהמערכת יכולה ללמוד ממנה. קבוצה קטנה, נקייה ומייצגת של {p1} בדרך כלל מועילה יותר ל{p2} מקבוצה גדולה ורועשת.",
   "auto.features.tutorial.lib.steps.template.18": "סמן/סמני כל עמודה כקלט שנשלח ל{p1}, כפלט שהוא התשובה הרצויה, או כעמודה שלא משתמשים בה. ליד כל עמודה מופיע גם סוג התוכן: טקסט נשלח כמלל רגיל, ותמונה נשלחת כקלט תמונה למודל שתומך בכך. המיפוי הזה יוצר אוטומטית את הפרומפט (Signature).",
@@ -4742,7 +4755,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "optimization.storage_label": "נפח האחסון של הריצה — לחצו לניהול",
   "optimization.workflow.hint": "גלילה לזום · גרירה להזזה · לחיצה על צומת לפרטים",
   "optimizations.datatab.description": "הנתונים ששימשו ב{term.optimization} — מחולקים ל{term.splitTrain}, {term.splitVal} ו{term.splitTest}, עם התוצאות לכל דוגמה.",
-  "optimizations.datatab.description_simple": "הדוגמאות שנמדדו — כל דוגמה עם התוצאה שלה, לפני ואחרי ה{term.optimization}.",
   "optimizations.detail.title": "פרטי אופטימיזציה",
   "optimizations.duration.lt_0_1s": "<0.1ש׳",
   "optimizations.duration.seconds": "{value}ש׳",
@@ -4789,8 +4801,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.about.reset_all.label": "איפוס כל ההעדפות",
   "settings.about.reset_all.success": "ההעדפות אופסו",
   "settings.about.version.label": "גרסה",
-  "settings.account.advanced_mode.description": "מציג בקרות אופטימיזציה למתקדמים — סריקות מודלים, כוונון האופטימייזר ופרטי אימון/אימות/בדיקה",
-  "settings.account.advanced_mode.label": "מצב מתקדם",
   "settings.account.expand_advanced.description": "אפשרויות מתקדמות ייפתחו כברירת מחדל באשף האופטימיזציה במקום להישאר מקופלות",
   "settings.account.expand_advanced.label": "הצגת אפשרויות מתקדמות",
   "settings.account.lite.description": "מכבה אנימציות ומחליף תצוגות כבדות בגרסאות פשוטות — לחוויה חלקה במחשבים חלשים",
@@ -5177,7 +5187,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.basics.privacy.public": "ציבורי",
   "submit.basics.privacy.public_desc": "מופיע ב{term.exploreTitle}",
   "submit.clone.failed": "שגיאה בטעינת הגדרות לשכפול",
-  "submit.clone.success": "הגדרות שוכפלו בהצלחה",
   "submit.code.agent.tool.metric.title": "עריכת {term.metric}",
   "submit.code.agent.tool.signature.title": "עריכת {term.signature}",
   "submit.code.interview.brief.add": "הוספת הנחיה",
@@ -5222,9 +5231,16 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.dataset.library_picker_title": "בחירת {term.dataset} מהספרייה",
   "submit.dataset.library_search": "חיפוש {term.dataset}…",
   "submit.dataset.library_search_empty": "לא נמצאו דאטאסטים תואמים",
+  "submit.depth.custom": "מותאם אישית",
+  "submit.draft.reset_failed": "לא ניתן היה לנקות את ההגדרה השמורה. הטיוטה הקודמת עדיין זמינה.",
+  "submit.draft.restore.continue": "להמשיך בטיוטה",
+  "submit.draft.restore.failed": "לא ניתן היה לשחזר את ההגדרה השמורה. אפשר לנסות שוב או להתחיל מחדש.",
+  "submit.draft.restore.gone": "ההגדרה השמורה כבר אינה זמינה בדפדפן הזה.",
+  "submit.draft.restore.retry": "לנסות שוב",
+  "submit.draft.restore.start_new": "להתחיל מחדש",
+  "submit.draft.restore.summary": "עצרתם בשלב {stage}",
+  "submit.draft.restore.title": "להמשיך מההגדרה הקודמת?",
   "submit.metric_calls": "תקציב קריאות מדד",
-  "submit.metric_calls.clear": "ניקוי",
-  "submit.metric_calls.hint": "עוקף את סבבי ההערכה — הריצה נעצרת אחרי מספר זה של קריאות מדד",
   "submit.modelpicker.purpose.all": "הכל",
   "submit.modelpicker.purpose.aria": "סינון מודלים לפי ייעוד",
   "submit.modelpicker.purpose.multilingual": "רב-לשוני",
@@ -5241,6 +5257,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.module.tagline.react": "קורא לכלים בלולאה עד לתשובה",
   "submit.module.tagline.workflow": "כמה צעדים מחוברים על קנבס אחד",
   "submit.nav.validating": "מאמת…",
+  "submit.optimizer_settings.customized": "מותאם",
+  "submit.optimizer_settings.defaults": "ברירות מחדל",
   "submit.pxn.batch_hint": "{total} מועמדים נבדקים בכל סבב",
   "submit.pxn.parents": "מועמדים לשיפור (p)",
   "submit.pxn.proposals": "הצעות לכל מועמד (n)",
@@ -5256,11 +5274,13 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.react.tools_list_label": "כלים מחוברים",
   "submit.react.tools_next": "כלים הבאים",
   "submit.react.tools_prev": "כלים קודמים",
+  "submit.split.adjust_hint": "סגירה מחזירה לחלוקה המומלצת.",
+  "submit.split.adjust_toggle": "התאמת החלוקה",
+  "submit.split.empty": "אין עדיין מה לחלק. אחרי שתעלו {term.dataset} ותסמנו עמודות קלט ופלט, החלוקה המומלצת תופיע כאן.",
+  "submit.split.example_count": "{term.examplePlural}: {count}",
   "submit.split.label_test": "{term.splitTest}",
   "submit.split.label_train": "{term.splitTrain}",
   "submit.split.label_val": "{term.splitVal}",
-  "submit.split.mode_auto": "לפי ההמלצה",
-  "submit.split.mode_manual": "בחירה ידנית",
   "submit.split.rationale.large": "הדאטאסט גדול ({total} {term.examplePlural}). הוקצו {val_count} {term.examplePlural} ל{term.splitVal} ו-{test_count} ל{term.splitTest}; כשהדאטאסט מגיע למכסות האלה, הן שומרות על זמן {term.optimization} סביר בלי להריץ הערכה על יותר {term.examplePlural} מהנדרש.",
   "submit.split.rationale.medium": "הדאטאסט בגודל בינוני ({total} {term.examplePlural}). חלוקת 60/20/20 משאירה מספיק {term.examplePlural} לכל שלושת הסטים.",
   "submit.split.rationale.small": "הדאטאסט קטן ({total} {term.examplePlural}). הוקצו 80% ל{term.splitTrain} ו-20% ל{term.splitVal} כדי לתת ל-GEPA בסיס הערכה נפרד; אין מספיק {term.examplePlural} גם ל{term.splitTest}.",
@@ -5268,6 +5288,11 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.split.rationale_aria": "הסבר לבחירת החלוקה המומלצת",
   "submit.split.rationale_title": "למה נבחרה החלוקה הזו",
   "submit.split.recommended_title": "החלוקה המומלצת",
+  "submit.split.step_desc": "איך ה{term.examplePlural} מתחלקות בין {term.splitTrain}, {term.splitVal} ו{term.splitTest}.",
+  "submit.stage.evaluation": "הערכה",
+  "submit.stage.goal": "מטרה",
+  "submit.stage.optimization": "אופטימיזציה",
+  "submit.stage.review": "סקירה",
   "submit.submit_failed": "שגיאה בשליחת ה{term.optimization}",
   "submit.summary.estimate_capped": "תקרה קשיחה {cap} קרדיטים",
   "submit.summary.estimate_cost": "עלות משוערת",
@@ -5297,9 +5322,13 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.validation.split_too_small": "ה{term.dataset} קטן מדי כדי להריץ {term.optimization} — נדרשות לפחות דוגמאות ל{term.splitVal} או ל{term.splitTest}",
   "submit.validation.target_score_invalid": "הזינו יעד אימות בין 1 ל־100",
   "submit.validation.target_score_requires_val": "יש להגדיר חלוקת אימות לפני שימוש ביעד ציון",
+  "submit.validation.toast.checking_code": "מאמתים את הקוד",
+  "submit.validation.toast.checking_split": "בודקים את חלוקת ה{term.dataset}",
+  "submit.validation.toast.passed": "ההגדרות אומתו",
+  "submit.validation.toast.running": "בודקים את ההגדרות…",
   "submit.validation.username_required": "הזן/הזיני שם משתמש",
   "submit.validation.vision_required": "העמודות {fields} מוגדרות כתמונה, אבל ה{term.model} '{model}' לא תומך בקלט תמונות",
-  "submit.validation.workflow_invalid": "יש בעיות בגרף תהליך העבודה — פתחו את שלב הקוד לפרטים",
+  "submit.validation.workflow_invalid": "יש בעיות בגרף תהליך העבודה — פתחו את שלב ההערכה לפרטים",
   "tagger.assist.autotag.browse": "מעבר לשורות",
   "tagger.assist.autotag.cancel": "ביטול — לשמור את מה שתויג",
   "tagger.assist.autotag.canceled_title": "התיוג בוטל",
@@ -5359,6 +5388,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.retry": "נסו שוב",
   "tagger.assist.review.predicting": "ה-AI מתייג את השורה הזו…",
   "tagger.assist.rubric.answer_style": "סגנון מענה",
+  "tagger.assist.rubric.dataset_hint": "כך העוזר הבין את הנתונים שאתם צריכים. השורות נכתבות כשמתחילים.",
+  "tagger.assist.rubric.dataset_rows": "{count} שורות",
+  "tagger.assist.rubric.dataset_title": "הדאטאסט שייווצר",
+  "tagger.assist.rubric.generating": "יוצר את הדאטאסט…",
   "tagger.assist.rubric.guide_hint": "זוקק מהתשובות שלכם — אפשר לערוך הכול; הוא מנחה כל תיוג של ה-AI.",
   "tagger.assist.rubric.guide_title": "מדריך התיוג",
   "tagger.assist.rubric.rule_add": "הוספת כלל",
@@ -5379,6 +5412,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.setup.recommended": "מומלץ",
   "tagger.assist.setup.step_label": "גישה",
   "tagger.assist.setup.title": "איך תרצו לתייג?",
+  "tagger.assist.synthesize_error": "לא הצלחנו ליצור את הדאטאסט. נסו שוב.",
   "tagger.library.name_cancel": "ביטול",
   "tagger.library.name_label": "שם הדאטאסט",
   "tagger.library.name_save": "שמירה",
@@ -5439,6 +5473,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.setup.library_loading": "טוען את הדאטאסט מהספרייה…",
   "tagger.setup.library_or": "או",
   "tagger.setup.library_pick": "בחירה מהספרייה שלכם",
+  "tagger.setup.synthetic_hint": "עדיין אין דאטאסט? בחרו כאן והעוזר ישאל אילו נתונים אתם צריכים, ואז יכתוב אותם לפני שהתיוג מתחיל.",
+  "tagger.setup.synthetic_manual_hint": "דאטאסט סינתטי נבנה בראיון, אז הוא דורש את העוזר.",
+  "tagger.setup.synthetic_pick": "יצירת דאטאסט סינתטי",
+  "tagger.setup.synthetic_source_name": "דאטאסט סינתטי",
   "tagger.upload.parse_failed": "טעינת הקובץ נכשלה",
   "tooltip.analytics.dataset_size_vs_improvement": "האם יותר נתונים מובילים ל{term.scoreImprovement} טוב יותר — כל נקודה היא {term.optimization} אחת",
   "tooltip.analytics.improvement_per_minute": "אחוזי {term.scoreImprovement} לכל דקת {term.optimizationTypeRun} — ערך גבוה משמעו {term.optimization} יעילה יותר",
