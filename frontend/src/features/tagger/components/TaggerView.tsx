@@ -167,6 +167,8 @@ export function TaggerView({ initialSession }: { initialSession?: TaggerSessionD
           rowCount={tagger.data.length}
           estimate={tagger.estimate}
           onFetchEstimate={() => void tagger.fetchEstimate()}
+          generating={tagger.generating}
+          onGenerateDataset={tagger.generateDataset}
           onSend={(content) => void tagger.sendInterviewMessage(content)}
           onEditResend={(index, content) => void tagger.sendInterviewMessage(content, index)}
           onStop={tagger.stopInterview}

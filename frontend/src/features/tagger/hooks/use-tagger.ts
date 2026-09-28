@@ -12,6 +12,7 @@ import {
   taggerAssistAutotagStart,
   taggerAssistAutotagStatus,
   taggerAssistAutotagCancel,
+  synthesizeTaggerDataset,
   type TaggerSessionDetail,
   type InterviewOption,
 } from "@/shared/lib/api";
@@ -152,6 +153,9 @@ export function useTagger(initialSession?: TaggerSessionDetail | null) {
   // the starter resolves so the between-rounds gate never renders on the way
   // out of the interview.
   const [contractStarting, setContractStarting] = useState(false);
+  // A synthetic session's rows are written between the confirmed contract
+  // and the launch; the contract card shows the wait.
+  const [generating, setGenerating] = useState(false);
   const [estimate, setEstimate] = useState<AutotagEstimate | null>(null);
   const [autotagStatus, setAutotagStatus] = useState<{
     status: string;
@@ -671,6 +675,7 @@ export function useTagger(initialSession?: TaggerSessionDetail | null) {
                 ...(turn.done && Object.keys(turn.taskOverride).length > 0
                   ? { taskOverride: turn.taskOverride }
                   : {}),
+                ...(turn.done && turn.datasetSpec ? { datasetSpec: turn.datasetSpec } : {}),
               });
               setInterviewOptions(turn.done ? [] : turn.options);
               // The interview names the session on its final turn; the user
@@ -711,6 +716,30 @@ export function useTagger(initialSession?: TaggerSessionDetail | null) {
     if (interviewBusy) return;
     void sendInterviewMessage(null);
   }, [phase, sessionId]);
+
+  // A synthetic session has no rows until the contract is confirmed: the
+  // server writes them from the interview's specification, persists them and
+  // makes every generated column an input column. Mirrored here so the launch
+  // that follows samples real rows. Resolves false when nothing was written,
+  // leaving the contract card up with the error and its retry.
+  const generateDataset = useCallback(async (): Promise<boolean> => {
+    const spec = assistRef.current?.datasetSpec;
+    if (!sessionId || !spec || generating) return false;
+    setGenerating(true);
+    setAssistError(null);
+    try {
+      const result = await synthesizeTaggerDataset(sessionId, spec);
+      setData(result.rows as DataRow[]);
+      setColumns(result.columns);
+      setConfig((prev) => (prev ? { ...prev, inputColumns: result.columns } : prev));
+      return true;
+    } catch {
+      setAssistError("synthesize");
+      return false;
+    } finally {
+      setGenerating(false);
+    }
+  }, [sessionId, generating]);
 
   /**
    * Confirm the task contract (answer style, artifacts, rubric) and leave the
@@ -1085,6 +1114,7 @@ export function useTagger(initialSession?: TaggerSessionDetail | null) {
     roundLoading,
     roundPredicting,
     contractStarting,
+    generating,
     estimate,
     autotagStatus,
     sendInterviewMessage,
@@ -1092,6 +1122,7 @@ export function useTagger(initialSession?: TaggerSessionDetail | null) {
     skipInterview,
     restartInterview,
     confirmRubric,
+    generateDataset,
     assistToggleBinary,
     assistToggleCategory,
     assistSetFreetext,

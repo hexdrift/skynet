@@ -2478,6 +2478,10 @@ export type MessageKey =
   | "tagger.assist.retry"
   | "tagger.assist.review.predicting"
   | "tagger.assist.rubric.answer_style"
+  | "tagger.assist.rubric.dataset_hint"
+  | "tagger.assist.rubric.dataset_rows"
+  | "tagger.assist.rubric.dataset_title"
+  | "tagger.assist.rubric.generating"
   | "tagger.assist.rubric.guide_hint"
   | "tagger.assist.rubric.guide_title"
   | "tagger.assist.rubric.rule_add"
@@ -2498,6 +2502,7 @@ export type MessageKey =
   | "tagger.assist.setup.recommended"
   | "tagger.assist.setup.step_label"
   | "tagger.assist.setup.title"
+  | "tagger.assist.synthesize_error"
   | "tagger.library.name_cancel"
   | "tagger.library.name_label"
   | "tagger.library.name_save"
@@ -2558,6 +2563,10 @@ export type MessageKey =
   | "tagger.setup.library_loading"
   | "tagger.setup.library_or"
   | "tagger.setup.library_pick"
+  | "tagger.setup.synthetic_hint"
+  | "tagger.setup.synthetic_manual_hint"
+  | "tagger.setup.synthetic_pick"
+  | "tagger.setup.synthetic_source_name"
   | "tagger.upload.parse_failed"
   | "tooltip.analytics.dataset_size_vs_improvement"
   | "tooltip.analytics.improvement_per_minute"
@@ -5337,6 +5346,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.retry": "נסו שוב",
   "tagger.assist.review.predicting": "ה-AI מתייג את השורה הזו…",
   "tagger.assist.rubric.answer_style": "סגנון מענה",
+  "tagger.assist.rubric.dataset_hint": "כך העוזר הבין את הנתונים שאתם צריכים. השורות נכתבות כשמתחילים.",
+  "tagger.assist.rubric.dataset_rows": "{count} שורות",
+  "tagger.assist.rubric.dataset_title": "הדאטאסט שייווצר",
+  "tagger.assist.rubric.generating": "יוצר את הדאטאסט…",
   "tagger.assist.rubric.guide_hint": "זוקק מהתשובות שלכם — אפשר לערוך הכול; הוא מנחה כל תיוג של ה-AI.",
   "tagger.assist.rubric.guide_title": "מדריך התיוג",
   "tagger.assist.rubric.rule_add": "הוספת כלל",
@@ -5357,6 +5370,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.setup.recommended": "מומלץ",
   "tagger.assist.setup.step_label": "גישה",
   "tagger.assist.setup.title": "איך תרצו לתייג?",
+  "tagger.assist.synthesize_error": "לא הצלחנו ליצור את הדאטאסט. נסו שוב.",
   "tagger.library.name_cancel": "ביטול",
   "tagger.library.name_label": "שם הדאטאסט",
   "tagger.library.name_save": "שמירה",
@@ -5417,6 +5431,10 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.setup.library_loading": "טוען את הדאטאסט מהספרייה…",
   "tagger.setup.library_or": "או",
   "tagger.setup.library_pick": "בחירה מהספרייה שלכם",
+  "tagger.setup.synthetic_hint": "עדיין אין דאטאסט? בחרו כאן והעוזר ישאל אילו נתונים אתם צריכים, ואז יכתוב אותם לפני שהתיוג מתחיל.",
+  "tagger.setup.synthetic_manual_hint": "דאטאסט סינתטי נבנה בראיון, אז הוא דורש את העוזר.",
+  "tagger.setup.synthetic_pick": "יצירת דאטאסט סינתטי",
+  "tagger.setup.synthetic_source_name": "דאטאסט סינתטי",
   "tagger.upload.parse_failed": "טעינת הקובץ נכשלה",
   "tooltip.analytics.dataset_size_vs_improvement": "האם יותר נתונים מובילים ל{term.scoreImprovement} טוב יותר — כל נקודה היא {term.optimization} אחת",
   "tooltip.analytics.improvement_per_minute": "אחוזי {term.scoreImprovement} לכל דקת {term.optimizationTypeRun} — ערך גבוה משמעו {term.optimization} יעילה יותר",

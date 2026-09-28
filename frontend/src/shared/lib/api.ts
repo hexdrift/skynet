@@ -1291,6 +1291,24 @@ export function taggerAssistAutotagCancel(sessionId: string) {
 }
 
 /**
+ * Generate a synthetic session's dataset from the specification the
+ * interview derived. The server writes the rows with the tagging model and
+ * persists them on the session; the returned rows are what it stored.
+ */
+export function synthesizeTaggerDataset(
+  sessionId: string,
+  body: { brief: string; rows: number; columns: string[] },
+) {
+  return request<{
+    columns: string[];
+    rows: Array<Record<string, unknown>>;
+  }>(`/tagging-sessions/${sessionId}/assist/synthesize`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/**
  * The caller's account-wide storage usage against their budget. ``breakdown``
  * maps each storage category to its byte contribution; ``used_bytes`` is their
  * sum and the same total the save/run gate enforces.
