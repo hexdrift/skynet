@@ -826,11 +826,6 @@ class Settings(BaseSettings):
         """Return admin IdP groups as a lowercase frozenset."""
         return _csv_lower_set(self.admin_groups)
 
-    @property
-    def is_byok_vault_configured(self) -> bool:
-        """Return whether a BYOK vault key is present (saving provider keys enabled)."""
-        return self.byok_vault_key is not None
-
     @cached_property
     def code_version(self) -> str:
         """Return the build version used for job-claim compatibility checks.

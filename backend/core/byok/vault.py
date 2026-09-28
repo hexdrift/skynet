@@ -4,8 +4,8 @@ When an account runs in ``byok`` token source, jobs use the user's own provider
 connection. This module is the only place that holds those
 secrets: it encrypts them with Fernet (symmetric AES) under
 ``settings.byok_vault_key`` before they touch the database, decrypts them only
-to run a verify probe or hand them to a run, and never returns plaintext to the
-API surface. The stored row keeps only the ciphertext, a masked tail (``last4``)
+in memory (to re-run a verify probe, hand them to a run, or list the models a
+custom endpoint serves), and never returns plaintext to the API surface. The stored row keeps only the ciphertext, a masked tail (``last4``)
 for display, and a verification ``status`` — so a database dump never leaks a
 usable key.
 
@@ -17,8 +17,9 @@ error leaves it ``unverified`` (the probe couldn't reach a verdict, not a bad
 key).
 
 Reads of the masked metadata work whether or not the vault is configured;
-saving a key requires ``settings.is_byok_vault_configured`` and raises a
-configuration error otherwise — never a 500.
+anything that encrypts or decrypts (saving, re-verifying, resolving a key for a
+run) needs ``settings.byok_vault_key`` and raises a 503 ``byok.not_configured``
+``DomainError`` when it is unset — never a 500.
 """
 
 from __future__ import annotations
