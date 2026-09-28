@@ -2147,6 +2147,23 @@ export type MessageKey =
   | "shared.code_editor.collapse"
   | "shared.code_editor.copied"
   | "shared.code_editor.copy"
+  | "shared.code_editor.find.close"
+  | "shared.code_editor.find.count"
+  | "shared.code_editor.find.invalid_regex"
+  | "shared.code_editor.find.match_case"
+  | "shared.code_editor.find.next"
+  | "shared.code_editor.find.no_results"
+  | "shared.code_editor.find.open"
+  | "shared.code_editor.find.open_tip"
+  | "shared.code_editor.find.placeholder"
+  | "shared.code_editor.find.previous"
+  | "shared.code_editor.find.regex"
+  | "shared.code_editor.find.replace"
+  | "shared.code_editor.find.replace_all"
+  | "shared.code_editor.find.replace_placeholder"
+  | "shared.code_editor.find.toggle_replace"
+  | "shared.code_editor.find.total"
+  | "shared.code_editor.find.whole_word"
   | "shared.code_editor.format"
   | "shared.code_editor.lines_count"
   | "shared.code_editor.lines_hidden"
@@ -4977,6 +4994,23 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "shared.code_editor.collapse": "כווץ/י",
   "shared.code_editor.copied": "הועתק",
   "shared.code_editor.copy": "העתק/העתיקי",
+  "shared.code_editor.find.close": "סגירה (Esc)",
+  "shared.code_editor.find.count": "{current} מתוך {total}",
+  "shared.code_editor.find.invalid_regex": "תבנית לא תקינה",
+  "shared.code_editor.find.match_case": "התאמת אותיות גדולות/קטנות",
+  "shared.code_editor.find.next": "ההתאמה הבאה (Enter)",
+  "shared.code_editor.find.no_results": "אין תוצאות",
+  "shared.code_editor.find.open": "חיפוש",
+  "shared.code_editor.find.open_tip": "חיפוש בקוד ({shortcut})",
+  "shared.code_editor.find.placeholder": "חיפוש",
+  "shared.code_editor.find.previous": "ההתאמה הקודמת (Shift+Enter)",
+  "shared.code_editor.find.regex": "ביטוי רגולרי",
+  "shared.code_editor.find.replace": "החלפה",
+  "shared.code_editor.find.replace_all": "החלפת הכול",
+  "shared.code_editor.find.replace_placeholder": "החלפה ב־",
+  "shared.code_editor.find.toggle_replace": "הצגת/הסתרת החלפה ({shortcut})",
+  "shared.code_editor.find.total": "{total, plural, one {התאמה אחת} two {שתי התאמות} other {# התאמות}}",
+  "shared.code_editor.find.whole_word": "מילים שלמות בלבד",
   "shared.code_editor.format": "פרמט/י",
   "shared.code_editor.lines_count": "{count, plural, one {שורה אחת} two {שתי שורות} other {# שורות}}",
   "shared.code_editor.lines_hidden": "{count, plural, one {שורה אחת מוסתרת} two {שתי שורות מוסתרות} other {# שורות מוסתרות}}",

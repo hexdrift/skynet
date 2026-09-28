@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Brain, CaretDown, Check, Clipboard } from "@/shared/ui/icons";
+import { Brain, CaretDown, Check } from "@/shared/ui/icons";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
 
@@ -150,28 +150,5 @@ export function ReasoningPill({
       <Brain className={iconSize} />
       {label}
     </span>
-  );
-}
-
-export function CopyButton({ text, className = "" }: { text: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      className={`inline-flex size-[44px] items-center justify-center cursor-pointer transition-opacity duration-200 outline-none border-none shadow-none ring-0 bg-transparent hover:opacity-100 sm:size-auto sm:p-1.5 [@media(hover:none)_and_(pointer:coarse)]:size-[44px] [@media(hover:none)_and_(pointer:coarse)]:p-0 ${className}`}
-      title={msg("auto.features.optimizations.components.ui.primitives.literal.1")}
-      aria-label={msg("auto.features.optimizations.components.ui.primitives.literal.2")}
-    >
-      {copied ? (
-        <Check className="size-3.5 text-foreground/70" />
-      ) : (
-        <Clipboard className="size-3.5 text-foreground/40 hover:text-foreground/70" />
-      )}
-    </button>
   );
 }

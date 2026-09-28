@@ -20,7 +20,7 @@ import type {
 import { displayName, kindLabel } from "@/features/submit/workflow/nodes";
 import { tip } from "@/shared/lib/tooltips";
 import { msg } from "@/shared/lib/messages";
-import { CopyButton } from "./ui-primitives";
+import { CopyButton } from "@/shared/ui/copy-button";
 import { ExportMenu } from "./ExportMenu";
 import { useIsPhone } from "@/shared/hooks/use-device-class";
 
@@ -183,6 +183,7 @@ function PromptBody({ predictor }: { predictor: OptimizedPredictor }) {
         </pre>
         <CopyButton
           text={predictor.formatted_prompt}
+          ariaLabel={msg("shared.agent.copy")}
           className="absolute end-1.5 top-1.5 opacity-100 sm:end-2 sm:top-2 sm:opacity-0 sm:group-hover:opacity-100"
         />
       </div>

@@ -9,7 +9,7 @@ import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { ServeChat, type ServeChatProps } from "./ServeChat";
 import { ServeCodeSnippets } from "./ServeCodeSnippets";
-import { CopyButton } from "./ui-primitives";
+import { CopyButton } from "@/shared/ui/copy-button";
 import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
@@ -112,6 +112,7 @@ export function RunPlayground({
                 <code className="text-xs font-mono break-all">{serveUrl}</code>
                 <CopyButton
                   text={serveUrl}
+                  ariaLabel={msg("shared.agent.copy")}
                   className="absolute end-1 top-1 opacity-100 sm:end-1.5 sm:top-1.5 sm:opacity-0 sm:group-hover:opacity-100"
                 />
               </div>

@@ -35,7 +35,7 @@ import { PingDot } from "@/shared/ui/ping-dot";
 import { markRecentSession } from "@/shared/lib/recent-session";
 import { FadeIn } from "@/shared/ui/motion";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
-import { CopyGlyph, useCopyToClipboard } from "@/shared/ui/copy-button";
+import { CopyButton } from "@/shared/ui/copy-button";
 import {
   getJob,
   cancelJob,
@@ -218,24 +218,16 @@ function LiveElapsedBadge({
   );
 }
 
-// Copy control for the failure card. Mirrors the app-wide animated copy
-// pattern (Copy morphs into a check, tooltip flips to "copied"), tinted to
-// the warm error palette so it reads as part of the card rather than a
-// generic action.
+// The app-standard copy button, tinted to the failure card's warm error
+// palette so it reads as part of the card rather than a generic action.
 function FailureCopyButton({ text }: { text: string }) {
-  const { copied, copy } = useCopyToClipboard();
-  const label = msg(copied ? "shared.code_editor.copied" : "shared.code_editor.copy");
   return (
-    <TooltipButton tooltip={label}>
-      <button
-        type="button"
-        aria-label={label}
-        onClick={() => void copy(text)}
-        className="-me-1 flex size-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-[#B04030]/70 transition-colors hover:bg-[#B04030]/10 hover:text-[#B04030] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B04030]/30 sm:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
-      >
-        <CopyGlyph copied={copied} className="size-3.5" checkClassName="text-[#B04030]" />
-      </button>
-    </TooltipButton>
+    <CopyButton
+      text={text}
+      ariaLabel={msg("shared.code_editor.copy")}
+      copiedAriaLabel={msg("shared.code_editor.copied")}
+      className="-me-1 shrink-0 text-[#B04030]/70 hover:bg-[#B04030]/10 hover:text-[#B04030]"
+    />
   );
 }
 

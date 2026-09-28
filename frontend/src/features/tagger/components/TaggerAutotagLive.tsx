@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CaretLeft, CaretRight, CircleNotch } from "@/shared/ui/icons";
 import { AgentPillDock } from "@/features/agent-panel";
 import { Button } from "@/shared/ui/primitives/button";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardTitle } from "@/shared/ui/primitives/card";
 import { cn } from "@/shared/lib/utils";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { arrowPageStep } from "@/shared/lib/arrow-paging";
 import { FieldsView } from "./TaggerAnnotation";
 import type { Annotation, DataRow, TaggerConfig } from "../lib/types";
 import { isBinaryNo, isBinaryYes } from "../lib/types";
@@ -80,14 +81,31 @@ export function TaggerAutotagLive({ config, data, annotations, status }: Props) 
     frontier = i;
   }
   const shown = Math.min(cursor ?? frontier, Math.max(0, data.length - 1));
+  const navigate = useCallback(
+    (dir: 1 | -1) => {
+      const next = Math.max(0, Math.min(shown + dir, frontier));
+      setCursor(next >= frontier ? null : next);
+    },
+    [shown, frontier],
+  );
+
+  // Arrows step rows from anywhere on this read-only surface, following the
+  // prev/next buttons' direction in either locale.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const step = arrowPageStep(event, rtl);
+      if (step === 0) return;
+      event.preventDefault();
+      navigate(step);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate, rtl]);
+
   const item = data[shown];
   if (!item) return null;
   const ann = annotations[String(item.id)];
   const labeled = hasLabel(ann, config.mode);
-  const navigate = (dir: 1 | -1) => {
-    const next = Math.max(0, Math.min(shown + dir, frontier));
-    setCursor(next >= frontier ? null : next);
-  };
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-height,53px)-3rem)] flex-col overflow-hidden md:h-[calc(100dvh-var(--header-height,53px)-4rem)]">

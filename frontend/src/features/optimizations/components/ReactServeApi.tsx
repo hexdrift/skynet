@@ -11,7 +11,8 @@ import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 
-import { CopyButton, LangPicker } from "./ui-primitives";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { LangPicker } from "./ui-primitives";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
@@ -209,6 +210,7 @@ export function ReactServeApi({ optimizationId }: ReactServeApiProps) {
             <code className="text-xs font-mono break-all">{url}</code>
             <CopyButton
               text={url}
+              ariaLabel={msg("shared.agent.copy")}
               className="absolute end-1 top-1 opacity-100 sm:end-1.5 sm:top-1.5 sm:opacity-0 sm:group-hover:opacity-100"
             />
           </div>

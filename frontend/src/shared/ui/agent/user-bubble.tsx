@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Check, Clipboard, PencilSimple } from "@/shared/ui/icons";
+import { PencilSimple } from "@/shared/ui/icons";
 
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
+import { Button } from "@/shared/ui/primitives/button";
+import { CopyButton } from "@/shared/ui/copy-button";
 
 import { autoResizeTextarea } from "./auto-resize";
 
@@ -16,14 +18,6 @@ interface UserBubbleProps {
 }
 
 export function UserBubble({ content, onEdit, editable = true }: UserBubbleProps) {
-  const [copied, setCopied] = React.useState(false);
-  const handleCopy = React.useCallback(() => {
-    if (!content) return;
-    void navigator.clipboard.writeText(content);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  }, [content]);
-
   return (
     <div className="flex justify-start group/user">
       <div
@@ -40,38 +34,23 @@ export function UserBubble({ content, onEdit, editable = true }: UserBubbleProps
           "opacity-0 group-hover/user:opacity-100 transition-opacity",
         )}
       >
-        <TooltipButton
-          tooltip={msg(copied ? "shared.agent.copied" : "shared.agent.copy")}
-          side="top"
-        >
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="p-1.5 rounded-lg hover:bg-muted/60 cursor-pointer"
-            aria-label={msg(copied ? "shared.agent.copied" : "shared.agent.copy")}
-          >
-            {copied ? (
-              <Check className="size-3 text-muted-foreground" />
-            ) : (
-              <Clipboard className="size-3 text-muted-foreground" />
-            )}
-          </button>
-        </TooltipButton>
+        <CopyButton
+          text={content}
+          ariaLabel={msg("shared.agent.copy")}
+          copiedAriaLabel={msg("shared.agent.copied")}
+        />
         {editable && onEdit && (
           <TooltipButton tooltip={msg("shared.agent.edit_and_resend")} side="top">
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-xs"
               onClick={onEdit}
-              className="p-1.5 rounded-lg hover:bg-muted/60 cursor-pointer"
               aria-label={msg("shared.agent.edit_and_resend")}
             >
-              <PencilSimple className="size-3 text-muted-foreground" />
-            </button>
+              <PencilSimple className="size-3.5" />
+            </Button>
           </TooltipButton>
         )}
-        <span className="sr-only" role="status" aria-live="polite">
-          {copied ? msg("shared.agent.copied") : ""}
-        </span>
       </div>
     </div>
   );

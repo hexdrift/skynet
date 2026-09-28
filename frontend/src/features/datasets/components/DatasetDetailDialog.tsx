@@ -45,6 +45,8 @@ import {
 } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { formatRelativeTime } from "@/shared/lib/formatters";
+import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { arrowPageStep } from "@/shared/lib/arrow-paging";
 
 // The grid sorts/filters the full row set in memory, but caps the DOM at this
 // many rows so a large dataset never renders tens of thousands of <tr>s.
@@ -312,13 +314,17 @@ export function DatasetDetailDialog({
                 })}
                 className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 focus-visible:outline-none sm:px-6"
                 onKeyDown={(e) => {
-                  if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    stepReader(-1);
-                  } else if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    stepReader(1);
-                  }
+                  // ↑/↓ walk the row list; ←/→ follow the prev/next carets,
+                  // which mirror in RTL.
+                  const step =
+                    e.key === "ArrowUp"
+                      ? -1
+                      : e.key === "ArrowDown"
+                        ? 1
+                        : arrowPageStep(e, getActiveDir() === "rtl");
+                  if (step === 0) return;
+                  e.preventDefault();
+                  stepReader(step);
                 }}
               >
                 <div className="mb-3 flex shrink-0 items-center gap-2">
@@ -379,8 +385,7 @@ export function DatasetDetailDialog({
                               })}
                               onCopied={() => toast.success(msg("clipboard.copied"))}
                               onCopyError={() => toast.error(msg("clipboard.copy_failed"))}
-                              className="size-[44px] opacity-100 transition-opacity lg:size-6 lg:opacity-0 lg:group-hover/field:opacity-100 lg:focus-visible:opacity-100"
-                              iconClassName="size-3"
+                              className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover/field:opacity-100 lg:focus-visible:opacity-100"
                             />
                           </div>
                           <dd

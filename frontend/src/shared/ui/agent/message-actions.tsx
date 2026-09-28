@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Check, Clipboard, Cpu, ArrowsClockwise } from "@/shared/ui/icons";
+import { Cpu, ArrowsClockwise } from "@/shared/ui/icons";
 
 import { Badge } from "@/shared/ui/primitives/badge";
+import { Button } from "@/shared/ui/primitives/button";
+import { CopyGlyph, useCopyToClipboard } from "@/shared/ui/copy-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
 import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
@@ -28,19 +30,9 @@ function ActionButton({ label, onClick, children }: ActionButtonProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          aria-label={label}
-          className={cn(
-            "inline-flex items-center justify-center rounded-md p-1.5 cursor-pointer outline-none",
-            "text-foreground/40 hover:text-foreground hover:bg-accent/70",
-            "transition-colors",
-            "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-          )}
-        >
+        <Button variant="ghost" size="icon-xs" onClick={onClick} aria-label={label}>
           {children}
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom" dir={getActiveDir()}>
         {label}
@@ -56,13 +48,7 @@ export function MessageActions({
   onRegenerate,
   className,
 }: MessageActionsProps) {
-  const [copied, setCopied] = React.useState(false);
-  const handleCopy = React.useCallback(() => {
-    if (!text) return;
-    void navigator.clipboard.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  }, [text]);
+  const { copied, copy } = useCopyToClipboard();
 
   // Turns routed by OpenRouter's Auto Router (the composer's Auto tiers)
   // report the router's own id — read it back as "Auto", and when the
@@ -83,13 +69,9 @@ export function MessageActions({
       {text.length > 0 && (
         <ActionButton
           label={msg(copied ? "shared.agent.copied" : "shared.agent.copy")}
-          onClick={handleCopy}
+          onClick={() => void copy(text)}
         >
-          {copied ? (
-            <Check className="size-3.5 text-foreground" />
-          ) : (
-            <Clipboard className="size-3.5" />
-          )}
+          <CopyGlyph copied={copied} className="size-3.5" />
         </ActionButton>
       )}
       {onRegenerate && (
