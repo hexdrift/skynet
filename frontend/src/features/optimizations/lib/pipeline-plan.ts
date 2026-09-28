@@ -10,6 +10,7 @@ import type { OptimizationStatusResponse } from "@/shared/types/api";
 import { TERMS } from "@/shared/lib/terms";
 import { msg } from "@/shared/lib/messages";
 import type { PipelineStage } from "../constants";
+import { isReactModuleName } from "./is-react-module";
 
 export interface PlannedStage {
   key: PipelineStage;
@@ -27,7 +28,7 @@ function optimizerLabel(raw: string): string {
 
 function optimizingStage(job: OptimizationStatusResponse): PlannedStage {
   const optimizer = job.optimizer_name ?? "";
-  const isReact = job.module_name === "react";
+  const isReact = isReactModuleName(job.module_name);
   if (isReact || optimizer.toLowerCase() === "gepa") {
     return {
       key: "optimizing",

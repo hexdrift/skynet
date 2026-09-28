@@ -457,9 +457,7 @@ function resolveModelParameter(
 
 /** Resolve a routed model id to the provider mark used by the config card. */
 function modelProviderSlug(id: string): string {
-  const parts = id.split("/");
-  const slug = (parts[0] === "openrouter" && parts.length > 2 ? parts[1] : parts[0]) ?? id;
-  return slug === "x-ai" ? "xai" : slug;
+  return id.split("/")[0] ?? id;
 }
 
 /** Graphical model-config card for the Models carousel slide. */
