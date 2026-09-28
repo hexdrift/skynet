@@ -896,7 +896,7 @@ def test_system_prompt_forbids_submit_in_authoring_turn() -> None:
     Guards against a future prompt edit silently dropping the ordering rule that
     is the primary defense for this bug.
     """
-    prompt = GENERALIST_SYSTEM_PROMPT or ""
+    prompt = GENERALIST_SYSTEM_PROMPT
     assert "NEVER call ``submit_job_run_post`` in the SAME turn as" in prompt
     assert "request_code_authoring" in prompt
 
@@ -1200,7 +1200,7 @@ async def test_sample_staging_keeps_an_existing_job_name() -> None:
 
 def test_system_prompt_covers_new_capabilities() -> None:
     """The prompt names the modules and tools the agent now supports."""
-    prompt = GENERALIST_SYSTEM_PROMPT or ""
+    prompt = GENERALIST_SYSTEM_PROMPT
     for needle in ("react", "flex", "target_score", "validate_datasets", "restart"):
         assert needle in prompt
     assert "blackbox" not in prompt.lower()
@@ -1250,7 +1250,11 @@ class _ScriptedLM(dspy.BaseLM):
         """
         self.requests.append({"messages": messages, **kwargs})
         name, args = self._script.pop(0)
-        call = {"id": f"call_{len(self.requests)}", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+        call = {
+            "id": f"call_{len(self.requests)}",
+            "type": "function",
+            "function": {"name": name, "arguments": json.dumps(args)},
+        }
         message = {"role": "assistant", "content": None, "tool_calls": [call]}
         return litellm.ModelResponse(
             model="scripted",

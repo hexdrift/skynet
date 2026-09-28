@@ -255,7 +255,7 @@ def create_agent_history_router(*, job_store) -> APIRouter:
                         role=cast(str, m.role),
                         content=cast(str, m.content),
                         tool_calls=cast("list[dict[str, Any]] | None", m.tool_calls),
-                        stats=(m.router_metadata or {}).get("stats") if isinstance(m.router_metadata, dict) else None,
+                        stats=m.router_metadata.get("stats") if isinstance(m.router_metadata, dict) else None,
                         created_at=cast(datetime, m.created_at),
                     )
                     for m in msgs
