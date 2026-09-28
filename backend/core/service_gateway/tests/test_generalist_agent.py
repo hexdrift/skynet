@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any, cast
 
 import dspy
@@ -14,8 +17,8 @@ from sqlalchemy.pool import StaticPool
 from core.service_gateway.agents import generalist as generalist_module
 from core.service_gateway.agents.code import _agent_error_payload, _SubmitArgExtractor
 from core.service_gateway.agents.generalist import (
+    GENERALIST_SYSTEM_PROMPT,
     ApprovalRegistry,
-    GeneralistSig,
     WizardState,
     _needs_approval,
     _TurnAuthoringFlag,
@@ -24,6 +27,7 @@ from core.service_gateway.agents.generalist import (
     tools_for,
     validate_wizard_patch_order,
 )
+from core.service_gateway.language_models import MeteredLM
 from core.storage.models import Base
 
 
@@ -892,7 +896,7 @@ def test_system_prompt_forbids_submit_in_authoring_turn() -> None:
     Guards against a future prompt edit silently dropping the ordering rule that
     is the primary defense for this bug.
     """
-    prompt = GeneralistSig.__doc__ or ""
+    prompt = GENERALIST_SYSTEM_PROMPT or ""
     assert "NEVER call ``submit_job_run_post`` in the SAME turn as" in prompt
     assert "request_code_authoring" in prompt
 
@@ -1196,7 +1200,7 @@ async def test_sample_staging_keeps_an_existing_job_name() -> None:
 
 def test_system_prompt_covers_new_capabilities() -> None:
     """The prompt names the modules and tools the agent now supports."""
-    prompt = GeneralistSig.__doc__ or ""
+    prompt = GENERALIST_SYSTEM_PROMPT or ""
     for needle in ("react", "flex", "target_score", "validate_datasets", "restart"):
         assert needle in prompt
     assert "blackbox" not in prompt.lower()
@@ -1208,3 +1212,181 @@ def test_split_check_is_reachable_once_a_dataset_is_ready() -> None:
     assert "validate_datasets_validate_post" in tools_for(
         cast(WizardState, {"job_name": "x", "dataset_ready": True})
     )
+
+
+class _ScriptedLM(dspy.BaseLM):
+    """An LM that records every request and answers with scripted native tool calls."""
+
+    def __init__(self, script: list[tuple[str, dict[str, Any]]]) -> None:
+        """Store the script.
+
+        Args:
+            script: One ``(tool name, arguments)`` pair per expected LM call.
+        """
+        super().__init__(model="scripted")
+        self._script = list(script)
+        self.requests: list[dict[str, Any]] = []
+
+    @property
+    def supports_function_calling(self) -> bool:
+        """Report native tool-call support."""
+        return True
+
+    @property
+    def supports_reasoning(self) -> bool:
+        """Report native reasoning support."""
+        return True
+
+    def forward(self, prompt=None, messages=None, **kwargs):
+        """Record the request and return the next scripted tool call.
+
+        Args:
+            prompt: Unused legacy prompt.
+            messages: The rendered chat messages.
+            **kwargs: Provider kwargs, including ``tools``.
+
+        Returns:
+            An OpenAI-shaped response carrying one tool call.
+        """
+        self.requests.append({"messages": messages, **kwargs})
+        name, args = self._script.pop(0)
+        call = {"id": f"call_{len(self.requests)}", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+        message = {"role": "assistant", "content": None, "tool_calls": [call]}
+        return litellm.ModelResponse(
+            model="scripted",
+            choices=[{"index": 0, "finish_reason": "tool_calls", "message": message}],
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        )
+
+
+class _Spec:
+    """A minimal MCP tool listing entry."""
+
+    def __init__(self, name: str) -> None:
+        """Name the tool.
+
+        Args:
+            name: The tool's MCP name.
+        """
+        self.name = name
+        self.description = "test tool"
+        self.inputSchema = {"type": "object", "properties": {}}
+
+
+class _Listing:
+    """What a fake MCP session's ``list_tools`` returns."""
+
+    def __init__(self, names: list[str]) -> None:
+        """Wrap the tool specs.
+
+        Args:
+            names: The listed tool names.
+        """
+        self.tools = [_Spec(name) for name in names]
+
+
+class _FakeSession:
+    """An MCP session that only lists tools."""
+
+    def __init__(self, names: list[str]) -> None:
+        """Remember which tools to list.
+
+        Args:
+            names: The listed tool names.
+        """
+        self._names = names
+
+    async def list_tools(self) -> _Listing:
+        """List the configured tools."""
+        return _Listing(self._names)
+
+
+async def test_turn_replays_history_natively_and_streams_the_submit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A turn runs on the conversation loop: earlier turns and their tool trace precede the new one as messages.
+
+    Also covers the native-tool-call gap the CLI bridge used to close: a
+    ``null`` optional never reaches the gated tool.
+    """
+    tool, seen = _make_recording_tool("list_models_for_agent")
+    seen["untouched"] = True
+
+    @asynccontextmanager
+    async def fake_session(mcp_url: str, *, auth_header: str | None = None) -> AsyncIterator[_FakeSession]:
+        """Yield the fake session in place of a Streamable-HTTP client.
+
+        Args:
+            mcp_url: Ignored.
+            auth_header: Ignored.
+        """
+        yield _FakeSession(["list_models_for_agent", "submit_job_run_post"])
+
+    monkeypatch.setattr(generalist_module, "_mcp_session", fake_session)
+    monkeypatch.setattr(dspy.Tool, "from_mcp_tool", staticmethod(lambda session, spec: tool))
+    lm = _ScriptedLM([("list_models_for_agent", {"limit": None}), ("submit", {"assistant_message": "הנה המודלים"})])
+    events: list[dict] = []
+
+    reply = await generalist_module._drive_generalist_agent(
+        mcp_url="http://unused/mcp/",
+        wizard_state=WizardState(),
+        memory_context="",
+        chat_history=[
+            {"role": "user", "content": "hi"},
+            {
+                "role": "assistant",
+                "content": "hello",
+                "tools": [{"tool": "get_registry_snapshot", "status": "done", "result": "{}"}],
+            },
+        ],
+        user_message="which models?",
+        trust_mode="yolo",
+        registry=ApprovalRegistry(),
+        emit=events.append,
+        lm=lm,
+        reply_language="Hebrew",
+    )
+
+    assert reply == "הנה המודלים"
+    assert seen == {"untouched": True}
+    first = lm.requests[0]["messages"]
+    assert [m["role"] for m in first] == ["system", "user", "assistant", "tool", "assistant", "tool", "user"]
+    assert first[2]["tool_calls"][0]["function"]["name"] == "get_registry_snapshot"
+    assert first[4]["tool_calls"][0]["function"]["name"] == "submit"
+    assert "which models?" in first[-1]["content"]
+    assert "hello" not in first[1]["content"]
+    assert [t["function"]["name"] for t in lm.requests[0]["tools"]] == ["list_models_for_agent", "submit"]
+    # The second request only appends to the first: the cacheable prefix holds.
+    assert lm.requests[1]["messages"][: len(first)] == first
+    assert events[0]["event"] == "turn_metadata"
+    assert events[0]["data"]["allowed_tools"] == ["list_models_for_agent"]
+    assert [e["event"] for e in events if e["event"] in ("tool_start", "tool_end")] == ["tool_start", "tool_end"]
+
+
+async def test_turn_declares_native_tool_calls_on_its_lm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The loop's LM always claims native tool calls, so tools never fall back to the text protocol."""
+    lm = MeteredLM(model="openai/onprem-gateway-alias", cache=False)
+    monkeypatch.setattr(generalist_module, "_build_generalist_lm", lambda: lm)
+    seen: dict[str, bool] = {}
+
+    async def fake_drive(**kwargs: Any) -> str:
+        """Record the LM's capability as the loop would see it.
+
+        Args:
+            **kwargs: The loop's arguments; only ``lm`` is read.
+
+        Returns:
+            A fixed reply.
+        """
+        seen["native"] = kwargs["lm"].supports_function_calling
+        return "ok"
+
+    monkeypatch.setattr(generalist_module, "_drive_generalist_agent", fake_drive)
+
+    events = [
+        event
+        async for event in generalist_module.run_generalist_agent(
+            wizard_state=WizardState(), chat_history=[], user_message="hi", mcp_url="http://unused"
+        )
+    ]
+
+    assert seen == {"native": True}
+    assert events[-1] == {"event": "done", "data": {"assistant_message": "ok"}}
