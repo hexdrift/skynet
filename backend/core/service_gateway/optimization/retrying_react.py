@@ -34,7 +34,6 @@ import logging
 import dspy
 from dspy.utils.exceptions import AdapterParseError
 
-from ..react_compat import REACT_CLASS
 from ..stable_roster_adapter import StableRosterChatAdapter
 
 logger = logging.getLogger(__name__)
@@ -200,14 +199,8 @@ class RetryingPredict(dspy.Predict):
         return {**kwargs, "config": config}
 
 
-class RetryingReActV2(REACT_CLASS):
-    """A ReAct program whose inner ``react`` predictor resamples on parse failures.
-
-    Subclasses whichever base the installed DSPy provides — ``ReActV2`` on 3.3+
-    or classic ``ReAct`` on 3.2.x. Both expose the same ``react`` loop predictor,
-    so the resample swap is identical across versions; classic ReAct's extra
-    ``extract`` predictor is left untouched (parse failures only strike the loop).
-    """
+class RetryingReActV2(dspy.ReActV2):
+    """A ReActV2 program whose inner ``react`` predictor resamples on parse failures."""
 
     def __init__(
         self,

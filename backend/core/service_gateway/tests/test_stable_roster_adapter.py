@@ -14,7 +14,6 @@ import pytest
 from dspy.adapters.types.tool import ToolCallResults, ToolCalls
 
 from ..optimization.retrying_react import RetryingPredict, RetryingReActV2
-from ..react_compat import react_uses_submit
 from ..stable_roster_adapter import StableRosterChatAdapter
 
 pytestmark = pytest.mark.skipif(
@@ -123,7 +122,6 @@ def test_stock_stream_listeners_accept_the_adapter() -> None:
 def test_retrying_predict_substitutes_only_the_default_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unconfigured adapter becomes the stable one; a configured adapter is left alone."""
     program = _program()
-    assert react_uses_submit(program)
     seen: list[object] = []
 
     def fake_super_forward(self: dspy.Predict, **kwargs: object) -> dspy.Prediction:

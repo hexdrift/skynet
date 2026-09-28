@@ -34,7 +34,6 @@ from ...exceptions import ServiceError
 from ...models import WorkflowSpec, workflow_tool_users, workflow_topological_order
 from ...models.workflow import WorkflowNode
 from ...registry.resolvers import ResolverError, resolve_module_factory
-from ..react_compat import REACT_CLASS
 from ..safe_exec import validate_signature_code, validate_transform_code
 from .data import extract_signature_fields, load_signature_from_code, load_transform_from_code
 from .training_ground.run_react import resolve_react_tools
@@ -294,7 +293,7 @@ def build_workflow_program(
             _, output_fields = extract_signature_fields(signature_cls)
             signature_outputs[node.id] = output_fields
             if node.module_name == "react":
-                signature_modules[node.id] = REACT_CLASS(
+                signature_modules[node.id] = dspy.ReActV2(
                     signature_cls, tools=_filter_roster(roster, node.tool_filter, node.id)
                 )
             else:

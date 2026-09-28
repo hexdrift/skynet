@@ -15,7 +15,6 @@ from ...constants import TQDM_REMAINING_KEY
 from ...models import OptimizationStatus
 from ...models.artifacts import ProgramArtifact, ReactOverlay
 from ...service_gateway.optimization.tool_overlay import hash_tool_schema
-from ...service_gateway.react_compat import REACT_CLASS
 from ...storage.usage import StorageUsage
 from ..auth import AuthenticatedUser
 from ..errors import DomainError
@@ -510,7 +509,7 @@ def _react_artifact(tool: dspy.Tool, schema_hashes: dict[str, str]) -> ProgramAr
         A ``ProgramArtifact`` with ``program_state_json`` and ``react_overlay``.
     """
     signature_cls = _helpers_mod.load_signature_from_code(_REACT_SIGNATURE_CODE)
-    seed = REACT_CLASS(signature_cls, tools=[tool], max_iters=4)
+    seed = dspy.ReActV2(signature_cls, tools=[tool], max_iters=4)
     return ProgramArtifact(
         program_state_json=seed.dump_state(),
         react_overlay=ReactOverlay(
@@ -546,7 +545,7 @@ def test_materialize_react_program_rebuilds_reactv2_with_overlays(
 
     program = _materialize_program(artifact, overview)
 
-    assert isinstance(program, REACT_CLASS)
+    assert isinstance(program, dspy.ReActV2)
     assert canned.desc == "GEPA-optimized echo wording."
     assert canned.args["query"]["description"] == "GEPA-optimized arg wording."
 
@@ -575,7 +574,7 @@ def test_materialize_react_program_renames_roster_from_overlay(
 
     program = _materialize_program(artifact, overview)
 
-    assert isinstance(program, REACT_CLASS)
+    assert isinstance(program, dspy.ReActV2)
     # Drift+desc/arg overlays applied under the canonical name before the rename.
     assert canned.desc == "GEPA-optimized echo wording."
     assert canned.name == "search_records"
@@ -680,6 +679,6 @@ def test_load_program_react_cache_key_includes_roster_identity(
     program, _, _ = load_program(store, "react-job", _TEST_USER)
 
     expected_key = f"react-job:{_stable_hash(schema_hashes)}"
-    assert isinstance(program, REACT_CLASS)
+    assert isinstance(program, dspy.ReActV2)
     assert expected_key in _helpers_mod._program_cache
     assert "react-job" not in _helpers_mod._program_cache

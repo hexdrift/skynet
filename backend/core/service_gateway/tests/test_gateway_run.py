@@ -24,7 +24,6 @@ from core.registry import ServiceRegistry
 from core.service_gateway.optimization.core import DspyService, _resolve_max_metric_calls
 from core.service_gateway.optimization.training_ground import run_react
 from core.service_gateway.optimization.training_ground.run_react import _AUTO_BUDGETS
-from core.service_gateway.react_compat import REACT_CLASS
 from core.service_gateway.tests.mocks import (
     fake_compiled_program,
     fake_language_model,
@@ -563,7 +562,7 @@ def test_run_react_branch_resolves_tools_and_returns_overlay() -> None:
     resolve_mock = MagicMock(return_value=(resolved_tools, resolved_hashes))
 
     def _fake_optimize(*, signature_cls, tools, schema_hashes, max_iters=run_react.DEFAULT_MAX_ITERS, **_kwargs) -> dict:
-        seed = REACT_CLASS(signature_cls, tools=tools, max_iters=max_iters)
+        seed = dspy.ReActV2(signature_cls, tools=tools, max_iters=max_iters)
         return {
             "program_state": seed.dump_state(),
             "baseline_scalar": 0.4,
@@ -643,7 +642,7 @@ def test_run_react_branch_passes_auto_budget_to_optimizer() -> None:
 
     def _fake_optimize(*, signature_cls, tools, schema_hashes, max_iters=run_react.DEFAULT_MAX_ITERS, **kwargs) -> dict:
         captured["max_metric_calls"] = kwargs.get("max_metric_calls")
-        seed = REACT_CLASS(signature_cls, tools=tools, max_iters=max_iters)
+        seed = dspy.ReActV2(signature_cls, tools=tools, max_iters=max_iters)
         return {
             "program_state": seed.dump_state(),
             "baseline_scalar": 0.4,

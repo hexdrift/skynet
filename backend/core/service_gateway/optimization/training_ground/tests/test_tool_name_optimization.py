@@ -23,7 +23,6 @@ from core.service_gateway.optimization.training_ground.gepa_adapter import (
     _candidate_tool_names,
     seed_candidate_from_program,
 )
-from core.service_gateway.react_compat import REACT_CLASS
 
 
 def test_candidate_tool_names_parses_proposed() -> None:
@@ -55,7 +54,7 @@ def test_seed_blob_carries_canonical_name() -> None:
         assistant_message: str = dspy.OutputField()
 
     tool = dspy.Tool(_echo, name="alpha", desc="the alpha tool")
-    program = REACT_CLASS(_Sig, tools=[tool], max_iters=4)
+    program = dspy.ReActV2(_Sig, tools=[tool], max_iters=4)
 
     candidate = seed_candidate_from_program(program)
     blob = json.loads(candidate[TOOL_MODULE_KEY])

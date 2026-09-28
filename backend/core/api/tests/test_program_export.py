@@ -238,7 +238,7 @@ def test_react_export_restores_current_class_loop_budget_and_tool_overlay(tmp_pa
     """A ReAct export rebuilds the installed class and its complete optimized tool surface."""
     namespace: dict = {"dspy": dspy}
     exec(compile(_SIGNATURE_CODE, "<sig>", "exec", dont_inherit=True), namespace)
-    react_class = getattr(dspy, "ReActV2", None) or dspy.ReAct
+    react_class = dspy.ReActV2
     optimized_tool = dspy.Tool(
         lambda query: f"hit:{query}",
         name="lookup",

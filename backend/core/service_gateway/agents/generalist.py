@@ -1761,14 +1761,12 @@ async def _drive_generalist_agent(
             max_iters=8,
             serial_tool_calls=True,
         )
-        # The user's ``assistant_message`` rides a ``submit`` tool call on ReActV2
-        # or a separate ``extract`` predictor on classic ReAct; ``ReactReplyStream``
-        # wires the right listeners and decodes whichever shape into reply deltas.
+        # The user's ``assistant_message`` rides a ``submit`` tool call;
+        # ``ReactReplyStream`` wires the listeners and decodes it into reply deltas.
         # Leaving ``is_async_program`` at its default (False) lets ``streamify``
-        # wrap the sync ``forward`` via ``asyncify``: on ReActV2 ``acall`` would
-        # otherwise delegate to an ``aforward`` the class never defines
-        # (AttributeError on the first turn), and classic ReAct's async path is
-        # likewise bypassed — streaming behaviour and listeners are unchanged.
+        # wrap the sync ``forward`` via ``asyncify``: ``acall`` would otherwise
+        # delegate to an ``aforward`` ReActV2 never defines (AttributeError on
+        # the first turn); streaming behaviour and listeners are unchanged.
         reply_stream = ReactReplyStream(react, "assistant_message", lm)
         program = dspy.streamify(
             react,

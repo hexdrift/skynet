@@ -44,7 +44,7 @@ from ..language_models import (
     apply_reasoning_effort,
     build_language_model,
 )
-from ..react_compat import REACT_CLASS, native_tool_calling_active, react_uses_submit
+from ..react_compat import native_tool_calling_active
 from ..safe_exec import validate_metric_code, validate_signature_code
 from .constants import REASONING_FIELD
 from .parse_salvage import strip_adapter_debris
@@ -1413,39 +1413,34 @@ class NativeToolCallStreamListener(dspy.streaming.StreamListener):
 
 
 class ReactReplyStream:
-    """Bridge the V2-vs-classic difference in how a ReAct program streams its reply.
+    """Stream a ReActV2 program's reply out of its ``submit`` tool call.
 
     ReActV2 carries the reply as a ``submit`` tool-call argument streamed on the
-    inner ``react`` predictor's ``tool_calls`` field; classic ReAct (DSPy 3.2.x)
-    streams the reply field straight off its separate ``extract`` predictor. This
-    bridges both so the agent loops stay identical: build ``listeners()`` once,
+    inner ``react`` predictor's ``tool_calls`` field, either as provider tool-call
+    deltas (native function calling) or as DSPy's text protocol. This hides that
+    difference so the agent loops stay identical: build ``listeners()`` once,
     then feed every non-reasoning ``StreamResponse`` through ``reply_delta``.
     """
 
     def __init__(self, program: dspy.Module, reply_field: str, lm: dspy.LM | None = None):
-        """Bind to a constructed ReAct program and the signature's reply field.
+        """Bind to a constructed ReActV2 program and the signature's reply field.
 
         Args:
-            program: The constructed ReAct/ReActV2 program (or subclass).
-            reply_field: Output field carrying the user-visible reply — a
-                ``submit`` arg on ReActV2, an ``extract`` output on classic ReAct.
+            program: The constructed ReActV2 program (or subclass).
+            reply_field: Output field carrying the user-visible reply, a
+                ``submit`` argument.
             lm: The LM the loop runs on; defaults to the active ``dspy.settings.lm``.
         """
         self._program = program
         self._reply_field = reply_field
-        self._uses_submit = react_uses_submit(program)
         lm = lm or getattr(dspy.settings, "lm", None)
         # The adapter only sends native tools when the LM also claims support;
         # otherwise it silently falls back to the text protocol, and a native
         # listener would never see the reply.
-        self._native = (
-            self._uses_submit and native_tool_calling_active() and (lm is None or bool(lm.supports_function_calling))
-        )
-        self._stream_field = "tool_calls" if self._uses_submit else reply_field
-        if not self._uses_submit:
-            self._extractor = None
-        elif self._native:
-            self._extractor = _NativeSubmitArgExtractor(reply_field)
+        self._native = native_tool_calling_active() and (lm is None or bool(lm.supports_function_calling))
+        self._stream_field = "tool_calls"
+        if self._native:
+            self._extractor: _NativeSubmitArgExtractor | _SubmitArgExtractor = _NativeSubmitArgExtractor(reply_field)
         else:
             self._extractor = _SubmitArgExtractor(
                 reply_field,
@@ -1456,28 +1451,22 @@ class ReactReplyStream:
         """Return the reply + reasoning stream listeners for this program.
 
         Returns:
-            On ReActV2 with native function calling: a
-            :class:`NativeToolCallStreamListener` reading the provider's
-            ``tool_calls`` deltas. On ReActV2 with the text protocol: a built-in
-            ``tool_calls`` listener bound to the reused inner predictor. On
-            classic ReAct: a listener that auto-resolves the reply field onto the
-            ``extract`` predictor (the only one declaring it). All carry the same
-            reasoning listener on the loop predictor.
+            With native function calling: a :class:`NativeToolCallStreamListener`
+            reading the provider's ``tool_calls`` deltas. With the text protocol:
+            a built-in ``tool_calls`` listener bound to the reused inner
+            predictor. Both carry the same reasoning listener on the loop
+            predictor.
         """
         if self._native:
             reply_listener: dspy.streaming.StreamListener = NativeToolCallStreamListener(
                 predict=self._program.react,
                 allow_reuse=True,
             )
-        elif self._uses_submit:
+        else:
             reply_listener = dspy.streaming.StreamListener(
                 signature_field_name="tool_calls",
                 predict=self._program.react,
                 allow_reuse=True,
-            )
-        else:
-            reply_listener = dspy.streaming.StreamListener(
-                signature_field_name=self._reply_field
             )
         return [
             reply_listener,
@@ -1487,9 +1476,8 @@ class ReactReplyStream:
     def reply_delta(self, chunk: dspy.streaming.StreamResponse) -> str | None:
         """Return the newly streamed reply text from a chunk, or ``None``.
 
-        On ReActV2 the chunk is partial ``submit`` JSON decoded incrementally;
-        on classic ReAct the chunk is already the field delta. Chunks for any
-        field other than the reply stream return ``None``.
+        The chunk is partial ``submit`` JSON decoded incrementally. Chunks for
+        any field other than ``tool_calls`` return ``None``.
 
         Args:
             chunk: A non-reasoning ``StreamResponse`` from the wrapped program.
@@ -1500,18 +1488,16 @@ class ReactReplyStream:
         """
         if chunk.signature_field_name != self._stream_field:
             return None
-        if self._extractor is not None:
-            if isinstance(self._extractor, _SubmitArgExtractor):
-                delta = self._extractor.feed(
-                    chunk.chunk,
-                    final=chunk.is_last_chunk,
-                )
-            else:
-                delta = self._extractor.feed(chunk.chunk)
-            if chunk.is_last_chunk:
-                self._extractor.reset()
-            return delta
-        return chunk.chunk or None
+        if isinstance(self._extractor, _SubmitArgExtractor):
+            delta = self._extractor.feed(
+                chunk.chunk,
+                final=chunk.is_last_chunk,
+            )
+        else:
+            delta = self._extractor.feed(chunk.chunk)
+        if chunk.is_last_chunk:
+            self._extractor.reset()
+        return delta
 
 
 def _build_agent_lm(
@@ -2574,14 +2560,13 @@ async def _run_agent(
     # the submit that carries the reply — max_iters=5 covers that without
     # room to run away (the per-artifact success guards reject any further
     # edits).
-    react = REACT_CLASS(
+    react = dspy.ReActV2(
         CodeAssistant,
         tools=[session.edit_signature, session.edit_metric],
         max_iters=5,
     )
-    # The user's ``reply`` rides a ``submit`` tool call on ReActV2 or a separate
-    # ``extract`` predictor on classic ReAct; ``ReactReplyStream`` wires the right
-    # listeners and decodes whichever shape into reply deltas.
+    # The user's ``reply`` rides a ``submit`` tool call; ``ReactReplyStream``
+    # wires the listeners and decodes it into reply deltas.
     reply_stream = ReactReplyStream(react, "reply", lm)
     program = dspy.streamify(
         react,
@@ -2841,7 +2826,7 @@ async def _run_workflow_agent(
     # A graph restructure is several ops (disconnect + add + reconnects),
     # each its own ReAct iteration; 8 covers a two-step insert with a
     # validation retry without room to run away.
-    react = REACT_CLASS(
+    react = dspy.ReActV2(
         WorkflowAssistant,
         tools=[
             session.add_node,
