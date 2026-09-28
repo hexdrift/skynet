@@ -24,7 +24,6 @@ from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..provider_registry import BYOK_CATALOG_PREFIXES
-from .errors import DomainError
 
 logger = logging.getLogger(__name__)
 
@@ -861,20 +860,3 @@ def get_byok_catalog_cached() -> ModelCatalogResponse:
     if _byok_cached is None:
         _byok_cached = get_byok_catalog()
     return _byok_cached
-
-
-def require_known_model(model: str | None) -> None:
-    """Reject a model id that is not in the curated catalog.
-
-    Guards every endpoint that lets the client pick an organization-managed
-    model so arbitrary endpoints cannot bypass the configured catalog.
-
-    Args:
-        model: LiteLLM model id; empty/None passes (the server default runs).
-
-    Raises:
-        DomainError: 422 when the id is not a catalog model.
-    """
-    name = str(model or "").strip()
-    if name and all(entry.value != name for entry in get_catalog_cached().models):
-        raise DomainError("models.unknown_model", status=422)

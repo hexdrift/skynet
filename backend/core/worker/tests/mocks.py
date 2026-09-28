@@ -96,33 +96,6 @@ REAL_GRID_PAYLOAD: dict = {
 }
 
 _GEPA_PROGRESS = _GEPA["progress_events"]
-_GEPA_LOGS = _GEPA["logs"]
-
-
-def make_log_event(
-    msg: str = _GEPA_LOGS[0]["message"],
-    level: str = "INFO",
-    logger: str = "dspy.evaluate.evaluate",
-    timestamp: str = _GEPA_LOGS[0]["timestamp"],
-) -> dict:
-    """Build a synthetic ``EVENT_LOG`` dict for tests.
-
-    Args:
-        msg: Log message text.
-        level: Log level name.
-        logger: Originating logger name.
-        timestamp: ISO 8601 timestamp string.
-
-    Returns:
-        Dict matching the ``EVENT_LOG`` shape produced by the runner.
-    """
-    return {
-        "type": "log",
-        "level": level,
-        "logger": logger,
-        "message": msg,
-        "timestamp": timestamp,
-    }
 
 
 def make_progress_event(

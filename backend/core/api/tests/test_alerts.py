@@ -85,7 +85,6 @@ def test_send_alert_noop_when_webhook_unset(monkeypatch):
     monkeypatch.setattr(settings, "alert_webhook_url", "")
     assert alerts.send_alert("boom") is None
     assert calls == []
-    assert alerts.alerts_configured() is False
 
 
 def test_send_alert_posts_rendered_message(captured_posts):
@@ -243,7 +242,6 @@ def test_send_alert_emails_when_only_email_configured(captured_emails):
     assert to == "ops@example.com"
     assert subject == "[test] WARNING: disk full"
     assert "details" in body
-    assert alerts.alerts_configured() is True
 
 
 def test_email_skipped_without_smtp(captured_emails, monkeypatch):
@@ -251,7 +249,6 @@ def test_email_skipped_without_smtp(captured_emails, monkeypatch):
     monkeypatch.setattr(alerts, "email_configured", lambda: False)
     assert alerts.send_alert("x", now=1.0) is None
     assert captured_emails == []
-    assert alerts.alerts_configured() is False
 
 
 def test_email_hourly_cap(captured_emails, monkeypatch):

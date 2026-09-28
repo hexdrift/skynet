@@ -870,20 +870,3 @@ class Settings(BaseSettings):
         return "unknown"
 
 settings = Settings()
-
-
-def embeddings_schema_enabled() -> bool:
-    """Report whether migrations should manage the pgvector embedding schema.
-
-    True only for the semantic search backend. The lexical and bm25 backends run
-    on a vanilla Postgres with no pgvector extension, so the baseline and every
-    downstream embedding migration skip the ``job_embeddings`` table, its Vector
-    columns and the HNSW indexes — which is what keeps the migrate Job from
-    issuing ``CREATE EXTENSION vector`` on a database that doesn't have it. The
-    migrate Job inherits SEARCH_BACKEND from the backend ConfigMap, so this reads
-    the same value the application pods do.
-
-    Returns:
-        True when SEARCH_BACKEND selects semantic search, else False.
-    """
-    return settings.embeddings_enabled

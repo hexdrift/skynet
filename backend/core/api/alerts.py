@@ -137,11 +137,6 @@ def _email_allowed(now: float) -> bool:
         return True
 
 
-def alerts_configured() -> bool:
-    """Return whether an outbound alert webhook or alert inbox is configured."""
-    return bool(settings.alert_webhook_url or _email_target())
-
-
 def _truncate(text_value: str, limit: int) -> str:
     """Return ``text_value`` shortened to ``limit`` characters with an elision marker.
 

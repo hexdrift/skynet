@@ -2671,18 +2671,6 @@ class RemoteDBJobStore:
         finally:
             session.close()
 
-    def count_users(self) -> int:
-        """Count persisted ADFS and local accounts.
-
-        Returns:
-            The number of rows in the ``users`` table.
-        """
-        session = self._get_session()
-        try:
-            return session.query(func.count(UserModel.username)).scalar() or 0
-        finally:
-            session.close()
-
     def count_jobs_by_status(self, *, username: str | None = None) -> dict[str, int]:
         """Count jobs per status in a single ``GROUP BY`` query.
 

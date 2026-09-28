@@ -271,28 +271,6 @@ class ProviderKeyVault:
                 is not None
             )
 
-    def has_verified_connection(self, username: str, provider: str) -> bool:
-        """Return whether the account has a verified connection for a provider.
-
-        Args:
-            username: Account to check.
-            provider: Provider slug to look for.
-
-        Returns:
-            True when at least one verified connection is stored.
-        """
-        with Session(self._engine) as session:
-            return (
-                session.query(ByokProviderKeyModel.id)
-                .filter(
-                    ByokProviderKeyModel.username == username,
-                    ByokProviderKeyModel.provider == provider,
-                    ByokProviderKeyModel.status == STATUS_VERIFIED,
-                )
-                .first()
-                is not None
-            )
-
     def save_key(
         self,
         username: str,
