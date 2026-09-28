@@ -2847,5 +2847,13 @@
   "shared.code_editor.find.replace_placeholder": "החלפה ב־",
   "shared.code_editor.find.toggle_replace": "הצגת/הסתרת החלפה ({shortcut})",
   "shared.code_editor.find.total": "{total, plural, one {התאמה אחת} two {שתי התאמות} other {# התאמות}}",
-  "shared.code_editor.find.whole_word": "מילים שלמות בלבד"
+  "shared.code_editor.find.whole_word": "מילים שלמות בלבד",
+  "submit.draft.restore.title": "להמשיך מההגדרה הקודמת?",
+  "submit.draft.restore.continue": "להמשיך בטיוטה",
+  "submit.draft.restore.start_new": "להתחיל מחדש",
+  "submit.draft.restore.retry": "לנסות שוב",
+  "submit.draft.restore.failed": "לא ניתן היה לשחזר את ההגדרה השמורה. אפשר לנסות שוב או להתחיל מחדש.",
+  "submit.draft.restore.gone": "ההגדרה השמורה כבר אינה זמינה בדפדפן הזה.",
+  "submit.draft.restore.summary": "עצרתם בשלב {stage}",
+  "submit.draft.reset_failed": "לא ניתן היה לנקות את ההגדרה השמורה. הטיוטה הקודמת עדיין זמינה."
 }

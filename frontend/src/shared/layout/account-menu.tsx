@@ -5,6 +5,10 @@ import { DotsThree, Gear, SignOut } from "@/shared/ui/icons";
 import { signOut, useSession } from "next-auth/react";
 import { msg } from "@/shared/lib/messages";
 import { cn } from "@/shared/lib/utils";
+// Leaf import on purpose: the submit barrel would pull the whole wizard into
+// the always-mounted shell for one sign-out helper.
+// eslint-disable-next-line no-restricted-imports -- deliberate leaf import; see above
+import { clearAllWizardDrafts } from "@/features/submit/lib/draft-store";
 import {
   COMPACT_POPOVER_ICON_CLASS,
   COMPACT_POPOVER_ITEM_CLASS,
@@ -197,7 +201,9 @@ export function AccountMenu({
           type="button"
           onClick={() => {
             close();
-            void signOut({ callbackUrl: "/login" });
+            // Saved wizard drafts belong to this account; wipe them before the
+            // session ends so the next person on this browser finds none.
+            void clearAllWizardDrafts().then(() => signOut({ callbackUrl: "/login" }));
           }}
           className={COMPACT_POPOVER_ITEM_CLASS}
         >

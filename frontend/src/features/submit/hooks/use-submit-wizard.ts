@@ -59,13 +59,11 @@ import { buildSignatureTemplate } from "../lib/build-signature";
 import { buildMetricTemplate } from "../lib/build-metric";
 import { buildOptimizerKwargs } from "../lib/build-kwargs";
 import {
-  saveWizardDraft,
-  readWizardDraft,
-  clearWizardDraft,
-  stashWizardDraftForReload,
+  isMeaningfulProgramDraft,
+  scrubDraftSecrets,
   type WizardDraftData,
-} from "../lib/wizard-draft";
-import { LOCALE_RELOAD_EVENT } from "@/shared/lib/locale";
+} from "../lib/draft-record";
+import { suggestedDspyRunName } from "../lib/run-name";
 import { useCodeAgent } from "@/shared/hooks/use-code-agent";
 import { useCodeInterview } from "@/shared/hooks/use-code-interview";
 import {
@@ -81,6 +79,7 @@ import {
   useModelCatalog,
   useRecentModelConfigs,
 } from "./use-submit-wizard-data";
+import { useWizardDrafts } from "./use-wizard-drafts";
 
 const COLUMN_ROLES = new Set<string>(["input", "output", "ignore"]);
 const WIZARD_ISSUE_TOAST = "wizard-issue";
@@ -113,18 +112,6 @@ function prepareModelConfig(config: ModelConfig): ModelConfig {
 /** Type guard for a valid dataset column role (signature I/O). */
 function isColumnRole(value: unknown): value is ColumnRole {
   return typeof value === "string" && COLUMN_ROLES.has(value);
-}
-
-// Nothing worth parking: still on Goal with no module picked, no dataset and no
-// name. Goal is the first stage, so the stage alone no longer shows progress.
-function isPristineDraft(d: WizardDraftData): boolean {
-  return (
-    d.stage === "goal" &&
-    !d.moduleChosen &&
-    d.parsedDataset === null &&
-    d.datasetFileName === null &&
-    d.jobName.trim() === ""
-  );
 }
 
 function parseTargetScore(value: string): number | undefined {
@@ -243,6 +230,7 @@ export function useSubmitWizard() {
     if (changedNodeId) {
       pulseClearRef.current = setTimeout(() => setAgentPulseNodeId(null), 1600);
     }
+    return laid;
   }, []);
 
   const [signatureCode, setSignatureCode] = useState(() => buildSignatureTemplate({}));
@@ -250,6 +238,19 @@ export function useSubmitWizard() {
 
   const [parsedDataset, setParsedDataset] = useState<ParsedDataset | null>(null);
   const [datasetFileName, setDatasetFileName] = useState<string | null>(null);
+  // Suggested without a model call; the name follows it until the user types one.
+  const suggestedName = useMemo(
+    () => suggestedDspyRunName(signatureCode, datasetFileName),
+    [signatureCode, datasetFileName],
+  );
+  const [jobNameTouched, setJobNameTouched] = useState(false);
+  useEffect(() => {
+    if (!jobNameTouched) setJobName(suggestedName);
+  }, [jobNameTouched, suggestedName]);
+  const editJobName = useCallback((value: string) => {
+    setJobNameTouched(true);
+    setJobName(value);
+  }, []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // A by-reference submit (source_dataset_id) is only valid while the on-screen
   // rows are still the ones we loaded from the library. Every other dataset
@@ -472,12 +473,22 @@ export function useSubmitWizard() {
   }, [wizardCtx]);
   const submittedRef = useRef(false);
 
-  // Mirror the full serializable wizard snapshot into a ref every commit so the
-  // unmount cleanup below parks the *latest* values — a []-deps cleanup would
-  // otherwise close over the first render's state.
-  const draftRef = useRef<WizardDraftData | null>(null);
+  // The durable draft (see use-wizard-drafts): this mount hydrates once from
+  // the snapshot the entry chose, then publishes every commit back with its
+  // secrets scrubbed. The saver skips identical snapshots and debounces the
+  // rest, so publishing per commit costs nothing when nothing changed.
+  const drafts = useWizardDrafts();
+  const draftsRef = useRef(drafts);
   useEffect(() => {
-    draftRef.current = {
+    draftsRef.current = drafts;
+  }, [drafts]);
+  const [draftSnapshot] = useState(() => drafts.takeSnapshot());
+  // Publishing waits for the mount restore, so the blank first render never
+  // overwrites the snapshot it is about to hydrate from.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (!hydratedRef.current || submittedRef.current) return;
+    const d: WizardDraftData = {
       stage: stageAt(step),
       furthestStage: stageAt(furthestReachedStep),
       summaryTab,
@@ -506,6 +517,7 @@ export function useSubmitWizard() {
       generationModels,
       reflectionModels,
       split,
+      splitMode,
       seed,
       autoLevel,
       reflectionMinibatchSize,
@@ -517,37 +529,31 @@ export function useSubmitWizard() {
       pxnProposals,
       shuffle,
     };
+    draftsRef.current.publish(scrubDraftSecrets(d), isMeaningfulProgramDraft(d));
   });
 
-  // A locale switch reloads the page (see LocaleProvider), which would lose
-  // this in-memory form. Stash the live snapshot for that one hop so the user
-  // comes back to the same step in the new language instead of a blank wizard.
+  // Stage boundaries write at once instead of waiting out the debounce.
   useEffect(() => {
-    const onLocaleReload = () => {
-      const d = draftRef.current;
-      if (d && !isPristineDraft(d)) {
-        stashWizardDraftForReload(d);
-      }
-    };
-    window.addEventListener(LOCALE_RELOAD_EVENT, onLocaleReload);
-    return () => window.removeEventListener(LOCALE_RELOAD_EVENT, onLocaleReload);
-  }, []);
+    if (hydratedRef.current) draftsRef.current.flush();
+  }, [step]);
 
-  // Restore a parked draft on mount so switching to another sidebar tab and
-  // coming back lands the user on the same step with inputs intact. Skipped when
-  // a clone/share URL owns hydration — that flow populates the form itself.
-  const restoredRef = useRef(false);
+  // Restore the chosen draft on mount. Skipped when a clone/share URL owns
+  // hydration — that flow populates the form itself and becomes the draft.
   useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
     if (searchParams.get("clone") || searchParams.get("shareToken")) return;
-    const d = readWizardDraft();
+    const d = draftSnapshot;
     if (!d) return;
     setSummaryTab(d.summaryTab);
     setSummaryCodeTab(d.summaryCodeTab);
     setOptimizationType(d.jobType);
     setIsPrivate(d.isPrivate);
     setJobName(d.jobName);
+    setJobNameTouched(
+      d.jobName.trim() !== "" &&
+        d.jobName !== suggestedDspyRunName(d.signatureCode, d.datasetFileName),
+    );
     setJobDescription(d.jobDescription);
     setModuleName(d.moduleName);
     setModuleChosen(d.moduleChosen);
@@ -573,6 +579,10 @@ export function useSubmitWizard() {
     setGenerationModels(d.generationModels);
     setReflectionModels(d.reflectionModels);
     setSplit(d.split);
+    if (d.splitMode) {
+      splitModeRef.current = d.splitMode;
+      setSplitModeState(d.splitMode);
+    }
     setSeed(d.seed);
     setAutoLevel(d.autoLevel);
     setReflectionMinibatchSize(d.reflectionMinibatchSize);
@@ -589,30 +599,30 @@ export function useSubmitWizard() {
   useEffect(
     () => () => {
       if (submittedRef.current) {
-        // A submit leaves on purpose: reset the shared agent state and drop any
-        // draft parked on an earlier nav-away, rather than parking this form to
-        // restore later.
+        // A submit leaves on purpose: reset the shared agent state (the draft
+        // was consumed at submit time) rather than keeping this form around.
         wizardCtxRef.current?.reset();
-        clearWizardDraft();
         return;
       }
-      // Park a half-filled form (skip a pristine one) so the round-trip restores.
-      const d = draftRef.current;
-      if (d && !isPristineDraft(d)) {
-        saveWizardDraft(d);
-      } else {
-        clearWizardDraft();
-      }
+      // Leaving mid-setup: write the latest snapshot now so the round-trip
+      // restores it.
+      draftsRef.current.flush();
     },
     [],
   );
 
+  // The agent's graph as seated on the canvas; the outgoing push skips it so
+  // a layout-only copy is never echoed back as a user override.
+  const agentWorkflowRef = useRef<WorkflowSpec | null>(null);
   // Incoming: apply agent patches to local state whenever the pulse bumps.
   useEffect(() => {
     if (!sharedState || agentPulseKeys.length === 0) return;
     for (const key of agentPulseKeys) {
       if (key === "job_name" && typeof sharedState.job_name === "string") {
+        // An agent-given name is decided: the form's own suggestion must not
+        // overwrite it when the code or dataset changes later.
         setJobName(sharedState.job_name);
+        setJobNameTouched(true);
       } else if (key === "job_description" && typeof sharedState.job_description === "string") {
         setJobDescription(sharedState.job_description);
       } else if (
@@ -631,13 +641,23 @@ export function useSubmitWizard() {
           typeof rc.mcpUrl === "string" ? { ...prev, mcpUrl: rc.mcpUrl } : prev,
         );
       } else if (key === "signature_code" && typeof sharedState.signature_code === "string") {
+        // Agent-authored code is written for the module already in play (the
+        // predict default when none was named), so the picker never re-asks.
         setSignatureCode(sharedState.signature_code);
         setSignatureManuallyEdited(true);
         setSignatureValidation(null);
+        setModuleChosen(true);
       } else if (key === "metric_code" && typeof sharedState.metric_code === "string") {
         setMetricCode(sharedState.metric_code);
         setMetricManuallyEdited(true);
         setMetricValidation(null);
+        setModuleChosen(true);
+      } else if (key === "workflow" && sharedState.workflow) {
+        // A panel-authored graph is the program: seat it on the canvas as the
+        // workflow module instead of dropping it on the floor.
+        setModuleName("workflow");
+        setModuleChosen(true);
+        agentWorkflowRef.current = applyAgentWorkflow(sharedState.workflow, null);
       } else if (key === "column_roles" && sharedState.column_roles) {
         setColumnRoles((prev) => {
           const next = { ...prev };
@@ -846,6 +866,20 @@ export function useSubmitWizard() {
       wizardCtx.setField("job_name", jobName, "user");
     }
   }, [jobName, wizardCtx]);
+
+  // The canvas is the program for a workflow run: the agent submits what it
+  // sees here, so canvas edits reach it and a non-workflow module clears it.
+  useEffect(() => {
+    if (!wizardCtx) return;
+    const spec = isWorkflow ? workflowSpec : null;
+    if (spec) {
+      if (spec !== agentWorkflowRef.current && wizardCtx.state.workflow !== spec) {
+        wizardCtx.setField("workflow", spec, "user");
+      }
+    } else if (wizardCtx.state.workflow != null) {
+      wizardCtx.clearField("workflow");
+    }
+  }, [isWorkflow, wizardCtx, workflowSpec]);
 
   useEffect(() => {
     if (!wizardCtx) return;
@@ -1171,7 +1205,10 @@ export function useSubmitWizard() {
       );
 
       const displayName = jobData?.name || payload.name;
-      if (displayName) setJobName(String(displayName));
+      if (displayName) {
+        setJobName(String(displayName));
+        setJobNameTouched(true);
+      }
       if (payload.description) setJobDescription(String(payload.description));
       if (payload.module_name) setModuleName(String(payload.module_name));
       // A clone is a complete prior submission — its module (absent = the
@@ -1465,7 +1502,8 @@ export function useSubmitWizard() {
       stageAt(s),
       {
         username,
-        jobName,
+        // A blank name falls back to the suggestion at submit time.
+        jobName: jobName.trim() || suggestedName,
         moduleSelectionRequired,
         datasetRowCount: parsedDataset?.rowCount ?? 0,
         inputColumnCount: Object.keys(mapping.inputs).length,
@@ -1874,7 +1912,7 @@ export function useSubmitWizard() {
           ? librarySourceRef.current.id
           : null;
       const base = {
-        name: jobName.trim() || undefined,
+        name: jobName.trim() || suggestedName || undefined,
         description: jobDescription.trim() || undefined,
         username: username.trim(),
         module_name: moduleName,
@@ -1969,6 +2007,7 @@ export function useSubmitWizard() {
       // Mark the submit so the unmount cleanup clears the shared wizard state
       // once navigation tears this form down.
       submittedRef.current = true;
+      draftsRef.current.consumed();
       const jobUrl = `/optimizations/${result.optimization_id}`;
       setSubmitPhase("splash");
       // Collapse sidebar before navigating so the job page opens with full width
@@ -2115,7 +2154,7 @@ export function useSubmitWizard() {
     seedEnabled: !moduleSelectionRequired && (!interviewPossible || interview.resolved),
     interviewBrief: interview.confirmedBrief,
     // The conversation rides through the locale-switch reload alongside the
-    // wizard draft (see wizard-draft.ts).
+    // wizard draft (see use-wizard-drafts.tsx).
     reloadPersistKey: "submit-code-agent",
   });
   useEffect(() => {
@@ -2147,7 +2186,8 @@ export function useSubmitWizard() {
     setIsPrivate,
     username,
     jobName,
-    setJobName,
+    setJobName: editJobName,
+    suggestedName,
     jobDescription,
     setJobDescription,
     moduleName,

@@ -2322,6 +2322,14 @@ export type MessageKey =
   | "submit.dataset.library_search"
   | "submit.dataset.library_search_empty"
   | "submit.depth.custom"
+  | "submit.draft.reset_failed"
+  | "submit.draft.restore.continue"
+  | "submit.draft.restore.failed"
+  | "submit.draft.restore.gone"
+  | "submit.draft.restore.retry"
+  | "submit.draft.restore.start_new"
+  | "submit.draft.restore.summary"
+  | "submit.draft.restore.title"
   | "submit.metric_calls"
   | "submit.modelpicker.purpose.all"
   | "submit.modelpicker.purpose.aria"
@@ -5173,6 +5181,14 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "submit.dataset.library_search": "חיפוש {term.dataset}…",
   "submit.dataset.library_search_empty": "לא נמצאו דאטאסטים תואמים",
   "submit.depth.custom": "מותאם אישית",
+  "submit.draft.reset_failed": "לא ניתן היה לנקות את ההגדרה השמורה. הטיוטה הקודמת עדיין זמינה.",
+  "submit.draft.restore.continue": "להמשיך בטיוטה",
+  "submit.draft.restore.failed": "לא ניתן היה לשחזר את ההגדרה השמורה. אפשר לנסות שוב או להתחיל מחדש.",
+  "submit.draft.restore.gone": "ההגדרה השמורה כבר אינה זמינה בדפדפן הזה.",
+  "submit.draft.restore.retry": "לנסות שוב",
+  "submit.draft.restore.start_new": "להתחיל מחדש",
+  "submit.draft.restore.summary": "עצרתם בשלב {stage}",
+  "submit.draft.restore.title": "להמשיך מההגדרה הקודמת?",
   "submit.metric_calls": "תקציב קריאות מדד",
   "submit.modelpicker.purpose.all": "הכל",
   "submit.modelpicker.purpose.aria": "סינון מודלים לפי ייעוד",
