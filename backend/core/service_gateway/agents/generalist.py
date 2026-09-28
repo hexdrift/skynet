@@ -397,7 +397,7 @@ def approval_key(call_id: str, owner: str | None) -> str:
     Binding the key to the stream's owner means a confirm from any other
     account derives a different key and can never resolve the call, on the
     in-process path and the cross-replica table alike. Owner-less callers
-    (the react-serve relay) keep the bare id.
+    keep the bare id.
 
     Args:
         call_id: The short id surfaced to the browser in ``pending_approval``.

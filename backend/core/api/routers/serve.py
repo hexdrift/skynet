@@ -34,7 +34,7 @@ from ...constants import (
     TOKEN_SOURCE_MANAGED,
 )
 from ...models import ModelConfig, ServeInfoResponse, ServeRequest, ServeResponse
-from ...service_gateway.agents.generalist import TrustMode, get_approval_registry
+from ...service_gateway.agents.generalist import TrustMode, approval_key, get_approval_registry
 from ...service_gateway.agents.react_serve import run_react_chat
 from ...service_gateway.language_models import build_language_model
 from ...service_gateway.optimization.workflow import capture_node_traces
@@ -1065,6 +1065,7 @@ def create_serve_router(*, job_store) -> APIRouter:
             model_name=model_config.normalized_identifier(),
             mcp_url=mcp_url,
             auth_header=authorization,
+            approval_owner=current_user.username,
         )
         metered = stream_with_llm_observation(
             source,
@@ -1100,6 +1101,8 @@ def create_serve_router(*, job_store) -> APIRouter:
         registry the generalist agent uses; ``optimization_id`` scopes the
         route and enforces the caller holds editor-tier access (chat spends the
         owner's key, so it is editor+ like the rest of the serve surface).
+        Pending calls are keyed to the account that opened the chat stream, so
+        another editor of the same run cannot resolve them.
 
         Args:
             optimization_id: The react run the pending call belongs to.
@@ -1111,11 +1114,11 @@ def create_serve_router(*, job_store) -> APIRouter:
 
         Raises:
             DomainError: 404 when the run is unknown/inaccessible; 403 when the
-                caller's role is below editor; 404 when the call id is unknown
-                or already resolved.
+                caller's role is below editor; 404 when the call id is unknown,
+                already resolved, or belongs to another account's stream.
         """
         require_role_at_least(job_store, optimization_id, current_user, ShareRole.editor)
-        resolved = get_approval_registry().resolve(req.call_id, req.approved)
+        resolved = get_approval_registry().resolve(approval_key(req.call_id, current_user.username), req.approved)
         if not resolved:
             raise DomainError("agent.approval.unknown_call_id", status=404)
         return ServeChatConfirmResponse(resolved=True)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Generator
 from contextlib import nullcontext
@@ -21,15 +22,18 @@ from ...byok.vault import ProviderKeyVault
 from ...config import settings
 from ...i18n_keys import I18nKey
 from ...models import ProgramArtifact
+from ...service_gateway.agents.generalist import ApprovalRegistry, approval_key
 from ...storage.models import (
     Base,
     ByokProviderKeyModel,
 )
+from ..auth import AuthenticatedUser
 
 # noinspection PyProtectedMember
 from ..routers import _helpers
 from ..routers.serve import _coerce_sample_value, _collect_sample, create_serve_router
-from .conftest import bypass_auth
+from ..sharing_access import ShareRole
+from .conftest import TEST_USER, bypass_auth
 from .mocks import (
     _BaseFakeJobStore,
     make_artifact,
@@ -701,13 +705,16 @@ def test_serve_chat_streams_react_turn(serve_client: TestClient, serve_store: _F
             return_value=(object, "{}", overlay, {"model_name": "openai/gpt-4o-mini"}),
         ),
         patch("core.api.routers.serve.build_language_model", return_value=MagicMock()),
-        patch("core.api.routers.serve.run_react_chat", side_effect=lambda **_kw: _fake_react_chat_stream()),
+        patch(
+            "core.api.routers.serve.run_react_chat", side_effect=lambda **_kw: _fake_react_chat_stream()
+        ) as run_chat,
     ):
         resp = serve_client.post("/serve/anything/chat", json={"user_message": "hi", "trust_mode": "ask"})
 
     assert resp.status_code == 200
     assert "text/event-stream" in resp.headers["content-type"]
     assert "event: done" in resp.text
+    assert run_chat.call_args.kwargs["approval_owner"] == TEST_USER.username
 
 
 def test_serve_chat_confirm_returns_404_for_unknown_id(serve_client: TestClient) -> None:
@@ -724,6 +731,78 @@ def test_serve_chat_confirm_returns_404_for_unknown_call_id(
     resp = serve_client.post("/serve/plain/chat/confirm", json={"call_id": "never-registered", "approved": True})
     assert resp.status_code == 404
     assert resp.json()["code"] == I18nKey.AGENT_APPROVAL_UNKNOWN_CALL_ID.value
+
+
+def _confirm_client(serve_store: _FakeJobStore, user: AuthenticatedUser) -> TestClient:
+    """Build a serve client authenticated as ``user``.
+
+    Args:
+        serve_store: Fake job store wired into the router factory.
+        user: The caller every request is made as.
+
+    Returns:
+        A ``TestClient`` over a minimal FastAPI app.
+    """
+    app = FastAPI()
+    app.include_router(create_serve_router(job_store=serve_store))
+    _wire_http_handler(app)
+    bypass_auth(app, user=user)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture
+def owner_bound_approval(
+    serve_store: _FakeJobStore, monkeypatch: pytest.MonkeyPatch
+) -> Generator[asyncio.Future[bool], None, None]:
+    """Seed a run owned by ``owner`` with ``editor`` invited, and a pending call opened by ``owner``.
+
+    Args:
+        serve_store: Fake job store the run is seeded into.
+        monkeypatch: Used to grant the editor role and isolate the registry.
+
+    Yields:
+        The pending approval future the owner's chat stream is waiting on.
+    """
+    serve_store.seed_job("shared", status="success", payload={"username": "owner"})
+    monkeypatch.setattr(
+        _helpers,
+        "_grant_role",
+        lambda _store, _opt_id, username: ShareRole.editor if username == "editor" else None,
+    )
+    registry = ApprovalRegistry()
+    monkeypatch.setattr("core.api.routers.serve.get_approval_registry", lambda: registry)
+    loop = asyncio.new_event_loop()
+    future = loop.create_future()
+    # noinspection PyProtectedMember
+    registry._pending[approval_key("call-1", "owner")] = future
+    yield future
+    loop.close()
+
+
+def test_serve_chat_confirm_rejects_another_editor(
+    serve_store: _FakeJobStore, owner_bound_approval: asyncio.Future[bool]
+) -> None:
+    """An editor of the same run cannot resolve a call pending on the owner's stream."""
+    client = _confirm_client(serve_store, AuthenticatedUser(username="editor", role="user", groups=()))
+
+    resp = client.post("/serve/shared/chat/confirm", json={"call_id": "call-1", "approved": True})
+
+    assert resp.status_code == 404
+    assert resp.json()["code"] == I18nKey.AGENT_APPROVAL_UNKNOWN_CALL_ID.value
+    assert not owner_bound_approval.done()
+
+
+def test_serve_chat_confirm_resolves_for_the_stream_owner(
+    serve_store: _FakeJobStore, owner_bound_approval: asyncio.Future[bool]
+) -> None:
+    """The account that opened the chat stream resolves its own pending call."""
+    client = _confirm_client(serve_store, AuthenticatedUser(username="owner", role="user", groups=()))
+
+    resp = client.post("/serve/shared/chat/confirm", json={"call_id": "call-1", "approved": False})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"resolved": True}
+    assert owner_bound_approval.result() is False
 
 
 class _UsageLm:

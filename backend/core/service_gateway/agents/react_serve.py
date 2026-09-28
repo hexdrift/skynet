@@ -122,6 +122,7 @@ async def _drive_react_chat(
     lm: Any,
     mcp_url: str,
     auth_header: str | None,
+    approval_owner: str | None = None,
 ) -> str:
     """Build a fresh live ReActV2 for this turn, run it, and return the reply.
 
@@ -145,6 +146,8 @@ async def _drive_react_chat(
         mcp_url: Live MCP endpoint to bind the roster to.
         auth_header: Verbatim ``Authorization`` header forwarded to the MCP
             session so tool calls authenticate as the chatting owner.
+        approval_owner: Username pending approvals are bound to, so only the
+            account that opened the stream can confirm them.
 
     Returns:
         The assistant reply assembled from the program's output fields.
@@ -181,6 +184,7 @@ async def _drive_react_chat(
                 emit=emit,
                 outer_loop=outer_loop,
                 needs_approval=_react_needs_approval,
+                approval_owner=approval_owner,
             )
             for tool in tools
         ]
@@ -245,6 +249,7 @@ async def run_react_chat(
     mcp_url: str,
     auth_header: str | None = None,
     approval_registry: ApprovalRegistry | None = None,
+    approval_owner: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Stream one chat turn against a served, optimized ReActV2 program.
 
@@ -266,6 +271,8 @@ async def run_react_chat(
             session.
         approval_registry: Registry used for tool-approval coordination;
             defaults to the process-wide singleton.
+        approval_owner: Username of the authenticated caller; pending
+            approvals are keyed to it so no other account can resolve them.
 
     Yields:
         SSE event dicts of shape ``{"event": str, "data": dict}``.
@@ -290,6 +297,7 @@ async def run_react_chat(
             lm=lm,
             mcp_url=mcp_url,
             auth_header=auth_header,
+            approval_owner=approval_owner,
         )
     )
     try:

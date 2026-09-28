@@ -114,6 +114,43 @@ async def test_injected_policy_gates_arbitrary_tool_in_ask() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_react_chat_binds_approvals_to_the_stream_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The chat turn hands its caller to the driver so pending approvals are owner-keyed."""
+    seen: dict[str, Any] = {}
+
+    async def fake_drive(**kwargs: Any) -> str:
+        """Record the driver's approval owner.
+
+        Args:
+            **kwargs: The driver's arguments; only ``approval_owner`` is read.
+
+        Returns:
+            A fixed reply.
+        """
+        seen["owner"] = kwargs["approval_owner"]
+        return "ok"
+
+    monkeypatch.setattr("core.service_gateway.agents.react_serve._drive_react_chat", fake_drive)
+
+    _events = [
+        ev
+        async for ev in run_react_chat(
+            signature_cls=object,
+            program_state_json="{}",
+            react_overlay=SimpleNamespace(tool_source={}),
+            user_message="hi",
+            trust_mode="ask",
+            lm=object(),
+            model_name="openai/gpt-4o-mini",
+            mcp_url="http://mcp.local",
+            approval_owner="alice",
+        )
+    ]
+
+    assert seen == {"owner": "alice"}
+
+
+@pytest.mark.asyncio
 async def test_run_react_chat_pumps_emitted_events_then_done(monkeypatch: pytest.MonkeyPatch) -> None:
     """``run_react_chat`` forwards driver-emitted events and appends ``done``."""
 
