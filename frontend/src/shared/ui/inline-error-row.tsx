@@ -17,6 +17,8 @@ interface InlineErrorRowProps {
   hideIcon?: boolean;
   /** ARIA label for the dismiss button. */
   dismissLabel?: string;
+  /** Trailing control (e.g. a retry button) shown before the dismiss button. */
+  action?: React.ReactNode;
   className?: string;
 }
 
@@ -31,6 +33,7 @@ export function InlineErrorRow({
   onDismiss,
   hideIcon = false,
   dismissLabel,
+  action,
   className,
 }: InlineErrorRowProps) {
   const resolvedDismissLabel = dismissLabel ?? msg("shared.dismiss");
@@ -45,10 +48,11 @@ export function InlineErrorRow({
       {!hideIcon && <XCircle className="size-4 shrink-0 mt-0.5" />}
       <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}
-        <p className={cn("break-words", title && "mt-0.5")} dir="auto">
+        <div className={cn("break-words", title && "mt-0.5")} dir="auto">
           {message}
-        </p>
+        </div>
       </div>
+      {action}
       {onDismiss && (
         <button
           type="button"

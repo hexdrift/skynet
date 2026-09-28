@@ -1,8 +1,7 @@
 "use client";
 
+import { notifyCopied } from "@/shared/lib/notify";
 import { useMemo, useState } from "react";
-import { toast } from "react-toastify";
-import { motion } from "framer-motion";
 import { Gauge, Scroll } from "@/shared/ui/icons";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
 import { EmptyState } from "@/shared/ui/empty-state";
@@ -17,6 +16,7 @@ import {
 } from "@/shared/ui/excel-filter";
 import { ExportTableMenu } from "@/shared/ui/export-table-menu";
 import { FadeIn } from "@/shared/ui/motion";
+import { Segmented } from "@/shared/ui/segmented";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import type { OptimizationLogEntry } from "@/shared/types/api";
 import { formatLogTimestamp, logTimeBucket } from "@/shared/lib";
@@ -38,9 +38,6 @@ const VERBOSITY_OPTIONS: ReadonlyArray<{ value: Verbosity; label: () => string }
   { value: "verbose", label: () => msg("optimizations.logs.verbosity.verbose") },
 ];
 
-// Matches the explore sort pill so both segmented controls animate alike.
-const PILL_TRANSITION = { type: "tween", duration: 0.16, ease: [0.22, 1, 0.36, 1] } as const;
-
 /** Map the live `level` column-filter set back to the verbosity it represents. */
 function verbosityFromLevelFilter(levelSet: Set<string> | undefined): Verbosity | null {
   if (!levelSet || levelSet.size === 0) return "verbose";
@@ -59,40 +56,17 @@ function VerbosityControl({
   onChange: (verbosity: Verbosity) => void;
 }) {
   return (
-    <div
-      role="group"
-      aria-label={msg("optimizations.logs.verbosity.aria")}
-      className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/30 p-0.5"
-    >
-      <Gauge className="mx-1 size-3 text-foreground/35" aria-hidden="true" />
-      {VERBOSITY_OPTIONS.map((o) => {
-        const isActive = o.value === active;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            aria-pressed={isActive}
-            onClick={() => {
-              if (!isActive) onChange(o.value);
-            }}
-            className={`relative min-h-[44px] rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px] ${
-              isActive
-                ? "text-foreground"
-                : "cursor-pointer text-foreground/55 hover:text-foreground"
-            }`}
-          >
-            {isActive && (
-              <motion.span
-                layoutId="logs-verbosity-pill"
-                className="absolute inset-0 rounded-md bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
-                transition={PILL_TRANSITION}
-                aria-hidden="true"
-              />
-            )}
-            <span className="relative z-10">{o.label()}</span>
-          </button>
-        );
-      })}
+    <div className="inline-flex items-center gap-1.5">
+      <Gauge className="size-3 text-foreground/35" aria-hidden="true" />
+      <Segmented
+        size="sm"
+        label={msg("optimizations.logs.verbosity.aria")}
+        value={active}
+        onChange={(verbosity) => {
+          if (verbosity !== active) onChange(verbosity);
+        }}
+        options={VERBOSITY_OPTIONS.map((o) => ({ value: o.value, label: o.label() }))}
+      />
     </div>
   );
 }
@@ -372,14 +346,14 @@ export function LogsTab({
                   {filtered.slice(0, 300).map((log, i) => (
                     <TableRow
                       key={i}
-                      className="cursor-pointer"
+                      className="cursor-pointer transition-colors duration-150 hover:bg-muted/50"
                       onClick={(e) => {
                         const td = (e.target as HTMLElement).closest("td");
                         if (!td) return;
                         const text = td.textContent?.trim();
                         if (text) {
                           void navigator.clipboard.writeText(text);
-                          toast.success(msg("clipboard.copied"));
+                          notifyCopied();
                         }
                       }}
                     >
@@ -396,7 +370,7 @@ export function LogsTab({
                           }
                         >
                           {log.pair_index != null ? (
-                            <Badge variant="secondary" className="text-[9px] font-mono">
+                            <Badge variant="secondary" size="sm" className="font-mono">
                               {pairNames?.[log.pair_index] ??
                                 formatMsg(
                                   "auto.features.optimizations.components.logstab.template.3",

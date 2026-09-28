@@ -1,5 +1,6 @@
 "use client";
 
+import { Kbd } from "@/shared/ui/kbd";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -333,12 +334,8 @@ export function GlobalSearch() {
           </span>
         </span>
         <span dir="ltr" className="hidden shrink-0 items-center gap-1 lg:flex" aria-hidden="true">
-          <kbd className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-md border border-border/70 bg-muted/55 px-1 text-[0.6875rem] font-medium text-muted-foreground">
-            {msg("app.shell.search.command_key")}
-          </kbd>
-          <kbd className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-md border border-border/70 bg-muted/55 px-1 text-[0.6875rem] font-medium text-muted-foreground">
-            {msg("app.shell.search.k_key")}
-          </kbd>
+          <Kbd>{msg("app.shell.search.command_key")}</Kbd>
+          <Kbd>{msg("app.shell.search.k_key")}</Kbd>
         </span>
       </button>
 
@@ -347,7 +344,7 @@ export function GlobalSearch() {
           id="global-search-dialog"
           showCloseButton={false}
           dir={dir}
-          className="max-w-[calc(100%-1.5rem)] gap-0 overflow-hidden rounded-2xl border border-[#DDD4C8]/75 bg-[#FAF8F5] p-0 shadow-[0_16px_48px_rgba(28,22,18,0.16)] sm:max-w-xl"
+          className="max-w-[calc(100%-1.5rem)] gap-0 overflow-hidden rounded-2xl border border-border/75 bg-background p-0 shadow-[0_16px_48px_rgba(28,22,18,0.16)] sm:max-w-xl"
         >
           <DialogHeader className="sr-only">
             <DialogTitle>{msg("app.shell.search.title")}</DialogTitle>
@@ -378,7 +375,7 @@ export function GlobalSearch() {
               autoComplete="off"
               spellCheck={false}
               dir={dir}
-              className="h-full min-w-0 flex-1 bg-transparent text-start text-[0.95rem] text-foreground outline-none placeholder:text-start placeholder:text-muted-foreground/70"
+              className="h-full min-w-0 flex-1 bg-transparent text-start text-[0.95rem] text-foreground outline-none placeholder:text-start placeholder:text-muted-foreground/90"
             />
           </div>
 

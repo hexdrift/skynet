@@ -17,9 +17,9 @@ export function DataTabSkeleton() {
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex w-full gap-1 rounded-lg bg-muted p-1">
+        <div className="flex w-full gap-0.5 rounded-lg bg-muted p-0.5">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} height={28} className="flex-1" />
+            <Skeleton key={i} height={24} className="flex-1" />
           ))}
         </div>
         <Skeleton width={64} height={10} className="ms-auto" />

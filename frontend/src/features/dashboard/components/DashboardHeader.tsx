@@ -3,6 +3,7 @@ import { Users } from "@/shared/ui/icons";
 import { AnimatedNumber } from "@/shared/ui/motion";
 import type { DashboardStats } from "../lib/get-dashboard-stats";
 import { msg } from "@/shared/lib/messages";
+import { ACCENT_DOT, ACCENT_TEXT, type StatAccent } from "../constants";
 
 type DashboardHeaderProps = {
   stats: DashboardStats;
@@ -11,23 +12,9 @@ type DashboardHeaderProps = {
 type StatCellProps = {
   label: string;
   value: number;
-  accent?: "default" | "warning" | "success" | "danger";
+  accent?: StatAccent;
   pulse?: boolean;
   icon?: ReactNode;
-};
-
-const ACCENT_TEXT: Record<NonNullable<StatCellProps["accent"]>, string> = {
-  default: "text-foreground",
-  warning: "text-[var(--warning)]",
-  success: "text-emerald-600",
-  danger: "text-red-600",
-};
-
-const ACCENT_DOT: Record<NonNullable<StatCellProps["accent"]>, string> = {
-  default: "bg-foreground/25",
-  warning: "bg-[var(--warning)]",
-  success: "bg-emerald-500",
-  danger: "bg-red-500",
 };
 
 function StatCell({ label, value, accent = "default", pulse = false, icon }: StatCellProps) {

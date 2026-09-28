@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
+import { Button } from "@/shared/ui/primitives/button";
 import * as React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
@@ -251,25 +253,18 @@ export function DatasetUploadCard({
         <AnimatePresence mode="wait" initial={false}>
           {!parsed && !parsing && initialFile && parseError && (
             <motion.div key="pick-error" {...fade} className="px-4 py-3.5 space-y-2">
-              <div className="text-[0.6875rem] text-red-600/90 bg-red-50/80 border border-red-100 rounded-md px-2.5 py-1.5">
-                {parseError}
-              </div>
-              <button
+              <InlineErrorRow message={parseError} className="py-2" />
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={onPickClick}
                 disabled={disabled}
-                className={cn(
-                  "w-full inline-flex items-center justify-center gap-1.5",
-                  "min-h-[44px] rounded-xl px-3 py-2 text-[0.8125rem] font-medium cursor-pointer",
-                  "border border-[#C8A882]/50 bg-white/50 text-[#3D2E22]",
-                  "hover:border-[#3D2E22]/60 hover:bg-white/80 transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FAF8F5]",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                )}
+                className="w-full"
               >
                 <UploadSimple className="size-3.5" />
                 {msg("auto.features.agent.panel.components.datasetuploadcard.replace")}
-              </button>
+              </Button>
             </motion.div>
           )}
 
@@ -287,7 +282,7 @@ export function DatasetUploadCard({
                   "group w-full rounded-xl border-2 border-dashed",
                   "px-4 py-5 flex flex-col items-center justify-center gap-2",
                   "cursor-pointer transition-all duration-150 outline-none",
-                  "focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FAF8F5]",
+                  "focus-visible:ring-2 focus-visible:ring-[#C8A882]/45",
                   dragOver
                     ? "border-[#3D2E22] bg-[#C8A882]/15 scale-[1.01]"
                     : "border-[#C8A882]/50 bg-white/50 hover:border-[#3D2E22]/60 hover:bg-white/80",
@@ -310,11 +305,7 @@ export function DatasetUploadCard({
                   </div>
                 </div>
               </button>
-              {parseError && (
-                <div className="mt-2 text-[0.6875rem] text-red-600/90 bg-red-50/80 border border-red-100 rounded-md px-2.5 py-1.5">
-                  {parseError}
-                </div>
-              )}
+              {parseError && <InlineErrorRow message={parseError} className="mt-2 py-2" />}
             </motion.div>
           )}
 
@@ -354,7 +345,7 @@ export function DatasetUploadCard({
                       "auto.features.agent.panel.components.datasetuploadcard.replace",
                     )}
                     className={cn(
-                      "shrink-0 inline-flex min-h-[44px] items-center gap-1 text-[0.6875rem] sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]",
+                      "shrink-0 inline-flex items-center gap-1 text-[0.6875rem]",
                       "rounded-md px-1.5 py-1 text-[#6B5B4A] hover:text-[#3D2E22]",
                       "hover:bg-white/70 transition-colors cursor-pointer",
                     )}
@@ -389,28 +380,19 @@ export function DatasetUploadCard({
                 })}
               </div>
 
-              {validationError && (
-                <div className="text-[0.6875rem] text-red-600/90 bg-red-50/80 border border-red-100 rounded-md px-2.5 py-1.5">
-                  {validationError}
-                </div>
-              )}
+              {validationError && <InlineErrorRow message={validationError} className="py-2" />}
 
               {!confirmed && (
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   onClick={handleConfirm}
                   disabled={!canConfirm || disabled}
-                  className={cn(
-                    "w-full inline-flex items-center justify-center gap-1.5",
-                    "min-h-[44px] rounded-xl px-3 py-2 text-[0.8125rem] font-medium cursor-pointer",
-                    "bg-[#3D2E22] text-[#FAF8F5] hover:bg-[#2A1F16] transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FAF8F5]",
-                    "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#3D2E22]",
-                  )}
+                  className="w-full"
                 >
                   {msg("auto.features.agent.panel.components.datasetuploadcard.confirm")}
-                  <ArrowRight className="size-3.5 rotate-180" />
-                </button>
+                  <ArrowRight className="size-3.5 rtl:rotate-180" />
+                </Button>
               )}
 
               {confirmed && (
@@ -470,7 +452,7 @@ function ColumnRoleRow({
             onClick={onToggleKind}
             disabled={disabled}
             className={cn(
-              "shrink-0 inline-flex min-h-[44px] items-center gap-1 rounded-md border px-1.5 py-0.5 text-[0.625rem] font-medium transition-colors cursor-pointer sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]",
+              "shrink-0 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[0.625rem] font-medium transition-colors cursor-pointer",
               kind === "image"
                 ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
                 : "border-border/60 bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-foreground",
@@ -506,8 +488,8 @@ function ColumnRoleRow({
             onClick={() => onChangeRole(val)}
             disabled={disabled}
             className={cn(
-              "relative z-10 min-h-[44px] rounded-md px-2.5 py-1 text-[0.6875rem] font-medium text-center transition-colors duration-100 cursor-pointer sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40",
+              "relative z-10 rounded-md px-2.5 py-1 text-[0.6875rem] font-medium text-center transition-colors duration-100 cursor-pointer",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45",
               role === val ? "text-stone-600" : "text-muted-foreground hover:text-foreground",
               disabled && "cursor-not-allowed opacity-60",
             )}

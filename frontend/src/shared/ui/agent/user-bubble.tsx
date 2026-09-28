@@ -10,6 +10,13 @@ import { Button } from "@/shared/ui/primitives/button";
 import { CopyButton } from "@/shared/ui/copy-button";
 
 import { autoResizeTextarea } from "./auto-resize";
+import { Textarea } from "@/shared/ui/primitives/textarea";
+
+/** Pill button styles for the edit-and-resend row under a user message. */
+export const USER_BUBBLE_EDIT_CANCEL_CLASS =
+  "text-[0.75rem] font-medium text-foreground/80 hover:text-foreground bg-white border border-[#DDD4C8] hover:bg-muted px-3.5 py-1.5 rounded-full transition-all duration-150 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/25 focus-visible:ring-offset-1";
+export const USER_BUBBLE_EDIT_SEND_CLASS =
+  "text-[0.75rem] font-medium text-white bg-[#3D2E22] hover:bg-[#3D2E22]/90 px-4 py-1.5 rounded-full transition-all duration-150 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100";
 
 interface UserBubbleProps {
   content: string;
@@ -80,7 +87,7 @@ export function UserBubbleEditor({
   return (
     <div className="flex justify-start">
       <div className="max-w-[80%] w-full space-y-2">
-        <textarea
+        <Textarea
           ref={textareaRef}
           value={value}
           onChange={(e) => {
@@ -96,24 +103,20 @@ export function UserBubbleEditor({
               onCancel();
             }
           }}
-          className="w-full bg-white border border-[#DDD4C8] rounded-xl px-3 py-2 text-sm resize-none outline-none focus:border-[#C8A882] transition-colors min-h-[40px] max-h-[120px]"
+          className="max-h-[120px] min-h-[40px]"
           rows={1}
           autoFocus
           dir="auto"
         />
         <div className="flex justify-start gap-1.5">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-[0.75rem] font-medium text-foreground/80 hover:text-foreground bg-white border border-[#DDD4C8] hover:bg-muted px-3.5 py-1.5 rounded-full transition-all duration-150 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/25 focus-visible:ring-offset-1"
-          >
+          <button type="button" onClick={onCancel} className={USER_BUBBLE_EDIT_CANCEL_CLASS}>
             {msg("shared.agent.cancel")}
           </button>
           <button
             type="button"
             onClick={onSubmit}
             disabled={!value.trim() || disabled}
-            className="text-[0.75rem] font-medium text-white bg-[#3D2E22] hover:bg-[#3D2E22]/90 px-4 py-1.5 rounded-full transition-all duration-150 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3D2E22]/40 focus-visible:ring-offset-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+            className={USER_BUBBLE_EDIT_SEND_CLASS}
           >
             {msg("shared.agent.send")}
           </button>

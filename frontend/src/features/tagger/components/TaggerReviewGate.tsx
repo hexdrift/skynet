@@ -1,9 +1,16 @@
 "use client";
 
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect } from "react";
-import { ArrowRight, CircleNotch, Sparkle } from "@/shared/ui/icons";
+import { ArrowRight, Sparkle } from "@/shared/ui/icons";
 import { Button } from "@/shared/ui/primitives/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/shared/ui/primitives/card";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import type { AutotagEstimate } from "../hooks/use-tagger";
 import type { AssistState, TaggerConfig } from "../lib/types";
@@ -55,19 +62,14 @@ export function TaggerReviewGate({
   }, [unlocked]);
 
   if (roundLoading) {
-    return (
-      <Centered>
-        <CircleNotch className="size-6 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">{msg("tagger.assist.gate.preparing")}</p>
-      </Centered>
-    );
+    return <LoadingState label={msg("tagger.assist.gate.preparing")} className="min-h-[40vh]" />;
   }
 
   return (
     <div className="flex w-full flex-col gap-4 lg:w-[300px]">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
+          <CardTitle className="text-lg">
             {assist.mode === "autopilot" && closedRounds.length === 0
               ? msg("tagger.assist.gate.autopilot_title")
               : lastRound
@@ -87,7 +89,9 @@ export function TaggerReviewGate({
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {assistError && (
-            <p className="text-sm text-destructive">{msg("tagger.assist.gate.error")}</p>
+            <p role="alert" className="text-xs text-destructive">
+              {msg("tagger.assist.gate.error")}
+            </p>
           )}
 
           {unlocked ? (
@@ -121,11 +125,5 @@ export function TaggerReviewGate({
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3">{children}</div>
   );
 }

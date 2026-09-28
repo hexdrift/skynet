@@ -1,5 +1,6 @@
 "use client";
 
+import { FieldKey } from "@/shared/ui/field-key";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import dynamic from "next/dynamic";
 import { CaretRight, Code, GitDiff, Hash, TextAlignLeft, XCircle, type Icon } from "@/shared/ui/icons";
@@ -7,9 +8,7 @@ import {
   createContext,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import {
@@ -32,12 +31,15 @@ import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { Segmented } from "@/shared/ui/segmented";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { RecordedChatTranscript, type ChatMessage } from "./RecordedChat";
 import { UserBubble } from "@/shared/ui/agent/user-bubble";
 import { AgentBubble } from "@/shared/ui/agent/agent-bubble";
 import { Carousel, ToolCallRow, ToolHeader, ToolsCarousel } from "@/features/agent-panel";
+import { OutcomeChip } from "@/shared/ui/outcome-chip";
 import type { AgentMessage, AgentToolCall } from "@/shared/ui/agent";
+import { readOnlyEditorHeight } from "@/shared/ui/code-editor-height";
 import {
   Sheet,
   SheetContent,
@@ -81,7 +83,7 @@ const EMPTY_SEVERITIES: Record<string, string> = {};
 // tab uses; lazy so CodeMirror stays out of the drawer's initial bundle.
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
-  loading: () => <Skeleton height={140} borderRadius={6} />,
+  loading: () => <Skeleton height={140} borderRadius={8} />,
 });
 
 export type DrawerSelection =
@@ -170,10 +172,10 @@ export function TrajectoryDrawer({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side={isRtl ? "left" : "right"}
-          className="w-full sm:max-w-md md:max-w-[min(520px,92vw)] overflow-hidden bg-[#fbf8f3]"
+          className="w-full sm:max-w-md md:max-w-[min(520px,92vw)] overflow-hidden"
         >
-          <SheetHeader>
-            <SheetTitle className="text-base">{TERMS.candidate}</SheetTitle>
+          <SheetHeader className="border-b border-border/40">
+            <SheetTitle>{TERMS.candidate}</SheetTitle>
           </SheetHeader>
         </SheetContent>
       </Sheet>
@@ -186,7 +188,7 @@ export function TrajectoryDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side={isRtl ? "left" : "right"}
-        className="w-full sm:max-w-md md:max-w-[min(520px,92vw)] overflow-hidden bg-[#fbf8f3] flex flex-col"
+        className="w-full sm:max-w-md md:max-w-[min(520px,92vw)] overflow-hidden flex flex-col"
       >
         <NodeBody
           view={view}
@@ -259,8 +261,8 @@ function NodeBody({
   return (
     <ToolSeveritiesContext.Provider value={toolSeverities ?? EMPTY_SEVERITIES}>
       <ToolDescriptionsContext.Provider value={toolDescriptions}>
-        <SheetHeader className="border-b border-border/30">
-          <SheetTitle className="flex items-center gap-2 text-base">
+        <SheetHeader className="border-b border-border/40">
+          <SheetTitle className="flex items-center gap-2">
             {view.kind === "rejected" ? (
               <XCircle className="size-4 text-[#a85a3b]" aria-hidden="true" />
             ) : null}
@@ -408,7 +410,7 @@ function StatTile({
   const palette = TONE_COLORS[tone];
   return (
     <div className="flex-1 min-w-0 px-2.5 py-1.5 border-s border-border/30 first:border-s-0">
-      <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/85">
+      <div className="flex items-center gap-1 text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
         {Icon !== undefined ? <Icon className="size-2.5 opacity-70" aria-hidden={true} /> : null}
         <span className="truncate">{label}</span>
       </div>
@@ -512,7 +514,7 @@ function MinibatchEntryCard({
         </div>
         <HelpTip text={msg("trajectory.minibatch.score_label.explain")}>
           <span className="inline-flex items-baseline gap-1.5">
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
               {msg("trajectory.minibatch.score_label")}
             </span>
             <span
@@ -546,9 +548,9 @@ function MinibatchEntryCard({
 
 function StatusChip({ passed }: { passed: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-[#DDD4C8]/70 bg-background/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-foreground/75">
+    <OutcomeChip tone={passed ? "pass" : "fail"} className="uppercase tracking-wider">
       {passed ? msg("trajectory.minibatch.pass_label") : msg("trajectory.minibatch.fail_label")}
-    </span>
+    </OutcomeChip>
   );
 }
 
@@ -1438,7 +1440,7 @@ function FeedbackBlock({ body }: { body: string }) {
   return (
     <div className="space-y-1">
       <HelpTip text={msg("trajectory.minibatch.feedback_label.explain")}>
-        <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
           {msg("trajectory.minibatch.feedback_label")}
         </div>
       </HelpTip>
@@ -1653,7 +1655,7 @@ function PromptKindHeader({
       : msg("trajectory.prompt.kind.instructions");
   return (
     <div className="mb-2 flex items-center justify-between gap-2">
-      <span className="inline-flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-wide text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
         <KindIcon className="size-3" />
         {kindText}
       </span>
@@ -1881,7 +1883,7 @@ function PromptCodeView({ value }: { value: string }) {
     <CodeEditor
       value={value}
       onChange={() => {}}
-      height={`${Math.min((value.split("\n").length + 1) * 19.6 + 8, 480)}px`}
+      height={readOnlyEditorHeight(value, { maxPx: 480 })}
       readOnly
     />
   );
@@ -1972,19 +1974,7 @@ interface SegmentedOption<T extends string> {
   icon?: Icon;
 }
 
-// Measuring the thumb must run before paint on the client, but useLayoutEffect
-// warns during SSR — fall back to useEffect on the server.
-const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
-
-// Pill segmented control with a single ``bg-background`` thumb that slides between
-// options. The thumb is positioned in the radiogroup's OWN coordinate space — it
-// animates ``left``/``width`` taken from the active button's offset box — rather
-// than via framer's shared-layout ``layoutId``. ``layoutId`` projects in page
-// coordinates, so when the control sits above content that reflows on click (the
-// tool-descriptions carousel swaps plain↔compare) that vertical shift leaked into
-// the slide as a downward "drop". Animating left/width is a pure horizontal slide
-// in any layout context, so the prompt and tools toggles animate identically.
-// Snaps instantly under reduced motion.
+// The shared segmented control; the options carry icon components here.
 function SegmentedToggle<T extends string>({
   value,
   onChange,
@@ -1996,68 +1986,19 @@ function SegmentedToggle<T extends string>({
   options: ReadonlyArray<SegmentedOption<T>>;
   ariaLabel: string;
 }) {
-  const reduce = useReducedMotion();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const btnRefs = useRef(new Map<T, HTMLButtonElement>());
-  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
-
-  useIsomorphicLayoutEffect(() => {
-    const measure = () => {
-      const el = btnRefs.current.get(value);
-      if (el) setThumb({ left: el.offsetLeft, width: el.offsetWidth });
-    };
-    measure();
-    const container = containerRef.current;
-    const ro = new ResizeObserver(measure);
-    if (container) ro.observe(container);
-    return () => ro.disconnect();
-  }, [value, options]);
-
   return (
-    <div
-      ref={containerRef}
-      role="radiogroup"
-      aria-label={ariaLabel}
-      className="relative inline-flex shrink-0 items-center rounded-full border border-border/80 bg-muted/40 p-0.5"
-    >
-      {thumb ? (
-        <motion.span
-          aria-hidden="true"
-          className="absolute inset-y-0.5 rounded-full bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
-          initial={false}
-          animate={{ left: thumb.left, width: thumb.width }}
-          transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 32 }}
-        />
-      ) : null}
-      {options.map((opt) => {
-        const active = opt.value === value;
-        const Icon = opt.icon;
-        return (
-          <button
-            key={opt.value}
-            ref={(el) => {
-              if (el) btnRefs.current.set(opt.value, el);
-              else btnRefs.current.delete(opt.value);
-            }}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(opt.value)}
-            className={cn(
-              "relative inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium leading-none",
-              "transition-colors duration-150 ease-out cursor-pointer",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45",
-              active ? "text-foreground" : "text-foreground/60 hover:text-foreground",
-            )}
-          >
-            <span className="relative z-10 inline-flex items-center gap-1.5">
-              {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}
-              <span>{opt.label}</span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
+    <Segmented
+      size="sm"
+      className="shrink-0"
+      label={ariaLabel}
+      value={value}
+      onChange={onChange}
+      options={options.map(({ value: v, label, icon: Icon }) => ({
+        value: v,
+        label,
+        icon: Icon ? <Icon className="size-3.5" aria-hidden="true" /> : undefined,
+      }))}
+    />
   );
 }
 
@@ -2109,9 +2050,7 @@ function ReactToolDetail({ tool }: { tool: ReactToolView | null }) {
               className="flex flex-col gap-1.5 rounded-md border border-[#DDD4C8]/45 bg-[#F8F4EF]/40 px-2.5 py-1.5"
               dir="ltr"
             >
-              <span className="inline-flex shrink-0 self-start rounded bg-foreground/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-medium text-foreground/75">
-                {arg}
-              </span>
+              <FieldKey className="shrink-0 self-start">{arg}</FieldKey>
               {desc ? (
                 <p
                   className="min-w-0 text-[11px] leading-relaxed text-muted-foreground/85 whitespace-pre-wrap"
@@ -2396,7 +2335,7 @@ function Section({
   children: React.ReactNode;
 }) {
   const titleNode = (
-    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
       {title}
     </div>
   );
@@ -2826,7 +2765,7 @@ function ParetoGridSection({
             </div>
             <HelpTip text={msg("trajectory.minibatch.score_label.explain")}>
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground">
                   {msg("trajectory.minibatch.score_label")}
                 </span>
                 <span

@@ -8,12 +8,10 @@ import {
   ArrowUpRight,
   CaretLeft,
   CaretRight,
-  CircleNotch,
   Sparkle,
   Table as Table2,
   Tray,
 } from "@/shared/ui/icons";
-import { motion } from "framer-motion";
 import { Button } from "@/shared/ui/primitives/button";
 import {
   Dialog,
@@ -34,6 +32,10 @@ import {
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { CopyButton } from "@/shared/ui/copy-button";
 import { EmptyState } from "@/shared/ui/empty-state";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { CountPill } from "@/shared/ui/count-badge";
+import { Segmented } from "@/shared/ui/segmented";
+import { notifyCopied } from "@/shared/lib/notify";
 import { ExportTableMenu } from "@/shared/ui/export-table-menu";
 import { FadeIn } from "@/shared/ui/motion";
 import {
@@ -51,9 +53,6 @@ import { arrowPageStep } from "@/shared/lib/arrow-paging";
 // The grid sorts/filters the full row set in memory, but caps the DOM at this
 // many rows so a large dataset never renders tens of thousands of <tr>s.
 const RENDER_ROW_CAP = 200;
-
-// Mirrors the Explore corpus toggle so the sliding pill feels identical app-wide.
-const PILL_TRANSITION = { type: "tween", duration: 0.18, ease: [0.22, 1, 0.36, 1] } as const;
 
 type DetailTab = "rows" | "usage";
 
@@ -180,7 +179,7 @@ export function DatasetDetailDialog({
     if (!text) return;
     navigator.clipboard
       .writeText(text)
-      .then(() => toast.success(msg("clipboard.copied")))
+      .then(notifyCopied)
       .catch(() => toast.error(msg("clipboard.copy_failed")));
   }, []);
 
@@ -235,7 +234,7 @@ export function DatasetDetailDialog({
   return (
     <Dialog open={dataset !== null} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
-        className="max-w-[min(72rem,94vw)] overflow-hidden p-0 max-lg:[&_[data-slot=dialog-close]]:!size-[44px] sm:max-w-[min(72rem,94vw)]"
+        className="max-w-[min(72rem,94vw)] overflow-hidden p-0 sm:max-w-[min(72rem,94vw)]"
         aria-describedby={undefined}
         onEscapeKeyDown={(e) => {
           // Escape peels one layer: reader -> grid first, dialog second.
@@ -259,48 +258,26 @@ export function DatasetDetailDialog({
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex shrink-0 justify-center border-b border-border/40 px-4 pb-4 sm:px-6">
-              <div
-                role="radiogroup"
-                aria-label={msg("datasets.detail.view_aria")}
-                className="relative inline-flex items-center rounded-full border border-border/80 bg-muted/40 p-0.5"
-              >
-                {segments.map((seg) => {
-                  const active = seg.value === tab;
+              <Segmented
+                size="sm"
+                label={msg("datasets.detail.view_aria")}
+                value={tab}
+                onChange={(value) => {
+                  if (value !== tab) setTab(value);
+                }}
+                options={segments.map((seg) => {
                   const Icon = seg.icon;
-                  return (
-                    <button
-                      key={seg.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() => !active && setTab(seg.value)}
-                      className={`relative inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:min-h-0 ${
-                        active
-                          ? "text-foreground"
-                          : "cursor-pointer text-foreground/60 hover:text-foreground"
-                      }`}
-                    >
-                      {active && (
-                        <motion.span
-                          layoutId="dataset-detail-tab-pill"
-                          className="absolute inset-0 rounded-full bg-background shadow-[0_1px_2px_oklch(0.25_0.04_45/.12)]"
-                          transition={PILL_TRANSITION}
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span className="relative z-10 inline-flex items-center gap-1.5">
-                        <Icon className="size-3.5" aria-hidden="true" />
-                        <span>{seg.label}</span>
-                        {seg.value === "usage" && usageCount > 0 && (
-                          <span className="rounded-full bg-foreground/10 px-1.5 text-[0.6875rem] font-bold tabular-nums">
-                            {usageCount}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
+                  return {
+                    value: seg.value,
+                    label: seg.label,
+                    icon: <Icon className="size-3.5" aria-hidden="true" />,
+                    trailing:
+                      seg.value === "usage" && usageCount > 0 ? (
+                        <CountPill>{usageCount}</CountPill>
+                      ) : undefined,
+                  };
                 })}
-              </div>
+              />
             </div>
 
             {tab === "rows" && readerRow !== null && readerIndex !== null ? (
@@ -332,7 +309,7 @@ export function DatasetDetailDialog({
                     variant="ghost"
                     size="sm"
                     onClick={() => setReaderIndex(null)}
-                    className="min-h-[44px] gap-1.5 text-muted-foreground hover:text-foreground lg:min-h-0"
+                    className="gap-1.5 text-muted-foreground hover:text-foreground"
                   >
                     <ArrowLeft className="size-4 rtl:rotate-180" />
                     {msg("datasets.detail.row_reader.back")}
@@ -343,7 +320,6 @@ export function DatasetDetailDialog({
                       size="icon-sm"
                       onClick={() => stepReader(-1)}
                       disabled={readerIndex === 0}
-                      className="size-[44px] lg:size-8"
                       aria-label={msg("datasets.detail.row_reader.prev")}
                     >
                       <CaretLeft className="size-4 rtl:rotate-180" />
@@ -359,7 +335,6 @@ export function DatasetDetailDialog({
                       size="icon-sm"
                       onClick={() => stepReader(1)}
                       disabled={readerIndex >= filtered.length - 1}
-                      className="size-[44px] lg:size-8"
                       aria-label={msg("datasets.detail.row_reader.next")}
                     >
                       <CaretRight className="size-4 rtl:rotate-180" />
@@ -383,7 +358,7 @@ export function DatasetDetailDialog({
                               ariaLabel={formatMsg("datasets.detail.row_reader.copy_field", {
                                 column: col,
                               })}
-                              onCopied={() => toast.success(msg("clipboard.copied"))}
+                              onCopied={notifyCopied}
                               onCopyError={() => toast.error(msg("clipboard.copy_failed"))}
                               className="opacity-100 transition-opacity lg:opacity-0 lg:group-hover/field:opacity-100 lg:focus-visible:opacity-100"
                             />
@@ -407,10 +382,10 @@ export function DatasetDetailDialog({
             ) : tab === "rows" ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6">
                 {rows === null ? (
-                  <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
-                    <CircleNotch className="size-4 animate-spin" />
-                    {msg("datasets.detail.loading")}
-                  </div>
+                  <LoadingState
+                    srLabel={msg("datasets.detail.loading")}
+                    className="min-h-40 flex-1"
+                  />
                 ) : columns.length === 0 || allRows.length === 0 ? (
                   <div className="py-8">
                     <EmptyState
@@ -450,7 +425,7 @@ export function DatasetDetailDialog({
                         />
                       </div>
                     ) : (
-                      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/50">
+                      <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/40 bg-card/60">
                         {/* Per-column width floor: on narrow viewports the
                             fixed-layout table scrolls sideways (the Table
                             container is overflow-x-auto) instead of crushing
@@ -485,7 +460,7 @@ export function DatasetDetailDialog({
                             {filtered.slice(0, RENDER_ROW_CAP).map((row, i) => (
                               <TableRow
                                 key={i}
-                                className="cursor-pointer transition-colors hover:bg-muted/40"
+                                className="cursor-pointer transition-colors duration-150 hover:bg-muted/50"
                                 onClick={() => {
                                   if (!window.matchMedia("(any-pointer: coarse)").matches) return;
                                   cancelPendingCopy();
@@ -542,10 +517,10 @@ export function DatasetDetailDialog({
             ) : (
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
                 {optimizations === null ? (
-                  <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
-                    <CircleNotch className="size-4 animate-spin" />
-                    {msg("datasets.detail.loading")}
-                  </div>
+                  <LoadingState
+                    srLabel={msg("datasets.detail.loading")}
+                    className="min-h-40 flex-1"
+                  />
                 ) : optimizations.length === 0 ? (
                   <div className="py-8">
                     <EmptyState

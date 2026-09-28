@@ -35,12 +35,12 @@ export function SubmitNav({ w }: { w: SubmitWizardContext }) {
           disabled={advancing}
           aria-busy={advancing || undefined}
           aria-live="polite"
-          className="min-h-[44px] min-w-0 flex-1 justify-center gap-2 whitespace-normal sm:min-w-[88px] sm:flex-none sm:whitespace-nowrap"
+          className="min-h-[44px] lg:min-h-0 min-w-0 flex-1 justify-center gap-2 whitespace-normal sm:min-w-[88px] sm:flex-none sm:whitespace-nowrap"
           data-tutorial="wizard-next"
         >
           {advancing ? (
             <>
-              <CircleNotch className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <CircleNotch className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
               <span>{msg("submit.nav.validating")}</span>
             </>
           ) : (

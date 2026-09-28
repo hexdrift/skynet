@@ -1,10 +1,13 @@
 "use client";
 
+import { MicroPill } from "@/shared/ui/model-chip";
 import * as React from "react";
 import { Check, CaretDown, Eye, MagnifyingGlass } from "@/shared/ui/icons";
 import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
+import { selectTriggerClass } from "@/shared/ui/primitives/select";
+import { TOUCH_FIELD } from "@/shared/ui/touch";
 import {
   getModelCatalog,
   cachedCatalog,
@@ -215,15 +218,8 @@ export function ModelPicker({
           type="button"
           id={id}
           disabled={disabled}
-          className={cn(
-            "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm lg:min-h-0",
-            "shadow-xs cursor-pointer transition-[border-color,background-color,box-shadow] duration-120",
-            "hover:border-foreground/20 hover:bg-accent/40",
-            "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-            open && "border-foreground/25 bg-accent/40",
-            className,
-          )}
+          // PopoverTrigger sets data-state=open, so the select's open style applies.
+          className={cn(selectTriggerClass, TOUCH_FIELD, "w-full", className)}
           aria-haspopup="listbox"
         >
           {value ? (
@@ -257,13 +253,13 @@ export function ModelPicker({
         }}
       >
         <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
-          <MagnifyingGlass className="size-3.5 shrink-0 text-muted-foreground" />
+          <MagnifyingGlass className="size-4 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={msg("auto.features.submit.components.modelpicker.literal.4")}
-            className="min-h-[44px] flex-1 bg-transparent text-start text-base outline-none placeholder:text-start placeholder:text-muted-foreground lg:min-h-0 lg:text-sm"
+            className="min-h-[44px] flex-1 bg-transparent text-start text-base outline-none placeholder:text-start placeholder:text-muted-foreground/90 lg:min-h-0 lg:text-sm"
           />
         </div>
 
@@ -302,7 +298,7 @@ export function ModelPicker({
           {Array.from(grouped.entries()).map(([provider, items]) => (
             <div key={provider} className="py-1">
               <div
-                className="px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-wider text-muted-foreground text-start"
+                className="px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 text-start"
                 dir="ltr"
               >
                 {providerLabel(provider)}
@@ -328,12 +324,9 @@ export function ModelPicker({
                       </span>
                     )}
                     {m.supports_vision && (
-                      <span
-                        className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-primary/10 px-1 py-px text-[9px] text-primary"
-                        title={msg("shared.model_chip.vision_badge")}
-                      >
+                      <MicroPill tone="primary" title={msg("shared.model_chip.vision_badge")}>
                         <Eye className="size-2.5" />
-                      </span>
+                      </MicroPill>
                     )}
                   </span>
                   <Check

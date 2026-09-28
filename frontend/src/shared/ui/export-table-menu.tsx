@@ -1,6 +1,14 @@
 "use client";
 
-import { BracketsCurly, Database, DownloadSimple, Feather, FileText, Stack, Table } from "@/shared/ui/icons";
+import {
+  BracketsCurly,
+  Database,
+  DownloadSimple,
+  Feather,
+  FileText,
+  Stack,
+  Table,
+} from "@/shared/ui/icons";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
@@ -90,10 +98,7 @@ export function ExportTableMenu({
                 aria-label={msg("export.table.aria")}
                 className={className}
               >
-                <DownloadSimple
-                  className="size-[1.05rem] text-primary"
-                  aria-hidden="true"
-                />
+                <DownloadSimple className="size-[1.05rem] text-primary" aria-hidden="true" />
               </Button>
             ) : (
               <Button
@@ -103,10 +108,7 @@ export function ExportTableMenu({
                 aria-label={msg("export.table.aria")}
                 className={cn("gap-1.5", className)}
               >
-                <DownloadSimple
-                  className="size-[1.05rem] text-primary"
-                  aria-hidden="true"
-                />
+                <DownloadSimple className="size-[1.05rem] text-primary" aria-hidden="true" />
                 {msg("export.table.button")}
               </Button>
             )}

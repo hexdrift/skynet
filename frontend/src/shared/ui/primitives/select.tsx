@@ -14,6 +14,10 @@ function SelectValue({ ...props }: React.ComponentProps<typeof SelectPrimitive.V
   return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
+/** The closed-select look, shared with hand-rolled Popover triggers. */
+const selectTriggerClass =
+  "group/select-trigger flex w-fit select-none items-center justify-between gap-2 rounded-xl border border-input/90 bg-background/75 px-3 py-2 text-sm whitespace-nowrap shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_12px_26px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm cursor-pointer transform-gpu transition-[transform,background-color,color,border-color,box-shadow] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] outline-none hover:border-foreground/20 hover:bg-accent/55 data-[state=open]:border-foreground/25 data-[state=open]:bg-accent/60 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-[placeholder]:text-muted-foreground *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground";
+
 function SelectTrigger({
   className,
   size = "default",
@@ -27,7 +31,10 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "group/select-trigger flex w-fit select-none items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs cursor-pointer transform-gpu transition-[transform,background-color,color,border-color,box-shadow] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] outline-none hover:border-foreground/20 hover:bg-accent/55 hover:shadow-sm data-[state=open]:border-foreground/25 data-[state=open]:bg-accent/60 data-[state=open]:shadow-sm focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-[placeholder]:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+        selectTriggerClass,
+        // Plain height classes (not data-[size] variants) so a caller's touch
+        // height wins through tailwind-merge without !important.
+        size === "sm" ? "h-8" : "h-9",
         className,
       )}
       {...props}
@@ -72,8 +79,7 @@ function SelectContent({
         <SelectPrimitive.Viewport
           className={cn(
             "p-1",
-            position === "popper" &&
-              "w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1",
+            position === "popper" && "w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1",
           )}
         >
           {children}
@@ -148,4 +154,5 @@ export {
   SelectScrollUpButton,
   SelectTrigger,
   SelectValue,
+  selectTriggerClass,
 };

@@ -1,19 +1,15 @@
 "use client";
 
+import { InlineWarningRow } from "@/shared/ui/inline-warning-row";
 import * as React from "react";
 import Link from "next/link";
 import { CircleNotch, Copy, Database, PencilSimple, Table, Tag, Trash } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import { Badge } from "@/shared/ui/primitives/badge";
 import { Button } from "@/shared/ui/primitives/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
 import { Input } from "@/shared/ui/primitives/input";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { SelectCheckbox } from "@/shared/ui/select-checkbox";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import {
@@ -190,7 +186,7 @@ export function DatasetCard({
               asChild
               variant="ghost"
               size="icon-sm"
-              className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+              className="text-muted-foreground hover:text-foreground"
               aria-label={msg("datasets.action.tag")}
             >
               <Link href={`/tagger?dataset=${dataset.id}&name=${encodeURIComponent(dataset.name)}`}>
@@ -204,7 +200,7 @@ export function DatasetCard({
                 asChild
                 variant="ghost"
                 size="icon-sm"
-                className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+                className="text-muted-foreground hover:text-foreground"
                 aria-label={msg("datasets.action.edit")}
               >
                 <Link
@@ -222,7 +218,7 @@ export function DatasetCard({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+                  className="text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     setRenameValue(dataset.name);
                     setRenameOpen(true);
@@ -236,7 +232,7 @@ export function DatasetCard({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="size-[44px] text-muted-foreground hover:text-destructive lg:size-8"
+                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   onClick={() => setDeleteOpen(true)}
                   aria-label={msg("datasets.action.delete")}
                 >
@@ -249,13 +245,16 @@ export function DatasetCard({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={handleClone}
                 disabled={cloning}
                 aria-label={msg("datasets.action.clone")}
               >
                 {cloning ? (
-                  <CircleNotch className="size-4 animate-spin" />
+                  <CircleNotch
+                    className="animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
                 ) : (
                   <Copy className="size-4" />
                 )}
@@ -266,10 +265,8 @@ export function DatasetCard({
       </div>
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] max-lg:[&_[data-slot=dialog-close]]:!size-[44px] sm:max-w-md">
-          <DialogHeader className="text-start">
-            <DialogTitle>{msg("datasets.rename.title")}</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+          <DialogTitleRow title={msg("datasets.rename.title")} />
           <Input
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
@@ -283,21 +280,15 @@ export function DatasetCard({
             autoFocus
           />
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRenameOpen(false)}
-              disabled={renaming}
-              className="!min-h-[44px] w-full justify-center lg:!min-h-0"
-            >
+            <Button variant="outline" onClick={() => setRenameOpen(false)} disabled={renaming}>
               {msg("datasets.rename.cancel")}
             </Button>
-            <Button
-              onClick={handleRename}
-              disabled={renaming || renameValue.trim().length === 0}
-              className="!min-h-[44px] w-full justify-center shadow-xs lg:!min-h-0"
-            >
+            <Button onClick={handleRename} disabled={renaming || renameValue.trim().length === 0}>
               {renaming ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("datasets.rename.save")
               )}
@@ -307,44 +298,41 @@ export function DatasetCard({
       </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] max-lg:[&_[data-slot=dialog-close]]:!size-[44px] sm:max-w-md">
-          <DialogHeader className="text-start">
-            <DialogTitle>{msg("datasets.delete.title")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">{msg("datasets.delete.body")}</p>
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+          <DialogTitleRow
+            title={msg("datasets.delete.title")}
+            description={msg("datasets.delete.body")}
+          />
           {usedCount !== null &&
             usedCount > 0 &&
             (() => {
               // Bold the affected-run count to match how every other delete dialog
-              // emphasizes its key value; keep the amber colour (no text-foreground).
+              // emphasizes its key value.
               const [warnBefore, warnAfter = ""] = msg("datasets.delete.used_warning").split(
                 "{count}",
               );
               return (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  {warnBefore}
-                  <span className="font-semibold">{usedCount}</span>
-                  {warnAfter}
-                </p>
+                <InlineWarningRow
+                  message={
+                    <>
+                      {warnBefore}
+                      <span className="font-semibold">{usedCount}</span>
+                      {warnAfter}
+                    </>
+                  }
+                />
               );
             })()}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={deleting}
-              className="!min-h-[44px] w-full justify-center lg:!min-h-0"
-            >
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
               {msg("datasets.delete.cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="!min-h-[44px] w-full justify-center shadow-xs lg:!min-h-0"
-            >
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("datasets.delete.confirm")
               )}

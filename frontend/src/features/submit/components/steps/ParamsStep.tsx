@@ -14,6 +14,7 @@ import { Separator } from "@/shared/ui/primitives/separator";
 import { Switch } from "@/shared/ui/primitives/switch";
 import { NumberInput } from "@/shared/ui/number-input";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { Segmented } from "@/shared/ui/segmented";
 import { cn } from "@/shared/lib/utils";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
@@ -23,8 +24,8 @@ import { useUserPrefs } from "@/features/settings";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 import { SplitRecommendationCard } from "../SplitRecommendationCard";
 
-const MOBILE_NUMBER_INPUT_CLASS =
-  "h-[44px] [&_button]:size-[44px] [&_input]:text-base lg:h-9 lg:[&_button]:size-9 lg:[&_input]:text-sm";
+const DEPTH_LEVELS = ["light", "medium", "heavy"] as const;
+type DepthLevel = (typeof DEPTH_LEVELS)[number];
 
 export function ParamsStep({ w }: { w: SubmitWizardContext }) {
   const { prefs } = useUserPrefs();
@@ -127,7 +128,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                       max={1}
                       value={split.train}
                       onChange={(v) => updateSplit("train", String(v))}
-                      className={MOBILE_NUMBER_INPUT_CLASS}
                     />
                   </div>
                   <div className="space-y-1">
@@ -144,7 +144,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                       max={1}
                       value={split.val}
                       onChange={(v) => updateSplit("val", String(v))}
-                      className={MOBILE_NUMBER_INPUT_CLASS}
                     />
                   </div>
                   <div className="space-y-1">
@@ -161,7 +160,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                       max={1}
                       value={split.test}
                       onChange={(v) => updateSplit("test", String(v))}
-                      className={MOBILE_NUMBER_INPUT_CLASS}
                     />
                   </div>
                 </div>
@@ -185,12 +183,7 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                   {msg("auto.features.submit.components.steps.paramsstep.10")}
                 </HelpTip>
               </Label>
-              <Switch
-                id="shuffle"
-                checked={shuffle}
-                onCheckedChange={setShuffle}
-                className="relative before:absolute before:-inset-3 before:content-[''] lg:before:hidden"
-              />
+              <Switch id="shuffle" checked={shuffle} onCheckedChange={setShuffle} />
             </div>
           )}
           <div className="space-y-2" data-tutorial="auto-level">
@@ -199,38 +192,27 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                 {msg("auto.features.submit.components.steps.paramsstep.12")}
               </HelpTip>
             </Label>
-            <div className="relative inline-flex w-full rounded-lg bg-muted p-1 gap-1">
-              {autoLevel && (
-                <div
-                  className="absolute top-1 bottom-1 rounded-md bg-background shadow-sm transition-[inset-inline-start] duration-100 ease-out pointer-events-none"
-                  style={{
-                    width: "calc((100% - 8px) / 3)",
-                    insetInlineStart: `calc(${(["light", "medium", "heavy"] as string[]).indexOf(autoLevel)} * (100% / 3) + 4px)`,
-                  }}
-                />
-              )}
-              {(
-                [
-                  ["light", msg("auto.features.submit.components.steps.paramsstep.literal.1")],
-                  ["medium", msg("auto.features.submit.components.steps.paramsstep.literal.2")],
-                  ["heavy", msg("auto.features.submit.components.steps.paramsstep.literal.3")],
-                ] as const
-              ).map(([val, label]) => (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => setAutoLevel(autoLevel === val ? "" : val)}
-                  className={cn(
-                    "relative z-[1] min-h-[44px] flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors text-center cursor-pointer lg:min-h-0",
-                    autoLevel === val
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* Picking the active level again clears it, which unlocks the
+                manual budget fields below. */}
+            <Segmented<DepthLevel>
+              label={msg("auto.features.submit.components.steps.paramsstep.12")}
+              options={[
+                {
+                  value: "light",
+                  label: msg("auto.features.submit.components.steps.paramsstep.literal.1"),
+                },
+                {
+                  value: "medium",
+                  label: msg("auto.features.submit.components.steps.paramsstep.literal.2"),
+                },
+                {
+                  value: "heavy",
+                  label: msg("auto.features.submit.components.steps.paramsstep.literal.3"),
+                },
+              ]}
+              value={DEPTH_LEVELS.find((level) => level === autoLevel) ?? null}
+              onChange={(level) => setAutoLevel(autoLevel === level ? "" : level)}
+            />
           </div>
 
           {advanced && (
@@ -241,7 +223,7 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                   type="button"
                   onClick={() => setOptimizerSettingsOpen(!optimizerSettingsOpen)}
                   aria-expanded={optimizerSettingsOpen}
-                  className="flex min-h-[44px] w-full cursor-pointer items-center justify-between gap-2 lg:min-h-0"
+                  className="flex w-full cursor-pointer items-center justify-between gap-2"
                 >
                   <span className="text-sm leading-none font-medium">
                     {msg("auto.features.submit.components.steps.paramsstep.11")}
@@ -271,7 +253,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                         step={1}
                         value={reflectionMinibatchSize ? parseInt(reflectionMinibatchSize, 10) : ""}
                         onChange={(v) => setReflectionMinibatchSize(String(v))}
-                        className={MOBILE_NUMBER_INPUT_CLASS}
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -292,7 +273,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                         value={maxFullEvals ? parseInt(maxFullEvals, 10) : ""}
                         onChange={(v) => setMaxFullEvals(String(v))}
                         disabled={!!autoLevel || !!maxMetricCalls}
-                        className={MOBILE_NUMBER_INPUT_CLASS}
                       />
                     </div>
                     <div className="col-span-1 flex items-center justify-between sm:col-span-2">
@@ -301,11 +281,7 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                           {msg("auto.features.submit.components.steps.paramsstep.15")}
                         </HelpTip>
                       </Label>
-                      <Switch
-                        checked={useMerge}
-                        onCheckedChange={setUseMerge}
-                        className="relative before:absolute before:-inset-3 before:content-[''] lg:before:hidden"
-                      />
+                      <Switch checked={useMerge} onCheckedChange={setUseMerge} />
                     </div>
                     {optimizerName.toLowerCase() === "gepa" && (
                       <>
@@ -325,7 +301,7 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                               <button
                                 type="button"
                                 onClick={() => setMaxMetricCalls("")}
-                                className="min-h-[44px] cursor-pointer px-2 text-xs text-muted-foreground hover:text-foreground lg:min-h-0 lg:px-0"
+                                className="cursor-pointer px-2 text-xs text-muted-foreground hover:text-foreground lg:px-0"
                               >
                                 {msg("submit.metric_calls.clear")}
                               </button>
@@ -339,7 +315,7 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                             value={maxMetricCalls ? parseInt(maxMetricCalls, 10) : ""}
                             onChange={(v) => setMaxMetricCalls(String(v))}
                             disabled={!!autoLevel}
-                            className={cn(MOBILE_NUMBER_INPUT_CLASS, "max-w-48")}
+                            className="max-w-48"
                           />
                           {maxMetricCalls && !autoLevel && (
                             <p className="text-xs text-muted-foreground">
@@ -360,7 +336,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                             step={1}
                             value={pxnParents ? parseInt(pxnParents, 10) : ""}
                             onChange={(v) => setPxnParents(String(v))}
-                            className={MOBILE_NUMBER_INPUT_CLASS}
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -376,7 +351,6 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                             step={1}
                             value={pxnProposals ? parseInt(pxnProposals, 10) : ""}
                             onChange={(v) => setPxnProposals(String(v))}
-                            className={MOBILE_NUMBER_INPUT_CLASS}
                           />
                         </div>
                         {pxnBatch > 1 && (
@@ -402,7 +376,7 @@ export function ParamsStep({ w }: { w: SubmitWizardContext }) {
                               step={0.1}
                               value={Number.isFinite(targetScoreValue) ? targetScoreValue : ""}
                               onChange={(value) => setTargetScore(String(value))}
-                              className={cn(MOBILE_NUMBER_INPUT_CLASS, "pe-8")}
+                              className="pe-8"
                             />
                             <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs text-muted-foreground">
                               %

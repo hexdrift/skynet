@@ -1,8 +1,10 @@
 "use client";
 
+import { PingDot } from "@/shared/ui/ping-dot";
 import { Sparkle, Info } from "@/shared/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/ui/primitives/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { Segmented } from "@/shared/ui/segmented";
 import { msg, type MessageKey } from "@/shared/lib/messages";
 import { getActiveIntlLocale } from "@/shared/lib/runtime-locale";
 import { useLocale } from "@/shared/providers";
@@ -39,7 +41,7 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
     if (profileLoading) {
       return (
         <div className="flex items-center gap-2 rounded-xl border border-[#DDD6CC]/60 bg-[#FAF8F5]/70 px-3.5 py-2.5 text-xs text-[#8C7A6B]">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#C8A882] motion-safe:animate-pulse" />
+          <PingDot size="sm" tone="agent" />
           {msg("submit.split.recommended_title")}…
         </div>
       );
@@ -73,9 +75,9 @@ export function SplitRecommendationCard({ w }: { w: SubmitWizardContext }) {
                   <button
                     type="button"
                     aria-label={msg("submit.split.rationale_aria")}
-                    className="-my-3 inline-flex size-[44px] items-center justify-center rounded-full text-[#8C7A6B] transition-colors hover:bg-[#EFE7DC] hover:text-[#3D2E22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/60 lg:my-0 lg:size-5"
+                    className="-my-3 inline-flex size-[44px] items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:my-0 lg:size-6"
                   >
-                    <Info className="h-3.5 w-3.5" />
+                    <Info className="size-3.5" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent
@@ -159,32 +161,16 @@ function ModeToggle({
   onChange: (mode: "auto" | "manual") => void;
 }) {
   return (
-    <div className="relative inline-grid w-full [grid-template-columns:repeat(2,minmax(0,1fr))] gap-0.5 rounded-lg bg-[#EFE7DC]/70 p-0.5 sm:w-auto">
-      <div
-        aria-hidden
-        className="absolute top-0.5 bottom-0.5 w-[calc(50%-4px)] rounded-md bg-white shadow-[0_1px_2px_rgba(61,46,34,0.08)] transition-[inset-inline-start] duration-200 ease-out pointer-events-none"
-        style={{ insetInlineStart: value === "auto" ? 2 : "calc(50% + 2px)" }}
-      />
-      {(
-        [
-          ["auto", msg("submit.split.mode_auto")],
-          ["manual", msg("submit.split.mode_manual")],
-        ] as const
-      ).map(([mode, label]) => (
-        <button
-          key={mode}
-          type="button"
-          onClick={() => onChange(mode)}
-          aria-pressed={value === mode}
-          className={cn(
-            "relative z-[1] min-h-[44px] cursor-pointer rounded-md px-3 py-1 text-center text-[11px] font-medium leading-none transition-colors lg:min-h-0",
-            value === mode ? "text-[#3D2E22]" : "text-[#8C7A6B] hover:text-[#3D2E22]",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <Segmented<"auto" | "manual">
+      size="sm"
+      className="w-full sm:w-auto"
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: "auto", label: msg("submit.split.mode_auto") },
+        { value: "manual", label: msg("submit.split.mode_manual") },
+      ]}
+    />
   );
 }
 

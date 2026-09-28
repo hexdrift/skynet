@@ -1,5 +1,7 @@
 "use client";
 
+import { Skeleton } from "@/shared/ui/skeleton";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
@@ -37,6 +39,7 @@ import { cn } from "@/shared/lib/utils";
 import type { AutotagEstimate } from "../hooks/use-tagger";
 import { calibrationTarget } from "../lib/assist";
 import type { AnnotationMode, AssistState, Category, TaggerConfig } from "../lib/types";
+import { Textarea } from "@/shared/ui/primitives/textarea";
 
 /**
  * Focus a just-appended field without the native focus jump: ``focus()``
@@ -169,7 +172,7 @@ export function TaggerInterview({
               size="sm"
               onClick={onRestart}
               disabled={busy || assist.interview.turns.length === 0}
-              className="min-h-[44px] shrink-0 gap-1.5 text-muted-foreground lg:min-h-0"
+              className="shrink-0 gap-1.5 text-muted-foreground"
             >
               <ArrowCounterClockwise className="size-3.5" />
               {msg("tagger.assist.interview.restart")}
@@ -184,10 +187,10 @@ export function TaggerInterview({
               // is unreachable the error strip below is the truth, so the
               // empty thread stays quiet instead of spinning forever.
               error ? null : (
-                <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-                  <CircleNotch className="size-5 animate-spin" />
-                  <p className="text-sm">{msg("tagger.assist.interview.reading")}</p>
-                </div>
+                <LoadingState
+                  label={msg("tagger.assist.interview.reading")}
+                  className="h-full py-0"
+                />
               )
             }
           >
@@ -202,7 +205,9 @@ export function TaggerInterview({
 
           {error && (
             <div className="flex items-center justify-between gap-3 border-t border-border/40 px-4 py-2.5">
-              <p className="text-sm text-destructive">{msg("tagger.assist.interview.error")}</p>
+              <p role="alert" className="text-xs text-destructive">
+                {msg("tagger.assist.interview.error")}
+              </p>
               <RetryIconButton label={msg("tagger.assist.retry")} onClick={onRetry} />
             </div>
           )}
@@ -291,10 +296,7 @@ function ContractPendingIndicator() {
             <span className="w-4 select-none text-end font-mono text-xs tabular-nums text-muted-foreground/50">
               {index + 1}
             </span>
-            <span
-              className={cn("h-3 rounded bg-muted motion-safe:animate-pulse", width)}
-              style={{ animationDelay: `${index * 0.15}s` }}
-            />
+            <Skeleton height={12} containerClassName={cn("leading-none", width)} />
           </div>
         ))}
       </div>
@@ -460,7 +462,7 @@ function RubricCard({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <Rise className="shrink-0">
-        <h3 className="text-lg font-semibold text-foreground">
+        <h3 className="text-lg font-semibold tracking-tight text-foreground">
           {msg("tagger.assist.rubric.title")}
         </h3>
         <p className="mt-0.5 text-sm text-muted-foreground">
@@ -485,9 +487,7 @@ function RubricCard({
         >
           <Card className="shrink-0">
             <CardHeader>
-              <CardTitle className="text-base">
-                {msg("tagger.assist.rubric.answer_style")}
-              </CardTitle>
+              <CardTitle className="text-lg">{msg("tagger.assist.rubric.answer_style")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
@@ -565,7 +565,6 @@ function RubricCard({
                           size="icon-xs"
                           onClick={() => removeCategory(cat.id)}
                           disabled={categories.length <= 2}
-                          className="size-[44px] lg:size-7"
                           aria-label={msg("auto.features.tagger.components.taggersetup.16")}
                         >
                           <Trash className="size-3.5 text-muted-foreground" />
@@ -590,9 +589,7 @@ function RubricCard({
           {assist.rubric.length > 0 && (
             <Card className="shrink-0">
               <CardHeader>
-                <CardTitle className="text-base">
-                  {msg("tagger.assist.rubric.guide_title")}
-                </CardTitle>
+                <CardTitle className="text-lg">{msg("tagger.assist.rubric.guide_title")}</CardTitle>
                 <CardDescription>{msg("tagger.assist.rubric.guide_hint")}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-2.5">
@@ -601,7 +598,7 @@ function RubricCard({
                     <span className="w-4 shrink-0 select-none pt-2.5 text-end font-mono text-xs tabular-nums text-muted-foreground/60">
                       {idx + 1}
                     </span>
-                    <textarea
+                    <Textarea
                       ref={
                         idx === rules.length - 1
                           ? (el: HTMLTextAreaElement | null) => {
@@ -618,10 +615,7 @@ function RubricCard({
                       aria-label={formatMsg("tagger.assist.rubric.rule_label", {
                         number: idx + 1,
                       })}
-                      className={cn(
-                        "flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm",
-                        "leading-relaxed outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                      )}
+                      className="flex-1 text-sm leading-relaxed"
                       dir="auto"
                     />
                     <Button
@@ -629,7 +623,7 @@ function RubricCard({
                       size="icon-xs"
                       onClick={() => removeRule(idx)}
                       aria-label={msg("tagger.assist.rubric.rule_remove")}
-                      className="mt-1.5 size-[44px] lg:size-7"
+                      className="mt-1.5"
                     >
                       <Trash className="size-3.5 text-muted-foreground" />
                     </Button>

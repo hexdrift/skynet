@@ -1,11 +1,12 @@
 "use client";
 
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ChartTooltip } from "@/shared/charts/chart-utils";
 import { ChartTable } from "@/shared/charts/chart-table";
 import { useLiteMode } from "@/features/settings";
 import { msg } from "@/shared/lib/messages";
+import { PanelHeading } from "@/shared/ui/panel-heading";
 
 type NameCount = { name: string; count: number };
 
@@ -47,14 +48,6 @@ function onActivate(e: KeyboardEvent, fn: () => void) {
     e.preventDefault();
     fn();
   }
-}
-
-function PanelHeading({ children }: { children: ReactNode }) {
-  return (
-    <p className="mb-4 text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
-      {children}
-    </p>
-  );
 }
 
 function LegendRow({
@@ -120,7 +113,7 @@ function OwnerDonut({
   if (lite) {
     return (
       <div>
-        <PanelHeading>{msg("dashboard.analytics.by_owner")}</PanelHeading>
+        <PanelHeading className="mb-4">{msg("dashboard.analytics.by_owner")}</PanelHeading>
         <ChartTable
           rows={data}
           onRowClick={(row) => onSelect(row.name)}
@@ -135,7 +128,7 @@ function OwnerDonut({
 
   return (
     <div>
-      <PanelHeading>{msg("dashboard.analytics.by_owner")}</PanelHeading>
+      <PanelHeading className="mb-4">{msg("dashboard.analytics.by_owner")}</PanelHeading>
       <div className="relative mx-auto h-[150px] w-full max-w-[190px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -198,7 +191,7 @@ function AccessSegments({
 
   return (
     <div>
-      <PanelHeading>{msg("dashboard.analytics.by_access")}</PanelHeading>
+      <PanelHeading className="mb-4">{msg("dashboard.analytics.by_access")}</PanelHeading>
       <div className="flex h-3.5 w-full gap-0.5 overflow-hidden rounded-full">
         {access.map((a) => {
           const pct = total > 0 ? (a.count / total) * 100 : 0;
@@ -211,7 +204,10 @@ function AccessSegments({
               onClick={() => onSelect(a.name)}
               onKeyDown={(e) => onActivate(e, () => onSelect(a.name))}
               className="h-full min-w-[3px] transition-opacity duration-300 hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              style={{ width: `${pct}%`, backgroundColor: ACCESS_COLOR[a.name] ?? "var(--color-chart-5)" }}
+              style={{
+                width: `${pct}%`,
+                backgroundColor: ACCESS_COLOR[a.name] ?? "var(--color-chart-5)",
+              }}
             />
           );
         })}
@@ -260,7 +256,9 @@ export default function SharingBreakdown({
       className="grid gap-x-10 gap-y-8"
       style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))" }}
     >
-      {showOwners && <OwnerDonut owners={owners} sessionUser={sessionUser} onSelect={onOwnerSelect} />}
+      {showOwners && (
+        <OwnerDonut owners={owners} sessionUser={sessionUser} onSelect={onOwnerSelect} />
+      )}
       {showAccess && <AccessSegments access={access} onSelect={onAccessSelect} />}
     </div>
   );

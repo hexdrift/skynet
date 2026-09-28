@@ -38,7 +38,10 @@ export function RetryIconButton({
         aria-busy={loading || undefined}
       >
         {loading ? (
-          <CircleNotch className="size-3.5 animate-spin" aria-hidden="true" />
+          <CircleNotch
+            className="size-3.5 animate-spin motion-reduce:animate-none"
+            aria-hidden="true"
+          />
         ) : (
           <RetryIcon className="size-3.5" aria-hidden="true" />
         )}

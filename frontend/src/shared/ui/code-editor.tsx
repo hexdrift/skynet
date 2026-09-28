@@ -473,7 +473,10 @@ export function CodeEditor({
             className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {running ? (
-              <CircleNotch className="size-3 animate-spin" aria-hidden="true" />
+              <CircleNotch
+                className="size-3 animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
             ) : (
               <Play className="size-3" />
             )}
@@ -488,7 +491,10 @@ export function CodeEditor({
           className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {formatting ? (
-            <CircleNotch className="size-3 animate-spin" aria-hidden="true" />
+            <CircleNotch
+              className="size-3 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
           ) : (
             <Eraser className="size-3" />
           )}

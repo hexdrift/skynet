@@ -1,8 +1,15 @@
 "use client";
 
+import { ProgressBar } from "@/shared/ui/progress-bar";
 import { ArrowCounterClockwise, CircleNotch, WarningOctagon } from "@/shared/ui/icons";
 import { Button } from "@/shared/ui/primitives/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/primitives/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/shared/ui/primitives/card";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 interface Props {
@@ -31,7 +38,7 @@ export function TaggerAutotagProgress({ status, onCancel, onResume, onBrowse }: 
     <div className="mx-auto flex max-w-lg flex-col gap-4 pt-10">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2 text-lg">
             {running && <CircleNotch className="size-4 animate-spin text-primary" />}
             {running
               ? msg("tagger.assist.autotag.running_title")
@@ -61,12 +68,7 @@ export function TaggerAutotagProgress({ status, onCancel, onResume, onBrowse }: 
                 {formatMsg("tagger.assist.autotag.progress_count", { done, total })}
               </span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${pct}%`, background: "var(--gradient-progress)" }}
-              />
-            </div>
+            <ProgressBar value={pct} tone="ai" />
           </div>
 
           {running && (

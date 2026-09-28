@@ -17,10 +17,10 @@ import { formatMsg, msg } from "@/shared/lib/messages";
 import { TERMS } from "@/shared/lib/terms";
 import { cn } from "@/shared/lib/utils";
 import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/shared/ui/primitives/tooltip";
+  CanvasControlButton,
+  CanvasControlDivider,
+  CanvasControlGroup,
+} from "@/shared/ui/canvas-control-button";
 
 const EDGE_STROKE = "rgba(124, 99, 80, 0.42)";
 const EDGE_STROKE_MERGE = "rgba(124, 99, 80, 0.3)";
@@ -495,49 +495,38 @@ export function TrajectoryTree({
         </g>
       </svg>
 
-      <div
+      <CanvasControlGroup
         data-trajectory-controls
         className={
-          isMaximized
-            ? "absolute top-4 start-4 z-20 flex overflow-hidden rounded-lg border border-border/70 bg-background/95 shadow-md backdrop-blur-sm"
-            : "absolute top-3 end-3 z-20 flex overflow-hidden rounded-lg border border-border/70 bg-background/90 shadow-sm backdrop-blur-sm"
+          isMaximized ? "absolute top-4 start-4 z-20 shadow-md" : "absolute top-3 end-3 z-20"
         }
       >
-        <MapControlButton
+        <CanvasControlButton
+          icon={Plus}
           label={msg("trajectory.controls.zoom_in")}
           onClick={() => zoomFromCenter(ZOOM_BUTTON_IN)}
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-        </MapControlButton>
-        <MapControlButton
+        />
+        <CanvasControlButton
+          icon={Minus}
           label={msg("trajectory.controls.zoom_out")}
           onClick={() => zoomFromCenter(ZOOM_BUTTON_OUT)}
-        >
-          <Minus className="size-3.5" aria-hidden="true" />
-        </MapControlButton>
-        <MapControlButton label={msg("trajectory.controls.zoom_reset")} onClick={resetView}>
-          {isTransformed ? (
-            <ArrowCounterClockwise className="size-3.5" aria-hidden="true" />
-          ) : (
-            <Crosshair className="size-3.5" aria-hidden="true" />
-          )}
-        </MapControlButton>
-        <ControlsDivider />
-        <MapControlButton
+        />
+        <CanvasControlButton
+          icon={isTransformed ? ArrowCounterClockwise : Crosshair}
+          label={msg("trajectory.controls.zoom_reset")}
+          onClick={resetView}
+        />
+        <CanvasControlDivider />
+        <CanvasControlButton
+          icon={isMaximized ? ArrowsIn : ArrowsOut}
           label={
             isMaximized
               ? msg("trajectory.controls.fullscreen_exit")
               : msg("trajectory.controls.fullscreen_enter")
           }
           onClick={() => setIsMaximized((v) => !v)}
-        >
-          {isMaximized ? (
-            <ArrowsIn className="size-3.5" aria-hidden="true" />
-          ) : (
-            <ArrowsOut className="size-3.5" aria-hidden="true" />
-          )}
-        </MapControlButton>
-      </div>
+        />
+      </CanvasControlGroup>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
         <div className="pointer-events-auto inline-flex flex-wrap items-center gap-x-1 gap-y-1 rounded-lg border border-[#DDD4C8]/70 bg-background/85 px-2 py-1 text-[11px] font-medium text-muted-foreground/90 backdrop-blur-sm">
@@ -951,7 +940,7 @@ function LegendToggle({
       aria-pressed={pressed}
       onClick={onToggle}
       className={cn(
-        "inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 py-0.5 transition-[opacity,color,background-color] duration-150 hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]",
+        "inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 py-0.5 transition-[opacity,color,background-color] duration-150 hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         !pressed && "opacity-40",
       )}
     >
@@ -962,50 +951,5 @@ function LegendToggle({
 }
 
 function LegendDivider() {
-  return <span aria-hidden="true" className="inline-block h-3 w-px bg-border/60" />;
-}
-
-function MapControlButton({
-  label,
-  onClick,
-  pressed,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  pressed?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <UiTooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          aria-label={label}
-          aria-pressed={pressed}
-          className={
-            pressed === true
-              ? "inline-flex size-[44px] items-center justify-center bg-[#1c1612] text-[#faf8f5] transition-[background-color,color] hover:bg-[#2a221c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8A882]/45 lg:size-9 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
-              : "inline-flex size-[44px] items-center justify-center text-foreground transition-[background-color,color] hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8A882]/45 lg:size-9 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
-          }
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" sideOffset={8}>
-        {label}
-      </TooltipContent>
-    </UiTooltip>
-  );
-}
-
-function ControlsDivider() {
-  return (
-    <span
-      aria-hidden="true"
-      className="my-1.5 inline-block w-px bg-border/60"
-      style={{ alignSelf: "stretch" }}
-    />
-  );
+  return <span aria-hidden="true" className="inline-block h-3 w-px bg-border/70" />;
 }

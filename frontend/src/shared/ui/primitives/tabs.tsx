@@ -42,7 +42,7 @@ const SLIDING_PILL_TABS_LIST_CLASS =
 const SLIDING_PILL_TABS_INDICATOR_CLASS =
   "absolute top-1 bottom-1 z-0 rounded-full bg-background shadow-sm transition-[inset-inline-start] duration-200 ease-out motion-reduce:transition-none";
 const SLIDING_PILL_TABS_TRIGGER_CLASS =
-  "relative z-10 rounded-full px-4 py-2 text-sm font-semibold cursor-pointer border-none bg-transparent text-foreground/65 shadow-none transition-[color,transform] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 gap-1.5";
+  "relative z-10 min-h-[44px] lg:min-h-10 rounded-full px-3 sm:px-4 py-2 text-sm font-semibold cursor-pointer border-none bg-transparent text-foreground/65 shadow-none transition-[color,transform] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:border-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 gap-1.5";
 
 function TabsList({
   className,

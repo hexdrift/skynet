@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
+import { LoadingState } from "@/shared/ui/loading-state";
 import { Suspense } from "react";
-import { CircleNotch } from "@/shared/ui/icons";
 import { TERMS } from "@/shared/lib/terms";
 
 import { formatMsg, msg } from "@/shared/lib/messages";
@@ -16,15 +16,5 @@ export function generateMetadata(): Metadata {
 }
 
 export default function JobLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <CircleNotch className="size-8 animate-spin text-primary" />
-        </div>
-      }
-    >
-      {children}
-    </Suspense>
-  );
+  return <Suspense fallback={<LoadingState fullPage />}>{children}</Suspense>;
 }

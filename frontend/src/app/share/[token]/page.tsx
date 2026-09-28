@@ -49,7 +49,7 @@ export default function SharePage() {
   if (failed) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
-        <h1 className="text-lg font-semibold">{msg("share.not_found_title")}</h1>
+        <h1 className="text-2xl font-bold text-foreground">{msg("share.not_found_title")}</h1>
         <p className="text-sm text-muted-foreground">{msg("share.not_found_body")}</p>
         <Button asChild variant="outline" className="mt-2 min-h-[44px]">
           <Link href="/">{msg("not_found.back_dashboard")}</Link>

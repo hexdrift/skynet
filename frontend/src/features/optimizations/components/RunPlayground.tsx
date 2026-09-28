@@ -95,7 +95,7 @@ export function RunPlayground({
       {!isShare && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">
+            <CardTitle className="text-base flex items-center gap-2">
               <HelpTip text={tip("serve.section_run")}>
                 {msg("auto.app.optimizations.id.page.22")}
               </HelpTip>
@@ -108,12 +108,12 @@ export function RunPlayground({
                   {msg("auto.app.optimizations.id.page.23")}
                 </HelpTip>
               </p>
-              <div className="group relative rounded-lg bg-muted/40 p-2.5 pe-11 sm:pe-8" dir="ltr">
+              <div className="group relative rounded-lg bg-muted/40 p-2.5 pe-10" dir="ltr">
                 <code className="text-xs font-mono break-all">{serveUrl}</code>
                 <CopyButton
                   text={serveUrl}
                   ariaLabel={msg("shared.agent.copy")}
-                  className="absolute end-1 top-1 opacity-100 sm:end-1.5 sm:top-1.5 sm:opacity-0 sm:group-hover:opacity-100"
+                  className="absolute end-1.5 top-1.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
                 />
               </div>
             </div>

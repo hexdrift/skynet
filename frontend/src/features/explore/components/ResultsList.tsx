@@ -1,5 +1,6 @@
 "use client";
 
+import { ScorePill } from "@/shared/ui/outcome-chip";
 import * as React from "react";
 import Link from "next/link";
 import { ArrowUp, ArrowDown } from "@/shared/ui/icons";
@@ -129,13 +130,9 @@ function RelevanceBadge({ relevance }: { relevance: number }) {
   const pct = Math.max(0, Math.min(1, relevance)) * 100;
   const label = formatMsg("explore.row.relevance", { pct: pct.toFixed(0) });
   return (
-    <span
-      dir="ltr"
-      className="inline-flex items-baseline gap-1 rounded-full bg-[oklch(0.94_0.03_82)] px-2 py-0.5 font-mono text-[10.5px] font-medium leading-none text-[oklch(0.42_0.10_82)] tabular-nums"
-      title={msg("explore.row.relevance.title")}
-    >
+    <ScorePill tone="neutral" title={msg("explore.row.relevance.title")}>
       <span>{label}</span>
-    </span>
+    </ScorePill>
   );
 }
 

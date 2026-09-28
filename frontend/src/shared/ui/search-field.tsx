@@ -47,7 +47,7 @@ export function SearchField({ value, onValueChange, placeholder, className }: Se
         }}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[15px] tracking-tight text-foreground placeholder:text-foreground/40 focus:outline-none"
+        className="h-full min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[15px] tracking-tight text-foreground placeholder:text-foreground/40 focus:outline-none"
       />
       {value.length > 0 && (
         <button
@@ -57,7 +57,7 @@ export function SearchField({ value, onValueChange, placeholder, className }: Se
             inputRef.current?.focus();
           }}
           aria-label={msg("search.clear")}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-foreground/55 transition-[background-color,color] cursor-pointer hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
+          className="inline-flex shrink-0 max-lg:size-[44px] lg:size-8 items-center justify-center rounded-lg text-foreground/55 transition-[background-color,color] cursor-pointer hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
         >
           <X className="size-4" aria-hidden="true" />
         </button>

@@ -156,16 +156,12 @@ export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
       aria-modal="true"
       aria-labelledby={titleId}
     >
-      <div
-        className="absolute inset-0 bg-[#1C1612]/55 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
 
       <div
         ref={dialogRef}
         dir={getActiveDir()}
-        className="relative w-full max-w-5xl h-[min(88vh,920px)] rounded-2xl border border-[#E5DDD4] bg-[#FAF8F5] shadow-[0_24px_64px_rgba(28,22,18,0.22)] overflow-hidden flex flex-col"
+        className="relative w-full max-w-5xl h-[min(88vh,920px)] rounded-2xl border border-(--border-subtle) bg-background shadow-[0_24px_64px_rgba(28,22,18,0.22)] overflow-hidden flex flex-col"
       >
         <GuideHeader titleId={titleId} onClose={onClose} closeBtnRef={closeBtnRef} />
 

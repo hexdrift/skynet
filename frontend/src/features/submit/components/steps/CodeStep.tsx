@@ -12,8 +12,8 @@ import {
   FlowArrow,
   Lightning,
   Cube,
-  CaretLeft,
 } from "@/shared/ui/icons";
+import { BackLink } from "@/shared/ui/back-link";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { Button } from "@/shared/ui/primitives/button";
@@ -266,7 +266,7 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
               className="space-y-2 border-t border-border/30 px-4 py-4 sm:px-6"
               data-tutorial="metric-editor"
             >
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Label className="text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                 <HelpTip text={tip("code.metric")}>{msg("workflow.step.metric_title")}</HelpTip>
               </Label>
               <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
@@ -354,7 +354,7 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
                 data-tutorial="signature-editor"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Label className="text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                     <HelpTip text={tip("code.signature")}>
                       {msg("auto.features.submit.components.steps.codestep.2")}
                     </HelpTip>
@@ -393,7 +393,7 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
                 data-tutorial="metric-editor"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Label className="text-[0.6875rem] font-semibold uppercase tracking-widest text-muted-foreground">
                     <HelpTip text={tip("code.metric")}>
                       {msg("auto.features.submit.components.steps.codestep.3")}
                     </HelpTip>
@@ -437,10 +437,7 @@ export function CodeStep({ w }: { w: SubmitWizardContext }) {
   }
 
   return (
-    <div
-      data-tutorial="wizard-step-4"
-      className="[&_button]:min-h-[44px] [&_button]:min-w-[44px] lg:[&_button]:min-h-0 lg:[&_button]:min-w-0"
-    >
+    <div data-tutorial="wizard-step-4">
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={view}
@@ -605,8 +602,8 @@ function CompositionCard({
       <Banner />
       <div className="flex flex-1 flex-col gap-1.5 px-4 py-4 sm:px-6 sm:py-5">
         <div className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-[#F3EDE3] text-[#3D2E22]">
-            <Icon className="size-[1.125rem]" />
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
+            <Icon className="size-4" />
           </span>
           <h4
             {...(labelLtr ? { dir: "ltr" } : {})}
@@ -638,14 +635,9 @@ function AtomicModulePicker({
   const currentIndex = ATOMIC_MODULES.findIndex((m) => m.value === current.toLowerCase());
   return (
     <div>
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-3 inline-flex min-h-[44px] items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground lg:min-h-0"
-      >
-        <CaretLeft className="size-3.5 rtl:-scale-x-100" aria-hidden />
-        {msg("submit.composition.back")}
-      </button>
+      <div className="mb-3">
+        <BackLink onClick={onBack} label={msg("submit.composition.back")} />
+      </div>
       <Carousel
         items={ATOMIC_MODULES}
         itemKey={(m) => m.value}
@@ -678,8 +670,8 @@ function ModuleSlide({
       <Banner />
       <div className="flex flex-col items-center justify-center gap-2 px-4 pb-6 pt-5 text-center sm:px-6 sm:pb-7 sm:pt-6 @3xl:flex-1 @3xl:px-10 @3xl:py-8">
         <div className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-[#F3EDE3] text-[#3D2E22]">
-            <Icon className="size-[1.125rem]" />
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
+            <Icon className="size-4" />
           </span>
           <h4 dir="ltr" className="text-lg font-semibold tracking-tight text-foreground">
             {label}
@@ -981,7 +973,7 @@ function ModeToggle({ value, onChange, disabledReason, module }: ModeToggleProps
             type="button"
             onClick={module.onChangeModule}
             data-tutorial="module-selector"
-            className="group inline-flex min-h-[44px] w-full min-w-0 shrink-0 cursor-pointer items-center justify-between gap-1.5 rounded-md border border-border/60 bg-background px-2 py-1 text-xs shadow-xs transition-colors hover:border-[#C8A882] sm:w-auto lg:min-h-0"
+            className="group inline-flex w-full min-w-0 shrink-0 cursor-pointer items-center justify-between gap-1.5 rounded-md border border-border/60 bg-background px-2 py-1 text-xs shadow-xs transition-colors hover:border-[#C8A882] sm:w-auto"
           >
             <span className="font-semibold text-foreground">{module.label}</span>
             <span aria-hidden className="h-3 w-px bg-border/80" />
@@ -1006,7 +998,7 @@ function ModeToggle({ value, onChange, disabledReason, module }: ModeToggleProps
           title={autoDisabled ? disabledReason : undefined}
           aria-pressed={value === "auto"}
           className={cn(
-            "relative z-[1] min-h-[44px] cursor-pointer rounded-md px-3 py-1 text-center text-xs font-medium leading-none transition-colors sm:px-4 lg:min-h-0",
+            "relative z-[1] cursor-pointer rounded-md px-3 py-1 text-center text-xs font-medium leading-none transition-colors sm:px-4",
             value === "auto" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
             autoDisabled && "opacity-40 cursor-not-allowed hover:text-muted-foreground",
           )}
@@ -1018,7 +1010,7 @@ function ModeToggle({ value, onChange, disabledReason, module }: ModeToggleProps
           onClick={() => onChange("manual")}
           aria-pressed={value === "manual"}
           className={cn(
-            "relative z-[1] min-h-[44px] cursor-pointer rounded-md px-3 py-1 text-center text-xs font-medium leading-none transition-colors sm:px-4 lg:min-h-0",
+            "relative z-[1] cursor-pointer rounded-md px-3 py-1 text-center text-xs font-medium leading-none transition-colors sm:px-4",
             value === "manual" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >

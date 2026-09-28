@@ -2182,6 +2182,8 @@ export type MessageKey =
   | "shared.excel_filter.search_placeholder"
   | "shared.excel_filter.select_all"
   | "shared.excel_filter.sort_by"
+  | "shared.expand_toggle.collapse"
+  | "shared.expand_toggle.expand"
   | "shared.inline_error.dismiss"
   | "shared.language.auto_detect"
   | "shared.language.no_results"
@@ -5029,6 +5031,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "shared.excel_filter.search_placeholder": "חיפוש…",
   "shared.excel_filter.select_all": "בחר/י הכל",
   "shared.excel_filter.sort_by": "מיון לפי {label}",
+  "shared.expand_toggle.collapse": "חזרה לגודל רגיל",
+  "shared.expand_toggle.expand": "הרחבה למסך מלא",
   "shared.inline_error.dismiss": "סגירה",
   "shared.language.auto_detect": "זיהוי אוטומטי",
   "shared.language.no_results": "לא נמצאו שפות",

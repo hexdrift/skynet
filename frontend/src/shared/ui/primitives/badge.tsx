@@ -19,10 +19,8 @@ const badgeVariants = cva(
         ghost:
           "border-transparent bg-transparent [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         link: "text-primary underline-offset-4 [a&]:hover:underline",
+        tint: "border-primary/15 bg-primary/10 text-primary",
         // Semantic variants — monochromatic warm palette
-        input: "border-[#DDD6CC]/60 bg-[#F0EBE4] text-[#5C4D40] [a&]:hover:bg-[#F0EBE4]/80",
-        output:
-          "border-[#C8B9A8]/60 bg-[#E5DDD4] text-[#3D2E22] font-semibold [a&]:hover:bg-[#E5DDD4]/80",
         model: "border-[#C8B9A8]/50 bg-[#DDD6CC] text-[#3D2E22] [a&]:hover:bg-[#DDD6CC]/80",
         config: "border-[#DDD6CC]/60 bg-[#EDE7DD] text-[#5C4D40] [a&]:hover:bg-[#EDE7DD]/80",
         meta: "border-[#E5DDD4]/50 bg-[#FAF8F5] text-[#8C7A6B] [a&]:hover:bg-[#FAF8F5]/80",

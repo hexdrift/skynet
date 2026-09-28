@@ -1,5 +1,6 @@
 "use client";
 
+import { CountBadge, CountPill } from "@/shared/ui/count-badge";
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -45,7 +46,12 @@ import {
   resumeJob,
 } from "@/shared/lib/api";
 import type { SidebarJobItem } from "@/shared/lib/api";
-import { isActiveStatus } from "@/shared/constants/job-status";
+import {
+  STATUS_DOT_COLOR,
+  STATUS_DOT_FALLBACK,
+  isActiveStatus,
+} from "@/shared/constants/job-status";
+import { PingDot } from "@/shared/ui/ping-dot";
 import { useJobsStream } from "@/shared/hooks/use-jobs-stream";
 import { toast } from "react-toastify";
 import { useSession } from "next-auth/react";
@@ -67,6 +73,7 @@ import {
   COMPACT_POPOVER_ITEM_CLASS,
   COMPACT_POPOVER_PANEL_CLASS,
 } from "@/shared/ui/compact-popover-menu";
+import { Input } from "@/shared/ui/primitives/input";
 
 const NAV_ITEMS = perLocale(
   () =>
@@ -569,7 +576,7 @@ export function Sidebar() {
               >
                 {groupedJobs.map((group) => (
                   <div key={group.label} className="mb-2">
-                    <p className="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 px-2 py-1.5">
+                    <p className="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 px-2 py-1.5">
                       <span>{group.label}</span>
                       <span className="tabular-nums text-muted-foreground/40 font-normal">
                         {group.jobs.length}
@@ -636,7 +643,7 @@ export function Sidebar() {
           if (!open) setDeleteConfirm(null);
         }}
       >
-        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {`${msg("auto.features.sidebar.components.sidebar.3")}${TERMS.optimization}`}
@@ -649,23 +656,20 @@ export function Sidebar() {
               ? {msg("delete.irreversible")}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="mt-2 gap-3">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDeleteConfirm(null)}
               disabled={deleteLoading}
-              className="w-full justify-center"
             >
               {msg("auto.features.sidebar.components.sidebar.5")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={deleteLoading}
-              className="w-full justify-center"
-            >
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleteLoading}>
               {deleteLoading ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("auto.features.sidebar.components.sidebar.literal.10")
               )}
@@ -744,11 +748,7 @@ function NavItem({
                 active ? "text-primary" : "group-hover:text-sidebar-foreground",
               )}
             />
-            {badge != null && (
-              <span className="absolute -end-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[0.5625rem] font-bold leading-4 text-primary-foreground tabular-nums">
-                {badge}
-              </span>
-            )}
+            {badge != null && <CountBadge overlay>{badge}</CountBadge>}
           </Link>
         </TooltipTrigger>
         <TooltipContent side={tooltipSide}>{label}</TooltipContent>
@@ -785,9 +785,9 @@ function NavItem({
         />
         <span className="truncate flex-1">{label}</span>
         {badge != null && (
-          <span className="shrink-0 text-[0.625rem] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full tabular-nums">
+          <CountPill active className="shrink-0">
             {badge}
-          </span>
+          </CountPill>
         )}
       </span>
     </Link>
@@ -925,7 +925,7 @@ function JobRow({
   if (renaming) {
     return (
       <div className="px-2 py-1.5">
-        <input
+        <Input
           ref={renameRef}
           type="text"
           value={renameValue}
@@ -943,7 +943,7 @@ function JobRow({
           }}
           onBlur={handleRename}
           maxLength={120}
-          className="w-full text-[0.6875rem] bg-sidebar-accent/30 border border-primary/30 rounded-md px-2 py-1 outline-none font-medium"
+          className="h-7 px-2 text-[0.6875rem] font-medium"
           dir="auto"
         />
       </div>
@@ -985,14 +985,16 @@ function JobRow({
           <StatusDot status={job.status} />
         </Link>
         {isGridSearch && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-xs"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               setExpanded((o) => !o);
             }}
-            className="inline-flex size-[44px] shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/40 transition-colors hover:text-foreground lg:size-5"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
             aria-label={
               expanded
                 ? msg("auto.features.sidebar.components.sidebar.literal.11")
@@ -1002,16 +1004,18 @@ function JobRow({
             <CaretLeft
               className={cn("size-3.5 transition-transform duration-200", expanded && "-rotate-90")}
             />
-          </button>
+          </Button>
         )}
         <PopoverPrimitive.Root open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverPrimitive.Trigger asChild>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={(e) => {
                 e.stopPropagation();
               }}
-              className="inline-flex size-[44px] shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/40 transition-colors hover:text-foreground lg:size-5"
+              className="shrink-0 text-muted-foreground hover:text-foreground"
               aria-label={formatMsg("auto.features.sidebar.components.sidebar.template.3", {
                 p1: displayName,
               })}
@@ -1023,7 +1027,7 @@ function JobRow({
                 )}
                 aria-hidden="true"
               />
-            </button>
+            </Button>
           </PopoverPrimitive.Trigger>
           <PopoverPrimitive.Portal>
             <PopoverPrimitive.Content
@@ -1142,10 +1146,13 @@ function JobRow({
                     }}
                     className={cn(
                       COMPACT_POPOVER_ITEM_CLASS,
-                      "text-destructive hover:bg-destructive/10 hover:text-destructive",
+                      "text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10",
                     )}
                   >
-                    <Trash className="size-4 shrink-0" aria-hidden="true" />
+                    <Trash
+                      className={cn(COMPACT_POPOVER_ICON_CLASS, "text-destructive")}
+                      aria-hidden="true"
+                    />
                     <span className="flex-1 text-start">
                       {msg("auto.features.sidebar.components.sidebar.10")}
                     </span>
@@ -1223,24 +1230,12 @@ function derivePairStatus(
 }
 
 function StatusDot({ status }: { status: string }) {
-  const isRunning = isActiveStatus(status);
+  if (status === "running" || status === "validating") return <PingDot />;
   return (
-    <span className="relative flex size-2 shrink-0">
-      {isRunning && (
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warning)]/60" />
-      )}
-      <span
-        className={cn(
-          "relative inline-flex rounded-full size-2",
-          status === "success"
-            ? "bg-[var(--success)]"
-            : status === "failed"
-              ? "bg-[var(--danger)]"
-              : status === "cancelled"
-                ? "bg-[#6b6058]"
-                : "bg-[var(--warning)]",
-        )}
-      />
-    </span>
+    <span
+      aria-hidden
+      className="inline-flex size-2 shrink-0 rounded-full"
+      style={{ backgroundColor: STATUS_DOT_COLOR[status] ?? STATUS_DOT_FALLBACK }}
+    />
   );
 }

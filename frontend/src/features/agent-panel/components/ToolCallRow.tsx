@@ -1,5 +1,6 @@
 "use client";
 
+import { PingDot } from "@/shared/ui/ping-dot";
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowsClockwise, CaretDown, Warning, type Icon } from "@/shared/ui/icons";
@@ -245,8 +246,7 @@ function StatusGlyph({
         )}
         aria-label={msg("auto.features.agent.panel.components.toolcallrow.literal.6")}
       >
-        <span className="absolute inset-0 rounded-full bg-[#3D2E22]/15 animate-ping motion-reduce:animate-none" />
-        <span className="relative size-2 rounded-full bg-[#3D2E22]" />
+        <PingDot tone="agent" />
       </span>
     );
   }

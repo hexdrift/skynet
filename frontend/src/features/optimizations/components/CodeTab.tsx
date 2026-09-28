@@ -16,6 +16,7 @@ import {
 import { FadeIn } from "@/shared/ui/motion";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { readOnlyEditorHeight } from "@/shared/ui/code-editor-height";
 import { tip } from "@/shared/lib/tooltips";
 import { msg } from "@/shared/lib/messages";
 import type { WorkflowSpec } from "@/shared/types/api";
@@ -31,8 +32,6 @@ const WorkflowGraphView = dynamic(
   () => import("./WorkflowGraphView").then((m) => m.WorkflowGraphView),
   { ssr: false, loading: () => <Skeleton height={480} borderRadius={8} /> },
 );
-
-const editorHeight = (code: string): string => `${(code.split("\n").length + 1) * 19.6 + 8}px`;
 
 export function CodeTab({
   signatureCode,
@@ -121,7 +120,7 @@ export function CodeTab({
                   <CodeEditor
                     value={workflowCode}
                     onChange={() => {}}
-                    height={editorHeight(workflowCode)}
+                    height={readOnlyEditorHeight(workflowCode)}
                     readOnly
                   />
                 </TabsContent>
@@ -131,7 +130,7 @@ export function CodeTab({
                   <CodeEditor
                     value={signatureCode}
                     onChange={() => {}}
-                    height={editorHeight(signatureCode)}
+                    height={readOnlyEditorHeight(signatureCode)}
                     readOnly
                   />
                 </TabsContent>
@@ -141,7 +140,7 @@ export function CodeTab({
                   <CodeEditor
                     value={metricCode}
                     onChange={() => {}}
-                    height={editorHeight(metricCode)}
+                    height={readOnlyEditorHeight(metricCode)}
                     readOnly
                   />
                 </TabsContent>

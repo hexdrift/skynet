@@ -24,6 +24,7 @@ import { InlineErrorRow } from "@/shared/ui/inline-error-row";
 import { PingDot } from "@/shared/ui/ping-dot";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { ExportTableMenu } from "@/shared/ui/export-table-menu";
+import { SelectCheckbox } from "@/shared/ui/select-checkbox";
 import type { useColumnResize } from "@/shared/ui/excel-filter";
 import {
   ColumnHeader,
@@ -168,7 +169,7 @@ export function JobsTab({
   return (
     <Card className="overflow-hidden border-border/60">
       <CardContent className="px-3 pt-4 sm:px-6 sm:pt-5">
-        <div className="mb-3 flex min-h-[44px] items-center gap-2 max-lg:[&_button]:size-[44px] lg:min-h-0">
+        <div className="mb-3 flex min-h-[44px] items-center gap-2 lg:min-h-0">
           {filteredItems.length > 0 && (
             <span className="text-[0.6875rem] text-muted-foreground tabular-nums">
               {filteredItems.length}
@@ -245,23 +246,18 @@ export function JobsTab({
               style={{ minWidth: "640px" }}
               className="table-stack no-copy-underline [&_thead_th]:ps-1 [&_thead_th]:pe-2 [&_thead_th]:py-2 [&_thead_th]:text-[0.6875rem] [&_thead_th_button]:px-1 [&_thead_svg]:size-2.5 [&_tbody_td]:px-1.5"
             >
-              <TableHeader className="bg-muted/20 [&_tr]:border-b-border/40">
+              <TableHeader>
                 <TableRow>
                   <TableHead className="w-12 px-0 text-center">
-                    <label className="inline-grid size-[44px] cursor-pointer place-items-center has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
-                      <input
-                        type="checkbox"
-                        aria-label={msg("auto.features.dashboard.components.jobstab.literal.1")}
-                        className="size-4 cursor-pointer accent-primary"
+                    <div className="flex justify-center">
+                      <SelectCheckbox
                         checked={pageAllSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = pageSomeSelected;
-                        }}
+                        indeterminate={pageSomeSelected}
                         disabled={selectablePageIds.length === 0}
-                        onChange={togglePageSelection}
-                        onClick={(e) => e.stopPropagation()}
+                        onToggle={togglePageSelection}
+                        ariaLabel={msg("auto.features.dashboard.components.jobstab.literal.1")}
                       />
-                    </label>
+                    </div>
                   </TableHead>
                   <ColumnHeader
                     label={msg("auto.features.dashboard.components.jobstab.template.1")}
@@ -444,19 +440,16 @@ export function JobsTab({
                       }}
                     >
                       <TableCell className="w-12 px-0 text-center">
-                        <label className="inline-grid size-[44px] cursor-pointer place-items-center">
-                          <input
-                            type="checkbox"
-                            aria-label={formatMsg(
+                        <div className="flex justify-center">
+                          <SelectCheckbox
+                            checked={isSelected}
+                            onToggle={() => toggleRowSelected(job.optimization_id)}
+                            ariaLabel={formatMsg(
                               "auto.features.dashboard.components.jobstab.template.2",
                               { p1: TERMS.optimization, p2: job.optimization_id },
                             )}
-                            className="size-4 cursor-pointer accent-primary"
-                            checked={isSelected}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() => toggleRowSelected(job.optimization_id)}
                           />
-                        </label>
+                        </div>
                       </TableCell>
                       <TableCell
                         className="px-2 max-w-[100px]"
@@ -592,18 +585,18 @@ export function JobsTab({
         )}
 
         {data && data.total > FETCH_PAGE_SIZE && (
-          <div className="flex items-center justify-center gap-3 pt-5 border-t border-border/50 mt-4">
+          <div className="flex items-center justify-center gap-2 pt-5 border-t border-border/50 mt-4">
             <Button
               variant="outline"
               size="sm"
               disabled={pageOffset === 0 || loading}
               onClick={() => setPageOffset(Math.max(0, pageOffset - FETCH_PAGE_SIZE))}
-              className="min-h-[44px] gap-1 lg:min-h-0"
+              className="gap-1"
             >
               <PrevIcon className="size-3.5" />
               {msg("auto.features.dashboard.components.jobstab.11")}
             </Button>
-            <span className="text-sm text-muted-foreground tabular-nums px-3 py-1 rounded-md bg-muted/50">
+            <span className="text-xs text-muted-foreground tabular-nums">
               {Math.floor(pageOffset / FETCH_PAGE_SIZE) + 1} /{" "}
               {Math.max(1, Math.ceil(data.total / FETCH_PAGE_SIZE))}
             </span>
@@ -612,7 +605,7 @@ export function JobsTab({
               size="sm"
               disabled={pageOffset + FETCH_PAGE_SIZE >= data.total || loading}
               onClick={() => setPageOffset(pageOffset + FETCH_PAGE_SIZE)}
-              className="min-h-[44px] gap-1 lg:min-h-0"
+              className="gap-1"
             >
               {msg("auto.features.dashboard.components.jobstab.12")}
               <NextIcon className="size-3.5" />

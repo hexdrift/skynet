@@ -1,5 +1,7 @@
 "use client";
 
+import { Kbd } from "@/shared/ui/kbd";
+import { CountBadge } from "@/shared/ui/count-badge";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,6 +16,7 @@ import {
 import { msg } from "@/shared/lib/messages";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/primitives/popover";
+import { Button } from "@/shared/ui/primitives/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/primitives/tooltip";
 
 import { AgentThread } from "@/shared/ui/agent/agent-thread";
@@ -673,7 +676,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
             transition={{ duration: 0.2 }}
             onClick={closePanel}
             aria-hidden="true"
-            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            className="fixed inset-0 z-40 bg-black/50"
           />
         )}
         {open && (
@@ -718,15 +721,17 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <PopoverTrigger asChild>
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex size-[44px] items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground cursor-pointer md:size-6 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                                variant="ghost"
+                                size="icon-xs"
+                                className="text-muted-foreground hover:text-foreground"
                                 aria-label={msg(
                                   "auto.features.agent.panel.components.generalistpanel.literal.2",
                                 )}
                               >
                                 <MagicWand className="size-3.5" />
-                              </button>
+                              </Button>
                             </PopoverTrigger>
                           </TooltipTrigger>
                           <TooltipContent side="bottom">
@@ -748,24 +753,23 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                 <div className="flex items-center gap-1 shrink-0">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="icon-xs"
                         onClick={() => setDrawerOpen(true)}
-                        className="relative inline-flex size-[44px] items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground cursor-pointer md:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                        className="relative text-muted-foreground hover:text-foreground"
                         aria-label={msg(
                           "auto.features.agent.panel.components.generalistpanel.history_button",
                         )}
                       >
                         <ClockCounterClockwise className="size-3.5" />
                         {agent.backgroundBusyCount > 0 && (
-                          <span
-                            aria-hidden="true"
-                            className="absolute -top-0.5 -end-0.5 flex min-w-3.5 h-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[0.5625rem] font-semibold leading-none text-primary-foreground"
-                          >
+                          <CountBadge overlay aria-hidden="true">
                             {agent.backgroundBusyCount}
-                          </span>
+                          </CountBadge>
                         )}
-                      </button>
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
                       {msg("auto.features.agent.panel.components.generalistpanel.history_button")}
@@ -782,16 +786,18 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                   {agent.messages.length > 0 && (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="icon-xs"
                           onClick={handleNewConversation}
-                          className="inline-flex size-[44px] items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground cursor-pointer md:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                          className="text-muted-foreground hover:text-foreground"
                           aria-label={msg(
                             "auto.features.agent.panel.components.generalistpanel.new_conversation",
                           )}
                         >
                           <Plus className="size-3.5" />
-                        </button>
+                        </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
                         {msg(
@@ -802,10 +808,12 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                   )}
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="icon-xs"
                         onClick={closePanel}
-                        className="inline-flex size-[44px] items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground cursor-pointer md:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                        className="text-muted-foreground hover:text-foreground"
                         aria-label={msg(
                           "auto.features.agent.panel.components.generalistpanel.literal.4",
                         )}
@@ -817,11 +825,11 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                         ) : (
                           <SidebarSimple className="size-3.5" />
                         )}
-                      </button>
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
                       {msg("auto.features.agent.panel.components.generalistpanel.6")}{" "}
-                      <span className="opacity-70 font-mono">({shortcutLabel})</span>
+                      <Kbd className="font-mono">{shortcutLabel}</Kbd>
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -915,7 +923,7 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
                                 attachInputRef.current?.click();
                               }}
                               className={cn(
-                                "inline-flex size-[44px] items-center justify-center rounded-full sm:size-9 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]",
+                                "inline-flex size-9 items-center justify-center rounded-full",
                                 "text-muted-foreground transition-colors cursor-pointer",
                                 "hover:bg-accent/60 hover:text-foreground",
                                 "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40",

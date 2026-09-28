@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Trash, X } from "@/shared/ui/icons";
 
@@ -33,18 +32,12 @@ export function SelectionBar({ count, onClear, onDelete }: SelectionBarProps) {
             <span className="min-w-0 px-1 text-sm tabular-nums text-foreground">
               {formatMsg("shared.selection.count", { count })}
             </span>
-            <div className="mx-1 h-5 w-px bg-border/60" />
+            <div aria-hidden="true" className="mx-1 h-5 w-px bg-border/70" />
             <TooltipButton tooltip={msg("shared.selection.clear")} side="top" delayDuration={150}>
               <button
                 type="button"
                 onClick={onClear}
-                className="close-button [--close-btn-size:44px] lg:[--close-btn-size:32px]"
-                style={
-                  {
-                    "--close-btn-radius": "9999px",
-                    "--close-btn-icon": "16px",
-                  } as React.CSSProperties
-                }
+                className="close-button [--close-btn-size:32px] [--close-btn-radius:9999px] [--close-btn-icon:16px]"
                 aria-label={msg("shared.selection.clear")}
               >
                 <X />
@@ -54,7 +47,7 @@ export function SelectionBar({ count, onClear, onDelete }: SelectionBarProps) {
               <button
                 type="button"
                 onClick={onDelete}
-                className="flex size-[44px] items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive active:scale-95 cursor-pointer lg:size-8"
+                className="size-8 flex items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive active:scale-95 cursor-pointer"
                 aria-label={msg("shared.selection.delete")}
               >
                 <Trash className="size-4" />

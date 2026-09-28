@@ -30,11 +30,11 @@ export function InfoCard({
             {icon}
           </span>
         )}
-        <p className="text-[0.625rem] font-semibold tracking-[0.08em] uppercase text-[#A89680] truncate">
+        <p className="truncate text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
           {label}
         </p>
       </div>
-      <p className="text-sm font-semibold text-[#1C1612] truncate">
+      <p className="text-sm font-semibold text-foreground truncate">
         {value ?? <span className="text-[#BFB3A3] font-normal">—</span>}
       </p>
     </motion.div>

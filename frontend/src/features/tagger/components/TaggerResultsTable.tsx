@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WarningCircle } from "@/shared/ui/icons";
 import { Card, CardContent } from "@/shared/ui/primitives/card";
@@ -214,13 +215,11 @@ export function TaggerResultsTable({
         </div>
 
         {visible.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            {msg("tagger.results.empty")}
-          </p>
+          <EmptyState variant="list" title={msg("tagger.results.empty")} />
         ) : (
-          <div className="max-h-[calc(100dvh-var(--header-height,53px)-14rem)] overflow-auto rounded-lg border border-border/60">
+          <div className="max-h-[calc(100dvh-var(--header-height,53px)-14rem)] overflow-auto rounded-2xl border border-border/40 bg-card/60">
             <Table className="table-fixed">
-              <TableHeader className="bg-card">
+              <TableHeader>
                 <TableRow>
                   <ColumnHeader
                     label={msg("tagger.results.col.text")}
@@ -288,14 +287,16 @@ export function TaggerResultsTable({
                         onOpenRow(row.index);
                       }}
                       className={cn(
-                        "cursor-pointer transition-colors",
-                        i === selected ? "bg-muted/70" : "hover:bg-muted/40",
+                        "cursor-pointer transition-colors duration-150",
+                        i === selected
+                          ? "bg-primary/[0.08] hover:bg-primary/[0.12]"
+                          : "hover:bg-muted/50",
                       )}
                     >
                       <TableCell className="max-w-0">
                         <span className="flex items-center gap-1.5">
                           {row.flagged && (
-                            <WarningCircle className="size-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+                            <WarningCircle className="size-3.5 shrink-0 text-[var(--warning)]" />
                           )}
                           <span className="truncate" dir="auto">
                             {row.text}

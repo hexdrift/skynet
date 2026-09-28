@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { RolePill } from "@/shared/ui/role-pill";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   SLIDING_PILL_TABS_INDICATOR_CLASS,
@@ -35,6 +36,7 @@ import { TERMS } from "@/shared/lib/terms";
 import { ModelChip } from "@/shared/ui/model-chip";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { useUserPrefs } from "@/features/settings";
+import { readOnlyEditorHeight } from "@/shared/ui/code-editor-height";
 import type { SubmitWizardContext } from "../../hooks/use-submit-wizard";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
@@ -232,25 +234,16 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                                 : msg(
                                     "auto.features.submit.components.steps.summarystep.literal.8",
                                   );
-                          const roleColor =
-                            role === "input"
-                              ? "text-[#3D2E22] bg-[#3D2E22]/10"
-                              : role === "output"
-                                ? "text-primary bg-primary/10"
-                                : "text-muted-foreground bg-muted";
                           return (
                             <div key={col} className="flex items-center justify-between gap-2 py-1">
                               <span className="text-xs font-mono truncate" dir="ltr">
                                 {col}
                               </span>
-                              <span
-                                className={cn(
-                                  "text-[0.625rem] font-semibold px-2 py-0.5 rounded-full",
-                                  roleColor,
-                                )}
+                              <RolePill
+                                role={role === "input" || role === "output" ? role : "ignore"}
                               >
                                 {roleLabel}
-                              </span>
+                              </RolePill>
                             </div>
                           );
                         })}
@@ -493,7 +486,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                       <CodeEditor
                         value={displaySignatureCode}
                         onChange={() => {}}
-                        height={`${Math.min(displaySignatureCode.split("\n").length + 1, 10) * 19.6 + 8}px`}
+                        height={readOnlyEditorHeight(displaySignatureCode, { maxLines: 10 })}
                         readOnly
                       />
                     </TabsContent>
@@ -503,7 +496,7 @@ export function SummaryStep({ w }: { w: SubmitWizardContext }) {
                       <CodeEditor
                         value={metricCode}
                         onChange={() => {}}
-                        height={`${Math.min(metricCode.split("\n").length + 1, 10) * 19.6 + 8}px`}
+                        height={readOnlyEditorHeight(metricCode, { maxLines: 10 })}
                         readOnly
                       />
                     </TabsContent>

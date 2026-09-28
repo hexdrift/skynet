@@ -31,6 +31,23 @@ const STATUS_LIFECYCLE = {
   paused: "terminal",
 } as const satisfies Record<JobStatus, StatusLifecycle>;
 
+/**
+ * Status -> dot/series color. Hues match the `status-pill-*` classes in
+ * globals.css so a job's dot, pill and chart bar read as the same color.
+ */
+export const STATUS_DOT_COLOR: Record<string, string> = {
+  success: "var(--success)",
+  failed: "var(--danger)",
+  running: "var(--warning)",
+  validating: "var(--warning)",
+  pending: "#6b6b7a",
+  paused: "#466089",
+  stopped: "#466089",
+  cancelled: "#6b6058",
+};
+
+export const STATUS_DOT_FALLBACK = "#6b6b7a";
+
 const statusesWith = (kind: StatusLifecycle): ReadonlySet<JobStatus> =>
   new Set(
     (Object.keys(STATUS_LIFECYCLE) as JobStatus[]).filter((s) => STATUS_LIFECYCLE[s] === kind),

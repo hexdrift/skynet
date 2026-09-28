@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/shared/ui/primitives/dialog";
 import { Input } from "@/shared/ui/primitives/input";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { SelectCheckbox } from "@/shared/ui/select-checkbox";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import {
@@ -196,7 +197,7 @@ export function TaggingSessionCard({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   setRenameValue(displayName);
                   setRenameOpen(true);
@@ -210,7 +211,7 @@ export function TaggingSessionCard({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="size-[44px] text-muted-foreground hover:text-destructive lg:size-8"
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => setDeleteOpen(true)}
                 aria-label={msg("datasets.action.delete")}
               >
@@ -223,9 +224,7 @@ export function TaggingSessionCard({
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
-          <DialogHeader className="text-start">
-            <DialogTitle>{msg("tagger.session.rename_title")}</DialogTitle>
-          </DialogHeader>
+          <DialogTitleRow title={msg("tagger.session.rename_title")} />
           <Input
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
@@ -239,21 +238,15 @@ export function TaggingSessionCard({
             autoFocus
           />
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRenameOpen(false)}
-              disabled={renaming}
-              className="w-full justify-center"
-            >
+            <Button variant="outline" onClick={() => setRenameOpen(false)} disabled={renaming}>
               {msg("datasets.rename.cancel")}
             </Button>
-            <Button
-              onClick={handleRename}
-              disabled={renaming || renameValue.trim().length === 0}
-              className="w-full justify-center shadow-xs"
-            >
+            <Button onClick={handleRename} disabled={renaming || renameValue.trim().length === 0}>
               {renaming ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("datasets.rename.save")
               )}
@@ -263,10 +256,7 @@ export function TaggingSessionCard({
       </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent
-          className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md"
-          showCloseButton={false}
-        >
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{msg("tagger.session.delete_title")}</DialogTitle>
             <DialogDescription>
@@ -277,23 +267,16 @@ export function TaggingSessionCard({
               ? {msg("delete.irreversible")}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="mt-2 gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={deleting}
-              className="w-full justify-center"
-            >
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
               {msg("datasets.delete.cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="w-full justify-center shadow-xs"
-            >
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("datasets.delete.confirm")
               )}

@@ -1,7 +1,8 @@
 "use client";
 
+import { ProgressBar } from "@/shared/ui/progress-bar";
 import * as React from "react";
-import { Check, HardDrive, Minus, X } from "@/shared/ui/icons";
+import { HardDrive, X } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import {
   bulkDeleteStorageItems,
@@ -24,10 +25,10 @@ import {
   DialogTitle,
 } from "@/shared/ui/primitives/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/ui/primitives/sheet";
-import { cn } from "@/shared/lib/utils";
 import { formatStorageSize } from "@/shared/lib/formatters";
 import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { SelectCheckbox } from "@/shared/ui/select-checkbox";
 import { StorageItemRow } from "./StorageItemRow";
 
 /** Per-category label keys, mirroring the backend ``STORAGE_CATEGORIES``. */
@@ -218,7 +219,7 @@ export function StorageCategoryDrawer({
     const n = removed.size;
     if (skippedCount === 0) toast.success(formatMsg("storage.bulk.deleted", { n }));
     else if (n === 0) toast.error(msg("storage.bulk.failed"));
-    else toast.warn(formatMsg("storage.bulk.partial", { n, skipped: skippedCount }));
+    else toast.warning(formatMsg("storage.bulk.partial", { n, skipped: skippedCount }));
   }, [items, selected, itemType, onChanged]);
 
   const list = items ?? [];
@@ -271,25 +272,12 @@ export function StorageCategoryDrawer({
             ) : (
               <>
                 <div className="flex items-center gap-3 px-2 pb-1">
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={allSelected ? true : someSelected ? "mixed" : false}
-                    aria-label={msg("storage.select.all")}
-                    onClick={toggleAll}
-                    className={cn(
-                      "grid size-[44px] shrink-0 cursor-pointer place-items-center rounded-md border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:size-5",
-                      allSelected || someSelected
-                        ? "border-transparent bg-foreground text-background"
-                        : "border-border/70 bg-background hover:border-foreground/40",
-                    )}
-                  >
-                    {allSelected ? (
-                      <Check className="size-3.5" aria-hidden="true" />
-                    ) : someSelected ? (
-                      <Minus className="size-3.5" aria-hidden="true" />
-                    ) : null}
-                  </button>
+                  <SelectCheckbox
+                    checked={allSelected}
+                    indeterminate={!allSelected && someSelected}
+                    onToggle={toggleAll}
+                    ariaLabel={msg("storage.select.all")}
+                  />
                   <span className="text-xs font-medium text-muted-foreground">
                     {msg("storage.select.all")}
                   </span>
@@ -313,16 +301,15 @@ export function StorageCategoryDrawer({
           {selected.size > 0 && (
             <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border/40 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
               <div className="flex min-w-0 items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="size-[44px] lg:size-8"
+                <button
+                  type="button"
+                  className="close-button shrink-0"
                   onClick={clearSelection}
                   disabled={busy}
                   aria-label={msg("storage.select.clear")}
                 >
-                  <X className="size-4" />
-                </Button>
+                  <X />
+                </button>
                 <span className="truncate text-sm tabular-nums text-foreground">
                   {formatMsg("storage.bulk.bar.summary", {
                     n: selected.size,
@@ -342,7 +329,7 @@ export function StorageCategoryDrawer({
         open={pending !== null}
         onOpenChange={(next) => !next && !deleting && setPending(null)}
       >
-        <DialogContent>
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{msg("storage.delete.title")}</DialogTitle>
             <DialogDescription>
@@ -362,7 +349,7 @@ export function StorageCategoryDrawer({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setPending(null)} disabled={deleting}>
+            <Button variant="outline" onClick={() => setPending(null)} disabled={deleting}>
               {msg("storage.delete.cancel")}
             </Button>
             <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
@@ -376,7 +363,7 @@ export function StorageCategoryDrawer({
         open={bulkConfirm}
         onOpenChange={(next) => !next && !running && setBulkConfirm(false)}
       >
-        <DialogContent>
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {formatMsg("storage.bulk.confirm.title", { n: selected.size })}
@@ -392,7 +379,7 @@ export function StorageCategoryDrawer({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setBulkConfirm(false)} disabled={running}>
+            <Button variant="outline" onClick={() => setBulkConfirm(false)} disabled={running}>
               {msg("storage.delete.cancel")}
             </Button>
             <Button variant="destructive" onClick={runBulkDelete} disabled={running}>
@@ -406,7 +393,7 @@ export function StorageCategoryDrawer({
         <DialogContent
           aria-describedby={undefined}
           showCloseButton={false}
-          className="sm:max-w-sm"
+          className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md"
           onEscapeKeyDown={(event) => event.preventDefault()}
           onPointerDownOutside={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
@@ -415,18 +402,7 @@ export function StorageCategoryDrawer({
             <DialogTitle>{msg("storage.bulk.progress.title")}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                role="progressbar"
-                aria-valuenow={progress?.done ?? 0}
-                aria-valuemin={0}
-                aria-valuemax={progress?.total ?? 0}
-                className="h-full origin-right rounded-full bg-foreground transition-transform duration-300 ease-out"
-                style={{
-                  transform: `scaleX(${progress && progress.total ? progress.done / progress.total : 0})`,
-                }}
-              />
-            </div>
+            <ProgressBar value={progress?.done ?? 0} max={progress?.total ?? 0} />
             <p className="text-center text-sm tabular-nums text-muted-foreground">
               {formatMsg("storage.bulk.progress.count", {
                 done: progress?.done ?? 0,

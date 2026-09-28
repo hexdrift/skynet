@@ -11,14 +11,8 @@ import {
 } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { Button } from "@/shared/ui/primitives/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { ListPageSkeleton } from "@/shared/ui/list-page-skeleton";
 import { SearchField } from "@/shared/ui/search-field";
@@ -75,7 +69,7 @@ export function TaggingSessionsPanel({ onStartNew }: { onStartNew: () => void })
     try {
       const res = await bulkDeleteTaggerSessions([...selectedIds]);
       if (res.skipped.length > 0) {
-        toast.warn(formatMsg("shared.selection.delete_skipped", { count: res.skipped.length }));
+        toast.warning(formatMsg("shared.selection.delete_skipped", { count: res.skipped.length }));
       }
       setBulkOpen(false);
       setSelectedIds(new Set());
@@ -188,7 +182,7 @@ export function TaggingSessionsPanel({ onStartNew }: { onStartNew: () => void })
           value={search}
           onValueChange={setSearch}
           placeholder={msg("tagger.session.search_placeholder")}
-          className="flex-1 !h-[44px] [&_input]:h-full max-lg:[&_button]:!size-[44px] lg:!h-11"
+          className="flex-1"
         />
         <Button
           variant="outline"
@@ -228,34 +222,26 @@ export function TaggingSessionsPanel({ onStartNew }: { onStartNew: () => void })
       />
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-        <DialogContent
-          className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md"
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>{msg("tagger.session.bulk_delete_title")}</DialogTitle>
-            <DialogDescription>
-              {formatMsg("tagger.session.bulk_delete_body", { count: selectedIds.size })}{" "}
-              {msg("delete.irreversible")}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-2 gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setBulkOpen(false)}
-              disabled={bulkDeleting}
-              className="w-full justify-center"
-            >
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+          <DialogTitleRow
+            title={msg("tagger.session.bulk_delete_title")}
+            description={
+              <>
+                {formatMsg("tagger.session.bulk_delete_body", { count: selectedIds.size })}{" "}
+                {msg("delete.irreversible")}
+              </>
+            }
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)} disabled={bulkDeleting}>
               {msg("datasets.delete.cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmBulkDelete}
-              disabled={bulkDeleting}
-              className="w-full justify-center shadow-xs"
-            >
+            <Button variant="destructive" onClick={confirmBulkDelete} disabled={bulkDeleting}>
               {bulkDeleting ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("datasets.delete.confirm")
               )}

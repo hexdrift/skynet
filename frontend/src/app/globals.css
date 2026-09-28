@@ -515,6 +515,10 @@ h3 {
   .close-button:focus-visible {
     box-shadow: 0 0 0 2px rgba(200, 168, 130, 0.3);
   }
+  .close-button:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
   .close-button svg {
     width: var(--close-btn-icon, 14px);
     height: var(--close-btn-icon, 14px);
@@ -522,7 +526,7 @@ h3 {
     flex-shrink: 0;
   }
 
-  @media (max-width: 767px), (any-pointer: coarse) {
+  @media (any-pointer: coarse) {
     .close-button {
       --close-btn-size: 44px !important;
     }
@@ -1127,12 +1131,12 @@ header {
 @media (any-pointer: coarse) {
   /* Keep touch targets usable on tablets and hybrid devices even when a
      mouse is also connected or the viewport crosses a desktop breakpoint. */
-  button,
+  /* Checkbox and switch buttons carry an invisible 44px hit area instead of growing. */
+  button:not([role="checkbox"]):not([role="switch"]),
   a,
   [role="button"],
   [role="tab"],
   [role="radio"],
-  [role="switch"],
   [role="combobox"],
   [role="slider"],
   input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
@@ -1409,11 +1413,12 @@ table {
     width: 100%;
   }
   table.table-stack tr {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--input);
+    border-radius: 1rem;
+    padding: 0.75rem 1rem;
     margin-bottom: 0.625rem;
-    background: var(--card);
+    background: var(--background);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     display: flex;
     flex-direction: column;
     gap: 0.375rem;

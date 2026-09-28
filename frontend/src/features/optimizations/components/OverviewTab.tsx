@@ -1,5 +1,7 @@
 "use client";
 
+import { ProgressBar } from "@/shared/ui/progress-bar";
+import { PingDot } from "@/shared/ui/ping-dot";
 import { memo, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { ChatText, Gauge, Hourglass, Timer, TrendUp } from "@/shared/ui/icons";
@@ -77,13 +79,13 @@ function formatLoggedValue(value: number | undefined, precision: number): string
 function LiveStat({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <span className="flex items-center gap-1.5 text-[#A89680]">
+      <span className="flex items-center gap-1.5 text-muted-foreground/70">
         {icon}
-        <span className="truncate text-[0.625rem] font-semibold uppercase tracking-[0.08em]">
+        <span className="truncate text-[0.625rem] font-semibold uppercase tracking-[0.14em]">
           {label}
         </span>
       </span>
-      <span className="truncate text-sm font-semibold tabular-nums text-[#1C1612]">{value}</span>
+      <span className="truncate text-sm font-semibold tabular-nums text-foreground">{value}</span>
     </div>
   );
 }
@@ -267,10 +269,7 @@ function OverviewTabImpl({
               <div className="rounded-xl border border-[#E3DCD0] bg-[#FBF9F4] px-4 py-3.5">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="flex items-center gap-2 text-sm font-semibold text-[#1C1612]">
-                    <span
-                      className="size-1.5 shrink-0 rounded-full bg-[var(--warning)] motion-safe:animate-pulse"
-                      aria-hidden="true"
-                    />
+                    <PingDot size="sm" />
                     {msg("optimization.progress.gepa")}
                   </span>
                   <span dir="ltr" className="flex items-baseline gap-1.5 font-mono tabular-nums">
@@ -282,12 +281,7 @@ function OverviewTabImpl({
                     </span>
                   </span>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E3DCD0]/70">
-                  <div
-                    className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
-                    style={{ width: `${tqdmPercent}%` }}
-                  />
-                </div>
+                <ProgressBar value={tqdmPercent} className="mt-2" />
                 {stats.length > 0 && (
                   <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-[#E3DCD0]/70 pt-3.5 sm:grid-cols-3">
                     {stats.map((s) => (
@@ -376,7 +370,7 @@ function OverviewTabImpl({
             </StaggerItem>
             <StaggerItem>
               <TiltCard
-                className={`rounded-xl border p-6 text-center ${(displayImprovement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-red-300/50 bg-gradient-to-br from-red-50/50 to-red-100/30"}`}
+                className={`rounded-xl border p-6 text-center ${(displayImprovement ?? 0) >= 0 ? "border-stone-400/50 bg-gradient-to-br from-stone-100/50 to-stone-200/30" : "border-[var(--danger-border)] bg-[var(--danger-dim)]"}`}
               >
                 <p className="text-[0.6875rem] text-muted-foreground mb-2 font-medium tracking-wide">
                   <HelpTip text={tip("score.improvement")}>
@@ -384,7 +378,7 @@ function OverviewTabImpl({
                   </HelpTip>
                 </p>
                 <p
-                  className={`text-3xl font-mono font-bold tabular-nums ${(displayImprovement ?? 0) >= 0 ? "text-stone-600" : "text-red-600"}`}
+                  className={`text-3xl font-mono font-bold tabular-nums ${(displayImprovement ?? 0) >= 0 ? "text-stone-600" : "text-[var(--danger)]"}`}
                 >
                   {formatImprovement(displayImprovement)}
                 </p>
@@ -408,7 +402,7 @@ function OverviewTabImpl({
                   {msg("optimization.logged_metrics.title")}
                 </HelpTip>
               </caption>
-              <TableHeader className="static bg-transparent [&_tr]:border-[#E3DCD0]">
+              <TableHeader className="static bg-transparent backdrop-blur-none">
                 <TableRow>
                   <TableHead className="h-auto w-full px-0 pb-1.5 text-[0.6875rem] font-medium text-muted-foreground/70">
                     {msg("optimization.logged_metrics.metric_col")}
@@ -443,7 +437,7 @@ function OverviewTabImpl({
                       ? Number((optimizedValue - baselineValue).toFixed(loggedDecimals)) + 0
                       : undefined;
                   return (
-                    <TableRow key={name} className="border-[#E3DCD0]/60">
+                    <TableRow key={name}>
                       <th
                         scope="row"
                         dir="auto"
@@ -506,7 +500,7 @@ function OverviewTabImpl({
             />
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <TrendUp className="size-4 text-[#7C6350]" aria-hidden="true" />
+                <TrendUp className="size-4" aria-hidden="true" />
                 <HelpTip text={tip("score.progression")}>
                   <span className="font-bold tracking-tight">
                     {msg("auto.features.optimizations.components.overviewtab.4")}

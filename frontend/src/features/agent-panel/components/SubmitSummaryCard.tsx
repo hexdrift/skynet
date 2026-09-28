@@ -1,8 +1,9 @@
 "use client";
 
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowSquareOut, CheckCircle, WarningCircle } from "@/shared/ui/icons";
+import { ArrowUpRight, CheckCircle } from "@/shared/ui/icons";
 import { formatMsg, msg } from "@/shared/lib/messages";
 
 import { cn } from "@/shared/lib/utils";
@@ -55,50 +56,43 @@ export function SubmitSummaryCard({ call, className }: SubmitSummaryCardProps) {
   const jobId = result?.id;
   const jobName = result?.job_name ?? TERMS.notificationNewOpt;
 
+  if (isError) {
+    return (
+      <InlineErrorRow
+        title={msg("auto.features.agent.panel.components.submitsummarycard.literal.1")}
+        message={
+          <>
+            <span className="block truncate">{jobName}</span>
+            {result?.detail && <span className="mt-1 block leading-relaxed">{result.detail}</span>}
+          </>
+        }
+        className={className}
+      />
+    );
+  }
+
   return (
     <div
       className={cn(
-        "rounded-2xl border shadow-sm overflow-hidden",
-        isError ? "border-red-200 bg-red-50" : "border-[#5E7A5E]/25 bg-[#F0F4EC]",
+        "rounded-2xl border border-[#5E7A5E]/25 bg-[#F0F4EC] shadow-sm overflow-hidden",
         className,
       )}
     >
-      <div
-        className={cn(
-          "flex items-start gap-2.5 px-4 py-3 border-b",
-          isError ? "border-red-200" : "border-[#5E7A5E]/15",
-        )}
-      >
-        <span
-          className={cn(
-            "inline-flex size-7 shrink-0 items-center justify-center rounded-full",
-            isError ? "bg-red-100 text-red-700" : "bg-[#5E7A5E]/20 text-[#3E5240]",
-          )}
-        >
-          {isError ? (
-            <WarningCircle className="size-3.5" aria-hidden="true" />
-          ) : (
-            <CheckCircle className="size-3.5" aria-hidden="true" />
-          )}
+      <div className="flex items-start gap-2.5 px-4 py-3 border-b border-[#5E7A5E]/15">
+        <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-[#5E7A5E]/20 text-[#3E5240]">
+          <CheckCircle className="size-3.5" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <div
-            className={cn(
-              "text-[0.8125rem] font-medium leading-tight",
-              isError ? "text-red-800" : "text-[#2F3E32]",
-            )}
-          >
-            {isError
-              ? msg("auto.features.agent.panel.components.submitsummarycard.literal.1")
-              : formatMsg("auto.features.agent.panel.components.submitsummarycard.template.1", {
-                  p1: TERMS.optimization,
-                })}
+          <div className="text-[0.8125rem] font-medium leading-tight text-[#2F3E32]">
+            {formatMsg("auto.features.agent.panel.components.submitsummarycard.template.1", {
+              p1: TERMS.optimization,
+            })}
           </div>
           <div className="text-[0.75rem] text-foreground/80 mt-0.5 truncate">{jobName}</div>
         </div>
       </div>
 
-      {!isError && jobId && (
+      {jobId && (
         <Link
           href={`/optimizations/${jobId}`}
           className={cn(
@@ -109,15 +103,9 @@ export function SubmitSummaryCard({ call, className }: SubmitSummaryCardProps) {
           <span className="font-mono truncate text-muted-foreground">{jobId}</span>
           <span className="inline-flex items-center gap-1 text-[#3D2E22] shrink-0">
             {msg("auto.features.agent.panel.components.submitsummarycard.1")}
-            <ArrowSquareOut className="size-3" aria-hidden="true" />
+            <ArrowUpRight className="size-3" aria-hidden="true" />
           </span>
         </Link>
-      )}
-
-      {isError && result?.detail && (
-        <div className="px-4 py-2.5 text-[0.75rem] text-red-800 leading-relaxed">
-          {result.detail}
-        </div>
       )}
     </div>
   );

@@ -1,4 +1,3 @@
-import * as React from "react";
 import { X } from "@/shared/ui/icons";
 import { getStatusLabel } from "@/shared/constants/job-status";
 import { modelDisplayName } from "@/shared/lib/formatters";
@@ -117,8 +116,9 @@ export function AnalyticsFilterChips({
         />
       )}
       <button
+        type="button"
         onClick={clearAllFilters}
-        className="ms-0.5 min-h-[44px] cursor-pointer text-[0.625rem] text-[#3D2E22]/40 transition-colors hover:text-[#3D2E22]/70 lg:min-h-0"
+        className="ms-0.5 cursor-pointer text-[0.625rem] text-[#3D2E22]/40 transition-colors hover:text-[#3D2E22]/70"
       >
         {msg("auto.features.dashboard.components.analyticstab.3")}
       </button>
@@ -142,7 +142,7 @@ function FilterChip({
   truncate?: boolean;
 }) {
   return (
-    <span className="group inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-[#3D2E22]/10 bg-[#3D2E22]/[0.06] pe-1 ps-2.5 py-1 transition-all duration-150 hover:border-[#3D2E22]/20 hover:bg-[#3D2E22]/[0.1] lg:min-h-0">
+    <span className="group inline-flex items-center gap-1.5 rounded-lg border border-[#3D2E22]/10 bg-[#3D2E22]/[0.06] pe-1 ps-2.5 py-1 transition-all duration-150 hover:border-[#3D2E22]/20 hover:bg-[#3D2E22]/[0.1]">
       <span
         className={`text-[0.6875rem] font-medium text-[#3D2E22]/80 ${truncate ? "font-mono truncate max-w-[140px]" : ""}`}
         dir={dir}
@@ -151,14 +151,9 @@ function FilterChip({
         {label}
       </span>
       <button
+        type="button"
         onClick={onClear}
-        className="close-button [--close-btn-size:44px] lg:[--close-btn-size:32px]"
-        style={
-          {
-            "--close-btn-radius": "6px",
-            "--close-btn-icon": "12px",
-          } as React.CSSProperties
-        }
+        className="close-button [--close-btn-size:20px] [--close-btn-radius:6px] [--close-btn-icon:12px]"
         aria-label={ariaLabel}
       >
         <X />

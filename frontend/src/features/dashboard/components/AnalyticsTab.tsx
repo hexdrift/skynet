@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react";
+import { ProgressBar } from "@/shared/ui/progress-bar";
 import type { KeyboardEvent, ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
@@ -9,6 +10,7 @@ import type { DashboardAnalytics } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
 import { tip } from "@/shared/lib/tooltips";
 import { TERMS } from "@/shared/lib/terms";
+import { ACCENT_DOT, ACCENT_TEXT, type StatAccent } from "../constants";
 import { AnalyticsEmpty } from "./AnalyticsEmpty";
 import { AnalyticsFilterChips } from "./AnalyticsFilterChips";
 import { AnalyticsSection } from "./AnalyticsSection";
@@ -55,22 +57,6 @@ type AnalyticsTabProps = {
   sessionUser: string;
 };
 
-type KpiAccent = "default" | "success" | "warning" | "danger";
-
-const KPI_DOT: Record<KpiAccent, string> = {
-  default: "bg-foreground/25",
-  success: "bg-emerald-500",
-  warning: "bg-[var(--warning)]",
-  danger: "bg-red-500",
-};
-
-const KPI_TEXT: Record<KpiAccent, string> = {
-  default: "text-foreground",
-  success: "text-emerald-600",
-  warning: "text-[var(--warning)]",
-  danger: "text-red-600",
-};
-
 function KpiCard({
   label,
   value,
@@ -79,13 +65,13 @@ function KpiCard({
 }: {
   label: string;
   value: ReactNode;
-  accent: KpiAccent;
+  accent: StatAccent;
   valueDir?: "ltr" | "rtl";
 }) {
   return (
     <div className="flex h-full min-w-0 flex-[1_1_13rem] flex-col gap-5 rounded-2xl border border-border/40 bg-card/60 p-6 transition-colors duration-300 hover:border-border/70 sm:p-7 xl:flex-[1_1_9rem]">
       <div className="flex items-center gap-2">
-        <span className={`size-1.5 rounded-full ${KPI_DOT[accent]}`} aria-hidden />
+        <span className={`size-1.5 rounded-full ${ACCENT_DOT[accent]}`} aria-hidden />
         <p className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
           {label}
         </p>
@@ -93,7 +79,7 @@ function KpiCard({
       <div className="flex flex-1 items-center justify-center">
         <p
           dir={valueDir}
-          className={`text-center text-[2.75rem] sm:text-[3.25rem] font-bold leading-[0.9] tracking-tight tabular-nums ${KPI_TEXT[accent]}`}
+          className={`text-center text-[2.75rem] sm:text-[3.25rem] font-bold leading-[0.9] tracking-tight tabular-nums ${ACCENT_TEXT[accent]}`}
         >
           {value}
         </p>
@@ -308,15 +294,7 @@ function AnalyticsTabImpl({
                               {s.value}
                             </span>
                           </div>
-                          <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-500"
-                              style={{
-                                width: `${s.pct}%`,
-                                backgroundColor: s.fill,
-                              }}
-                            />
-                          </div>
+                          <ProgressBar value={s.pct} color={s.fill} />
                         </div>
                       ))}
                     </div>
@@ -335,14 +313,7 @@ function AnalyticsTabImpl({
                                 <span>{d.name}</span>
                                 <span className="tabular-nums font-medium">{d.value}</span>
                               </div>
-                              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                <div
-                                  className="h-full rounded-full bg-primary/70 transition-all"
-                                  style={{
-                                    width: `${d.pct}%`,
-                                  }}
-                                />
-                              </div>
+                              <ProgressBar value={d.pct} fillClassName="bg-primary/70" />
                             </div>
                           ))}
                         </div>
@@ -468,15 +439,12 @@ function AnalyticsTabImpl({
                             {m.count}
                           </span>
                         </div>
-                        <div className="h-2 rounded-full bg-muted overflow-hidden ms-6" dir="ltr">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${m.pct}%`,
-                              backgroundColor: MODEL_RAMP[Math.min(i, MODEL_RAMP.length - 1)],
-                            }}
-                          />
-                        </div>
+                        <ProgressBar
+                          dir="ltr"
+                          value={m.pct}
+                          color={MODEL_RAMP[Math.min(i, MODEL_RAMP.length - 1)]}
+                          className="ms-6 w-auto"
+                        />
                       </div>
                     ))}
                   </div>

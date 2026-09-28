@@ -5,6 +5,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CaretDown, DownloadSimple, FileCode, FileText, FileXls, Package } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
+import {
+  COMPACT_POPOVER_ICON_CLASS,
+  COMPACT_POPOVER_ITEM_CLASS,
+  COMPACT_POPOVER_PANEL_CLASS,
+} from "@/shared/ui/compact-popover-menu";
+import { cn } from "@/shared/lib/utils";
 import { downloadProgramExport } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
 import { track, TelemetryEvent } from "@/shared/lib/telemetry";
@@ -132,20 +138,14 @@ export function ExportMenu({
     ? [["", optimizedModuleSrc]]
     : Object.entries(optimizedComponentSrcs ?? {});
   const hasModuleSrc = moduleDownloads.length > 0;
-  const itemCls =
-    "flex min-h-[44px] w-full items-center gap-2.5 px-3.5 py-2 text-[0.75rem] text-foreground hover:bg-muted/40 cursor-pointer transition-colors";
-  const iconCls = "size-4 shrink-0 text-muted-foreground/60";
+  const itemCls = COMPACT_POPOVER_ITEM_CLASS;
+  const iconCls = COMPACT_POPOVER_ICON_CLASS;
   const extCls = "text-muted-foreground/60 font-mono text-[0.625rem] ms-auto";
-  const divider = <div className="h-px bg-border/40 mx-2 my-1" />;
+  const divider = <div role="separator" className="mx-1 my-1 h-px bg-border/60" />;
 
   return (
     <div className="relative" ref={ref}>
-      <Button
-        size="sm"
-        onClick={() => setOpen((o) => !o)}
-        data-telemetry="results-export-menu"
-        className="min-h-[44px] gap-1.5 sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
-      >
+      <Button size="sm" onClick={() => setOpen((o) => !o)} data-telemetry="results-export-menu">
         <DownloadSimple className="size-4" />
         {msg("auto.features.optimizations.components.exportmenu.1")}
         <CaretDown
@@ -160,7 +160,11 @@ export function ExportMenu({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute end-0 top-full mt-1.5 z-50 min-w-[180px] max-w-[min(240px,90vw)] rounded-2xl border border-border/40 bg-card shadow-[0_4px_24px_rgba(28,22,18,0.1)] py-1.5"
+            className={cn(
+              COMPACT_POPOVER_PANEL_CLASS,
+              // framer-motion owns the enter/exit animation here.
+              "absolute end-0 top-full mt-1.5 min-w-[180px] max-w-[min(240px,90vw)] animate-none",
+            )}
           >
             {hasProgram && (
               <button

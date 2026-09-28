@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/shared/lib/utils";
+import { KBD_CLASS } from "@/shared/ui/kbd";
 import * as React from "react";
 import { toast } from "react-toastify";
 import { msg } from "@/shared/lib/messages";
@@ -52,11 +54,13 @@ export function ShortcutRecorder() {
         type="button"
         onClick={() => setRecording((v) => !v)}
         title={msg("settings.agent.shortcut.change")}
-        className={
+        className={cn(
+          KBD_CLASS,
+          "h-7 cursor-pointer px-2 font-mono text-xs transition-colors",
           recording
-            ? "font-mono text-xs bg-amber-100 border border-amber-300 px-2 py-1 rounded animate-pulse cursor-pointer"
-            : "font-mono text-xs bg-muted/60 border border-border/60 px-2 py-1 rounded cursor-pointer hover:bg-muted hover:border-border transition-colors"
-        }
+            ? "border-[var(--warning-border)] bg-[var(--warning-dim)] motion-safe:animate-pulse"
+            : "hover:border-border hover:bg-muted",
+        )}
       >
         {recording ? msg("settings.agent.shortcut.recording") : display}
       </button>

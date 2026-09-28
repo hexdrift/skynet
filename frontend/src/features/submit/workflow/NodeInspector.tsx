@@ -18,10 +18,12 @@ import { Button } from "@/shared/ui/primitives/button";
 import { Input } from "@/shared/ui/primitives/input";
 import { Label } from "@/shared/ui/primitives/label";
 import { Separator } from "@/shared/ui/primitives/separator";
+import { Segmented } from "@/shared/ui/segmented";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
 import type { WorkflowFieldSpec, WorkflowNodeSpec } from "@/shared/types/api";
+import { TOUCH_FIELD, TOUCH_FIELD_SM } from "@/shared/ui/touch";
 
 const CodeEditor = dynamic(() => import("@/shared/ui/code-editor").then((m) => m.CodeEditor), {
   ssr: false,
@@ -53,7 +55,7 @@ export function NodeInspector({
   onClose,
 }: NodeInspectorProps) {
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-card [&_button]:min-h-[44px] [&_button]:min-w-[44px] lg:[&_button]:min-h-0 lg:[&_button]:min-w-0">
+    <div className="flex h-full flex-col overflow-y-auto bg-card">
       <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-2.5">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold" dir="ltr">
@@ -67,35 +69,34 @@ export function NodeInspector({
           {onDuplicate && (
             <Button
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               onClick={onDuplicate}
-              className="inline-flex size-[44px] text-muted-foreground lg:hidden"
+              className="text-muted-foreground hover:text-foreground lg:hidden"
               aria-label={msg("workflow.menu.duplicate")}
             >
-              <Copy className="size-3.5" />
+              <Copy className="size-4" />
             </Button>
           )}
           {onDelete && (
             <Button
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               onClick={onDelete}
-              className="size-[44px] text-muted-foreground hover:text-destructive lg:size-8"
+              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               aria-label={msg("workflow.inspector.delete")}
             >
-              <Trash className="size-3.5" />
+              <Trash className="size-4" />
             </Button>
           )}
           {onClose && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              type="button"
               onClick={onClose}
-              className="size-[44px] text-muted-foreground hover:text-foreground lg:size-8"
+              className="close-button shrink-0"
               aria-label={msg("workflow.inspector.close")}
             >
-              <X className="size-3.5" />
-            </Button>
+              <X />
+            </button>
           )}
         </div>
       </div>
@@ -118,7 +119,7 @@ export function NodeInspector({
           <Input
             value={spec.name ?? ""}
             placeholder={spec.id}
-            className="min-h-[44px] text-base lg:min-h-0 lg:text-sm"
+            className={TOUCH_FIELD}
             onChange={(e) => onChange({ ...spec, name: e.target.value || null })}
           />
         </div>
@@ -142,29 +143,19 @@ export function NodeInspector({
               <Label className="text-[0.6875rem] uppercase tracking-wide text-muted-foreground">
                 {msg("workflow.inspector.module")}
               </Label>
-              <div className="inline-flex w-full rounded-lg bg-muted p-1 gap-1">
-                {MODULE_CHOICES.map(([val, label]) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() =>
-                      onChange({
-                        ...spec,
-                        module_name: val,
-                        ...(val === "react" || val === "flex" ? {} : { tool_filter: null }),
-                      })
-                    }
-                    className={cn(
-                      "min-h-[44px] flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors cursor-pointer lg:min-h-0",
-                      spec.module_name === val
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <Segmented<(typeof MODULE_CHOICES)[number][0]>
+                size="sm"
+                className="w-full"
+                value={spec.module_name}
+                onChange={(val) =>
+                  onChange({
+                    ...spec,
+                    module_name: val,
+                    ...(val === "react" || val === "flex" ? {} : { tool_filter: null }),
+                  })
+                }
+                options={MODULE_CHOICES.map(([value, label]) => ({ value, label }))}
+              />
             </div>
             {spec.module_name === "flex" && (
               <FlexToolsEditor
@@ -223,7 +214,7 @@ export function NodeInspector({
                 dir="ltr"
                 value={spec.tool_name}
                 placeholder={msg("workflow.inspector.tool_name_placeholder")}
-                className="min-h-[44px] text-base lg:min-h-0 lg:text-sm"
+                className={TOUCH_FIELD}
                 onChange={(e) => onChange({ ...spec, tool_name: e.target.value })}
               />
             </div>
@@ -240,7 +231,7 @@ export function NodeInspector({
               <Input
                 dir="ltr"
                 value={spec.output_field.name}
-                className="min-h-[44px] text-base lg:min-h-0 lg:text-sm"
+                className={TOUCH_FIELD}
                 onChange={(e) =>
                   onChange({
                     ...spec,
@@ -313,8 +304,8 @@ function FieldListEditor({
         </Label>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-[44px] px-1.5 text-muted-foreground lg:h-6"
+          size="icon-xs"
+          className="text-muted-foreground hover:text-foreground"
           onClick={() => onChange([...fields, { name: `field_${fields.length + 1}` }])}
           aria-label={msg("workflow.inspector.add_field")}
         >
@@ -326,7 +317,7 @@ function FieldListEditor({
           <div key={i} className="flex items-center gap-1.5">
             <Input
               dir="ltr"
-              className="h-[44px] font-mono text-base lg:h-8 lg:text-xs"
+              className={cn(TOUCH_FIELD_SM, "font-mono lg:text-xs")}
               value={field.name}
               onChange={(e) => {
                 const next = [...fields];
@@ -336,13 +327,13 @@ function FieldListEditor({
             />
             <Button
               variant="ghost"
-              size="sm"
-              className="h-[44px] px-1.5 text-muted-foreground hover:text-destructive lg:h-8"
+              size="icon-sm"
+              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               disabled={fields.length <= minFields}
               onClick={() => onChange(fields.filter((_, j) => j !== i))}
               aria-label={msg("workflow.inspector.remove_field")}
             >
-              <Trash className="size-3" />
+              <Trash className="size-4" />
             </Button>
           </div>
         ))}

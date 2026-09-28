@@ -1,5 +1,6 @@
 "use client";
 
+import { ProgressBar } from "@/shared/ui/progress-bar";
 import { useEffect, useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, CircleNotch, Sparkle } from "@/shared/ui/icons";
@@ -101,8 +102,7 @@ export function TaggerAssistRail({
   // navigates: jump to the next row (wrapping) that still needs a decision.
   const goToNextUnreviewed = () => {
     if (!openRound) return;
-    const undecided = (i: number) =>
-      openRound.decided[String(frameData[i]!.id)] === undefined;
+    const undecided = (i: number) => openRound.decided[String(frameData[i]!.id)] === undefined;
     for (let step = 1; step <= frameData.length; step++) {
       const idx = (currentIndex + step) % frameData.length;
       if (undecided(idx)) {
@@ -140,19 +140,12 @@ export function TaggerAssistRail({
             {agreement === null ? "—" : `${Math.round(agreement * 100)}%`}
           </span>
         </div>
-        <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${Math.round((agreement ?? 0) * 100)}%`,
-              background: "var(--gradient-progress)",
-            }}
-          />
+        <ProgressBar value={Math.round((agreement ?? 0) * 100)} tone="ai">
           <div
             className="absolute top-0 h-full w-px bg-foreground/30"
             style={{ insetInlineStart: `${gate * 100}%` }}
           />
-        </div>
+        </ProgressBar>
         <p className="mt-1 text-[11px] text-muted-foreground">
           {formatMsg("tagger.assist.rail.gate", { gate: Math.round(gate * 100) })}
         </p>
@@ -173,14 +166,13 @@ export function TaggerAssistRail({
                 {predictedCount}/{openRound.rowIds.length}
               </span>
             </div>
-            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary/40 transition-all duration-500"
-                style={{
-                  width: `${Math.round((predictedCount / Math.max(1, openRound.rowIds.length)) * 100)}%`,
-                }}
-              />
-            </div>
+            <ProgressBar
+              value={predictedCount}
+              max={Math.max(1, openRound.rowIds.length)}
+              size="sm"
+              className="mt-1.5"
+              fillClassName="bg-primary/40"
+            />
           </div>
         )}
       </div>

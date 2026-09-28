@@ -27,7 +27,7 @@ export function DeleteDialogs({
         if (!open) setBulkDeleteOpen(false);
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
         <DialogTitleRow
           title={
             selectedCount === 1
@@ -60,18 +60,12 @@ export function DeleteDialogs({
             variant="outline"
             onClick={() => setBulkDeleteOpen(false)}
             disabled={bulkDeleting}
-            className="w-full justify-center"
           >
             {msg("auto.features.dashboard.components.deletedialogs.5")}
           </Button>
-          <Button
-            variant="destructive"
-            onClick={confirmBulkDelete}
-            disabled={bulkDeleting}
-            className="w-full justify-center"
-          >
+          <Button variant="destructive" onClick={confirmBulkDelete} disabled={bulkDeleting}>
             {bulkDeleting ? (
-              <CircleNotch className="size-4 animate-spin" />
+              <CircleNotch className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
             ) : (
               msg("auto.features.dashboard.components.deletedialogs.literal.1")
             )}

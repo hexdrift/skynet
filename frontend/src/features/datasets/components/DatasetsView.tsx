@@ -5,14 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { CircleNotch, Database, MagnifyingGlass, UploadSimple } from "@/shared/ui/icons";
 import { toast } from "react-toastify";
 import { Button } from "@/shared/ui/primitives/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { DataHubTabs } from "@/shared/ui/data-hub-tabs";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { SearchField } from "@/shared/ui/search-field";
@@ -77,7 +71,7 @@ export function DatasetsView() {
         toast.success(formatMsg("datasets.toast.bulk_deleted", { count: res.deleted.length }));
       }
       if (res.skipped.length > 0) {
-        toast.warn(formatMsg("shared.selection.delete_skipped", { count: res.skipped.length }));
+        toast.warning(formatMsg("shared.selection.delete_skipped", { count: res.skipped.length }));
       }
       setBulkOpen(false);
       setSelectedIds(new Set());
@@ -202,7 +196,7 @@ export function DatasetsView() {
             value={search}
             onValueChange={setSearch}
             placeholder={msg("datasets.search.placeholder")}
-            className="flex-1 !h-[44px] [&_input]:h-full max-lg:[&_button]:!size-[44px] lg:!h-11"
+            className="flex-1"
           />
           <Button
             variant="outline"
@@ -279,33 +273,21 @@ export function DatasetsView() {
       />
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-        <DialogContent
-          className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md"
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>{msg("datasets.delete.selected_title")}</DialogTitle>
-            <DialogDescription>
-              {formatMsg("datasets.delete.selected_body", { count: selectedIds.size })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-2 gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setBulkOpen(false)}
-              disabled={bulkDeleting}
-              className="!min-h-[44px] w-full justify-center lg:!min-h-0"
-            >
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+          <DialogTitleRow
+            title={msg("datasets.delete.selected_title")}
+            description={formatMsg("datasets.delete.selected_body", { count: selectedIds.size })}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)} disabled={bulkDeleting}>
               {msg("datasets.delete.cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmBulkDelete}
-              disabled={bulkDeleting}
-              className="!min-h-[44px] w-full justify-center shadow-xs lg:!min-h-0"
-            >
+            <Button variant="destructive" onClick={confirmBulkDelete} disabled={bulkDeleting}>
               {bulkDeleting ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("datasets.delete.confirm")
               )}

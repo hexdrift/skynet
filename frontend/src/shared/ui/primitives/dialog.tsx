@@ -24,10 +24,10 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className,
       )}
-      style={{ zIndex: 50, position: "fixed", inset: 0, backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+      style={{ zIndex: 50 }}
       {...props}
     />
   );
@@ -69,7 +69,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="close-button absolute top-4 end-4"
+            className="close-button absolute top-2 end-2 [--close-btn-size:44px] lg:top-4 lg:end-4 lg:[--close-btn-size:26px]"
           >
             <X />
             <span className="sr-only">{msg("shared.dialog.close")}</span>
@@ -84,7 +84,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-start", className)}
+      className={cn("flex flex-col gap-2 text-start", className)}
       {...props}
     />
   );
@@ -101,7 +101,10 @@ function DialogFooter({
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("grid grid-cols-2 gap-2", className)}
+      className={cn(
+        "grid grid-cols-2 gap-2 [&_[data-slot=button]]:min-h-[44px] [&_[data-slot=button]]:w-full [&_[data-slot=button]]:justify-center lg:[&_[data-slot=button]]:min-h-0",
+        className,
+      )}
       {...props}
     >
       {children}

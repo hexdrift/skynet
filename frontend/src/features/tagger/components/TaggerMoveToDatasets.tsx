@@ -8,14 +8,8 @@ import { Button } from "@/shared/ui/primitives/button";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { Input } from "@/shared/ui/primitives/input";
 import { Label } from "@/shared/ui/primitives/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent, DialogFooter } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { isStorageQuotaError, moveTaggerSessionToLibrary } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { clearRecentSession } from "@/shared/lib/recent-session";
@@ -94,14 +88,25 @@ export function TaggerMoveToDatasets({
       }
       setMoving(false);
     }
-  }, [moving, name, defaultName, data, columns, annotations, config, provenance, sessionId, router]);
+  }, [
+    moving,
+    name,
+    defaultName,
+    data,
+    columns,
+    annotations,
+    config,
+    provenance,
+    sessionId,
+    router,
+  ]);
 
   return (
     <>
       <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Database className="size-5" />
+          <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-muted-foreground [&_svg]:size-4">
+            <Database className="size-4" />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-medium text-foreground">{msg("tagger.move.title")}</p>
@@ -122,11 +127,11 @@ export function TaggerMoveToDatasets({
       </div>
 
       <Dialog open={open} onOpenChange={(v) => !moving && setOpen(v)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{msg("tagger.move.confirm_title")}</DialogTitle>
-            <DialogDescription>{msg("tagger.move.confirm_body")}</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+          <DialogTitleRow
+            title={msg("tagger.move.confirm_title")}
+            description={msg("tagger.move.confirm_body")}
+          />
           <div className="space-y-2">
             <Label htmlFor="move-dataset-name">{msg("tagger.library.name_label")}</Label>
             <Input
@@ -141,9 +146,15 @@ export function TaggerMoveToDatasets({
             <Button variant="outline" onClick={() => setOpen(false)} disabled={moving}>
               {msg("tagger.library.name_cancel")}
             </Button>
-            <Button onClick={() => void handleMove()} disabled={moving} className="gap-1.5">
-              {moving && <CircleNotch className="size-4 animate-spin" />}
-              {msg("tagger.move.cta")}
+            <Button onClick={() => void handleMove()} disabled={moving}>
+              {moving ? (
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+              ) : (
+                msg("tagger.move.cta")
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

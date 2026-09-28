@@ -1,5 +1,4 @@
 import { AnimatePresence, motion } from "framer-motion";
-import * as React from "react";
 import { Trash, X } from "@/shared/ui/icons";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { TERMS } from "@/shared/lib/terms";
@@ -35,7 +34,7 @@ export function BulkActionBar({
           data-tutorial="bulk-action-bar"
         >
           <div className="flex max-w-[92vw] flex-wrap items-center justify-center gap-1 rounded-full border border-border/60 bg-background/95 backdrop-blur-xl px-3 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
-            <span className="min-w-0 px-1 text-sm text-foreground">
+            <span className="min-w-0 px-1 text-sm tabular-nums text-foreground">
               {selectedCount === 1 ? (
                 <>
                   {msg("auto.features.dashboard.components.bulkactionbar.1")}
@@ -45,12 +44,11 @@ export function BulkActionBar({
               ) : (
                 <>
                   {msg("auto.features.dashboard.components.bulkactionbar.3")}
-                  <span className="font-semibold tabular-nums">{selectedCount}</span>{" "}
-                  {TERMS.optimizationPlural}
+                  {selectedCount} {TERMS.optimizationPlural}
                 </>
               )}
             </span>
-            <div className="mx-1 h-5 w-px bg-border/60" />
+            <div aria-hidden="true" className="mx-1 h-5 w-px bg-border/70" />
             <TooltipButton
               tooltip={msg("auto.features.dashboard.components.bulkactionbar.4")}
               side="top"
@@ -59,14 +57,7 @@ export function BulkActionBar({
               <button
                 type="button"
                 onClick={onClear}
-                className="close-button"
-                style={
-                  {
-                    "--close-btn-size": "44px",
-                    "--close-btn-radius": "9999px",
-                    "--close-btn-icon": "16px",
-                  } as React.CSSProperties
-                }
+                className="close-button [--close-btn-size:32px] [--close-btn-radius:9999px] [--close-btn-icon:16px]"
                 aria-label={msg("auto.features.dashboard.components.bulkactionbar.literal.1")}
               >
                 <X />

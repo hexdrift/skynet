@@ -33,9 +33,15 @@ import {
   MagnifyingGlassPlus,
   X,
 } from "@/shared/ui/icons";
-import { Button } from "@/shared/ui/primitives/button";
+import {
+  CanvasControlButton,
+  CanvasControlDivider,
+  CanvasControlGroup,
+  CanvasZoomReadout,
+} from "@/shared/ui/canvas-control-button";
 import { Label } from "@/shared/ui/primitives/label";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { readOnlyEditorHeight } from "@/shared/ui/code-editor-height";
 import { cn } from "@/shared/lib/utils";
 import { msg } from "@/shared/lib/messages";
 import { autoLayoutSpec } from "@/features/submit/workflow/model";
@@ -165,15 +171,15 @@ function GraphView({ spec }: { spec: WorkflowSpec }) {
             <Background gap={16} size={1.25} color="#E3D9CB" />
             <ViewControls />
             <Panel position="top-right" className="!m-3">
-              <div className="flex items-center overflow-hidden rounded-lg border border-border/60 bg-background/95 shadow-sm backdrop-blur">
-                <ControlButton
+              <CanvasControlGroup>
+                <CanvasControlButton
                   icon={fullscreen ? ArrowsIn : ArrowsOut}
                   label={msg(
                     fullscreen ? "workflow.toolbar.exit_fullscreen" : "workflow.toolbar.fullscreen",
                   )}
                   onClick={() => setFullscreen((f) => !f)}
                 />
-              </div>
+              </CanvasControlGroup>
             </Panel>
             <Panel position="bottom-center" className="pointer-events-none !m-3">
               <span
@@ -225,60 +231,32 @@ function ViewControls() {
   const zoom = useStore((s) => s.transform[2]);
   return (
     <Panel position="bottom-left" className="!m-3">
-      <div className="flex items-center overflow-hidden rounded-lg border border-border/60 bg-background/95 shadow-sm backdrop-blur">
-        <ControlButton
+      <CanvasControlGroup>
+        <CanvasControlButton
           icon={MagnifyingGlassMinus}
           label={msg("workflow.controls.zoom_out")}
           onClick={() => zoomOut({ duration: 150 })}
         />
-        <button
-          type="button"
+        <CanvasZoomReadout
+          zoom={zoom}
+          label={msg("workflow.controls.zoom_reset")}
           onClick={() => zoomTo(1, { duration: 200 })}
-          title={msg("workflow.controls.zoom_reset")}
-          className="h-[44px] min-w-12 cursor-pointer px-1 text-center text-[0.6875rem] font-medium tabular-nums text-muted-foreground transition-colors hover:text-foreground sm:h-7 [@media(hover:none)_and_(pointer:coarse)]:h-[44px]"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <ControlButton
+        />
+        <CanvasControlButton
           icon={MagnifyingGlassPlus}
           label={msg("workflow.controls.zoom_in")}
           onClick={() => zoomIn({ duration: 150 })}
         />
-        <div className="h-4 w-px bg-border/70" />
-        <ControlButton
+        <CanvasControlDivider />
+        <CanvasControlButton
           icon={ArrowCounterClockwise}
           label={msg("workflow.controls.reset")}
           onClick={() => fitView({ ...FIT_VIEW, duration: 300 })}
         />
-      </div>
+      </CanvasControlGroup>
     </Panel>
   );
 }
-
-function ControlButton({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="flex size-[44px] cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
-    >
-      <Icon className="size-3.5" />
-    </button>
-  );
-}
-
-const codeHeight = (code: string): string =>
-  `${Math.min((code.split("\n").length + 1) * 19.6 + 8, 340)}px`;
 
 /** Read-only details for the clicked node, mirroring the editor inspector's layout. */
 function NodeDetails({ spec, onClose }: { spec: WorkflowNodeSpec; onClose: () => void }) {
@@ -293,15 +271,14 @@ function NodeDetails({ spec, onClose }: { spec: WorkflowNodeSpec; onClose: () =>
             {msg(`workflow.inspector.kind.${spec.kind}`)}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
+        <button
+          type="button"
           onClick={onClose}
-          className="min-h-[44px] shrink-0 text-muted-foreground hover:text-foreground sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
+          className="close-button shrink-0"
           aria-label={msg("workflow.inspector.close")}
         >
-          <X className="size-3.5" />
-        </Button>
+          <X />
+        </button>
       </div>
 
       <div className="space-y-4 px-4 py-3">
@@ -325,7 +302,7 @@ function NodeDetails({ spec, onClose }: { spec: WorkflowNodeSpec; onClose: () =>
               <CodeEditor
                 value={spec.signature_code}
                 onChange={() => {}}
-                height={codeHeight(spec.signature_code)}
+                height={readOnlyEditorHeight(spec.signature_code, { maxPx: 340 })}
                 readOnly
               />
             </Section>
@@ -346,7 +323,7 @@ function NodeDetails({ spec, onClose }: { spec: WorkflowNodeSpec; onClose: () =>
               <CodeEditor
                 value={spec.transform_code}
                 onChange={() => {}}
-                height={codeHeight(spec.transform_code)}
+                height={readOnlyEditorHeight(spec.transform_code, { maxPx: 340 })}
                 readOnly
               />
             </Section>

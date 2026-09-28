@@ -23,6 +23,8 @@ import {
   SheetDescription,
 } from "@/shared/ui/primitives/sheet";
 import { SkynetDatePicker } from "@/shared/ui/skynet-date-picker";
+import { Button } from "@/shared/ui/primitives/button";
+import { CountPill } from "@/shared/ui/count-badge";
 
 interface FiltersDrawerProps {
   open: boolean;
@@ -125,9 +127,9 @@ export function FiltersDrawer({
               type="button"
               onClick={() => onOpenChange(false)}
               aria-label={msg("explore.filters.close")}
-              className="inline-flex size-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg text-foreground/55 transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45 lg:size-9"
+              className="close-button shrink-0"
             >
-              <X className="size-4" aria-hidden="true" />
+              <X aria-hidden="true" />
             </button>
           </SheetHeader>
 
@@ -206,21 +208,18 @@ export function FiltersDrawer({
           </div>
 
           <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-background px-6 py-4">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="lg"
               onClick={onClearAll}
               disabled={totalActive === 0}
-              className="inline-flex items-center justify-center rounded-lg px-3 py-2 text-[13px] text-foreground/65 transition-[background-color,color] cursor-pointer hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:text-foreground/30 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
             >
               {msg("explore.filters.clear")}
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="inline-flex items-center justify-center rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-colors cursor-pointer hover:bg-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
-            >
+            </Button>
+            <Button type="button" size="lg" onClick={() => onOpenChange(false)}>
               {msg("explore.filters.apply")}
-            </button>
+            </Button>
           </div>
         </div>
       </SheetContent>
@@ -268,8 +267,7 @@ function FilterSection({
           <span>{title}</span>
         </h3>
         {active && (
-          <span
-            className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10.5px] font-medium tabular-nums text-foreground/60"
+          <CountPill
             aria-label={formatMsg(
               selectedCount === 1
                 ? "explore.filters.section.selected"
@@ -283,7 +281,7 @@ function FilterSection({
                 : "explore.filters.section.selected_many",
               { n: selectedCount },
             )}
-          </span>
+          </CountPill>
         )}
       </div>
       {children}

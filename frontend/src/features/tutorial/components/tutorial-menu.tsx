@@ -105,7 +105,7 @@ export function TutorialMenu() {
         <p className="px-4 pb-1.5 pt-1 text-[0.6875rem] leading-relaxed text-muted-foreground">
           {msg("tutorial.menu.subtitle")}
         </p>
-        <div role="separator" className="mx-3 mb-1 h-px bg-border/40" />
+        <div role="separator" className="mx-3 mb-1 h-px bg-border/60" />
         {TRACKS.map(({ id, icon: Icon, nameKey, descKey }) => (
           <TrackItem
             key={id}

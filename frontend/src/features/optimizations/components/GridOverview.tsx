@@ -1,5 +1,6 @@
 "use client";
 
+import { ProgressBar } from "@/shared/ui/progress-bar";
 import { memo, useMemo, useState } from "react";
 import {
   ArrowCounterClockwise,
@@ -306,11 +307,12 @@ function GridOverviewImpl({
                   {selectedPair ? pairLabel(selectedPair) : "—"}
                 </span>
                 <button
+                  type="button"
                   onClick={() => setPairFilter(null)}
-                  className="flex size-[44px] items-center justify-center rounded-md text-[#3D2E22]/40 transition-colors hover:bg-[#3D2E22]/10 hover:text-[#3D2E22] cursor-pointer sm:size-5 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                  className="close-button [--close-btn-size:20px] [--close-btn-radius:6px] [--close-btn-icon:12px]"
                   aria-label={msg("auto.features.optimizations.components.gridoverview.literal.1")}
                 >
-                  <X className="size-3" />
+                  <X />
                 </button>
               </span>
             </div>
@@ -318,7 +320,7 @@ function GridOverviewImpl({
           {scatterPoints.length > 0 && (
             <Card className="mb-4">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">
+                <CardTitle className="text-base flex items-center gap-2">
                   <HelpTip
                     text={msg("auto.features.optimizations.components.gridoverview.literal.2")}
                   >
@@ -451,7 +453,7 @@ function GridOverviewImpl({
                         key={key}
                         type="button"
                         onClick={() => toggleScatterSeries(key)}
-                        className={`inline-flex min-h-[44px] items-center gap-1.5 cursor-pointer transition-colors sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px] ${isHidden ? "text-muted-foreground/50" : "text-muted-foreground hover:text-foreground"}`}
+                        className={`inline-flex  items-center gap-1.5 cursor-pointer transition-colors   ${isHidden ? "text-muted-foreground/50" : "text-muted-foreground hover:text-foreground"}`}
                         aria-pressed={!isHidden}
                       >
                         <span
@@ -484,7 +486,7 @@ function GridOverviewImpl({
               <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold">
+                    <CardTitle className="text-base flex items-center gap-2">
                       <HelpTip text={tip("grid.score_comparison")}>
                         {msg("auto.features.optimizations.components.gridoverview.10")}
                       </HelpTip>
@@ -640,7 +642,7 @@ function GridOverviewImpl({
                             key={key}
                             type="button"
                             onClick={() => togglePairSeries(key)}
-                            className={`flex min-h-[44px] items-center gap-1.5 text-[0.625rem] cursor-pointer transition-colors sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px] ${isHidden ? "text-muted-foreground/50" : "text-muted-foreground hover:text-foreground"}`}
+                            className={`flex  items-center gap-1.5 text-[0.625rem] cursor-pointer transition-colors   ${isHidden ? "text-muted-foreground/50" : "text-muted-foreground hover:text-foreground"}`}
                             aria-pressed={!isHidden}
                           >
                             <span
@@ -664,7 +666,7 @@ function GridOverviewImpl({
 
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold">
+                    <CardTitle className="text-base flex items-center gap-2">
                       <HelpTip text={tip("grid.quality_speed_combined")}>
                         {msg("auto.features.optimizations.components.gridoverview.11")}
                       </HelpTip>
@@ -820,7 +822,7 @@ function GridOverviewImpl({
                             key={key}
                             type="button"
                             onClick={() => toggleCombinedSeries(key)}
-                            className={`flex min-h-[44px] items-center gap-1.5 text-[0.625rem] cursor-pointer transition-colors sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px] ${isHidden ? "text-muted-foreground/50" : "text-muted-foreground hover:text-foreground"}`}
+                            className={`flex  items-center gap-1.5 text-[0.625rem] cursor-pointer transition-colors   ${isHidden ? "text-muted-foreground/50" : "text-muted-foreground hover:text-foreground"}`}
                             aria-pressed={!isHidden}
                           >
                             <span
@@ -846,7 +848,7 @@ function GridOverviewImpl({
               {pairRespTimeFiltered.length > 0 && (
                 <Card className="mt-4">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold">
+                    <CardTitle className="text-base flex items-center gap-2">
                       <HelpTip text={tip("grid.avg_response_time_per_pair")}>
                         {msg("auto.features.optimizations.components.gridoverview.12")}
                       </HelpTip>
@@ -1075,8 +1077,8 @@ function GridOverviewImpl({
                   >
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="size-[44px] shrink-0 text-muted-foreground/50 hover:text-foreground sm:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                      size="icon-xs"
+                      className="shrink-0 text-muted-foreground/50 hover:text-foreground"
                       disabled={rerunBusy}
                       aria-label={msg(
                         pairResumable ? "optimization.pair.resume" : "optimization.pair.restart",
@@ -1106,8 +1108,8 @@ function GridOverviewImpl({
                 >
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="size-[44px] shrink-0 text-muted-foreground/50 hover:text-red-600 sm:size-7 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
+                    size="icon-xs"
+                    className="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     aria-label={msg(
                       "auto.features.optimizations.components.gridoverview.literal.29",
                     )}
@@ -1124,16 +1126,13 @@ function GridOverviewImpl({
               </div>
 
               {!pr.error && (
-                <div className="mt-2.5 h-1 rounded-full bg-border/30 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${barRatio * 100}%`,
-                      background: isOverall ? "#3D2E22" : "#C8A882",
-                      opacity: isOverall ? 0.6 : 0.3,
-                    }}
-                  />
-                </div>
+                <ProgressBar
+                  value={barRatio * 100}
+                  size="sm"
+                  color={isOverall ? "#3D2E22" : "#C8A882"}
+                  className="mt-2.5"
+                  fillClassName={isOverall ? "opacity-60" : "opacity-30"}
+                />
               )}
             </div>
           );
@@ -1155,22 +1154,15 @@ function GridOverviewImpl({
             }
           />
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPendingDelete(null)}
-              disabled={deleting}
-              className="min-h-[44px] w-full justify-center sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
-            >
+            <Button variant="outline" onClick={() => setPendingDelete(null)} disabled={deleting}>
               {msg("auto.features.optimizations.components.gridoverview.22")}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmDelete}
-              disabled={deleting}
-              className="min-h-[44px] w-full justify-center sm:min-h-0 [@media(hover:none)_and_(pointer:coarse)]:min-h-[44px]"
-            >
+            <Button variant="destructive" onClick={handleConfirmDelete} disabled={deleting}>
               {deleting ? (
-                <CircleNotch className="size-4 animate-spin" />
+                <CircleNotch
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
               ) : (
                 msg("auto.features.optimizations.components.gridoverview.literal.30")
               )}

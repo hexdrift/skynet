@@ -1,5 +1,6 @@
 "use client";
 
+import { ProgressBar, StorageUsageBar } from "@/shared/ui/progress-bar";
 import * as React from "react";
 import { CaretLeft, CaretRight, HardDrive } from "@/shared/ui/icons";
 import { getStorageUsage, type StorageUsageResponse } from "@/shared/lib/api";
@@ -96,12 +97,7 @@ export function StorageView() {
             {formatMsg("storage.page.free", { free: formatStorageSize(free) })}
           </span>
         </div>
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#E5DDD4]">
-          <div
-            className="h-full rounded-full bg-[#3D2E22]/70 transition-[width] duration-500 ease-out"
-            style={{ width: `${usagePct}%` }}
-          />
-        </div>
+        <StorageUsageBar value={usagePct} over={quota > 0 && used > quota} className="mt-3" />
         <p className="mt-2 text-xs tabular-nums text-muted-foreground">
           {formatMsg("storage.page.percent", {
             percent: used > 0 ? Math.max(1, Math.round(usagePct)) : 0,
@@ -112,7 +108,7 @@ export function StorageView() {
       <section className="mt-10">
         <h2 className="text-sm font-semibold text-foreground">{msg("storage.breakdown.title")}</h2>
         {breakdown.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">{msg("storage.breakdown.empty")}</p>
+          <EmptyState variant="list" title={msg("storage.breakdown.empty")} />
         ) : (
           <ul className="mt-3 flex flex-col gap-1.5">
             {breakdown.map(([key, bytes]) => {
@@ -120,12 +116,12 @@ export function StorageView() {
               const label = labelKey ? msg(labelKey) : key;
               const pct = used > 0 ? Math.max(2, (bytes / used) * 100) : 0;
               const bar = (
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#E5DDD4]/60">
-                  <div
-                    className="h-full rounded-full bg-[#3D2E22]/30"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
+                <ProgressBar
+                  value={pct}
+                  size="sm"
+                  className="mt-1 bg-[#E5DDD4]/60"
+                  fillClassName="bg-[#3D2E22]/30"
+                />
               );
 
               return (
@@ -134,7 +130,7 @@ export function StorageView() {
                     type="button"
                     onClick={() => setOpenCategory(key)}
                     aria-label={formatMsg("storage.category.open", { category: label })}
-                    className="group min-h-12 w-full cursor-pointer rounded-lg px-2 py-2 text-start transition-colors duration-150 hover:bg-muted/40"
+                    className="group min-h-12 w-full cursor-pointer rounded-lg px-2 py-2 text-start transition-colors duration-150 hover:bg-muted/50"
                   >
                     <div className="flex items-baseline justify-between gap-2 text-sm">
                       <span className="flex items-center gap-1.5 text-foreground">

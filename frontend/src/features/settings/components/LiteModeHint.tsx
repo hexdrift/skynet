@@ -74,9 +74,9 @@ export function LiteModeHint() {
         type="button"
         onClick={dismiss}
         aria-label={msg("app.shell.lite.hint.dismiss_aria")}
-        className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
+        className="close-button shrink-0"
       >
-        <X className="size-4" aria-hidden="true" />
+        <X aria-hidden="true" />
       </button>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/shared/ui/primitives/badge";
 import { useState, useCallback, useEffect } from "react";
 import {
   UploadSimple,
@@ -10,7 +11,6 @@ import {
   Trash,
   CaretLeft,
   CaretRight,
-  Check,
   Books,
 } from "@/shared/ui/icons";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,6 +30,8 @@ import { parseDatasetFile } from "@/shared/lib/parse-dataset";
 import { getDatasetRows } from "@/shared/lib/api";
 import { registerTutorialHook, registerTutorialQuery } from "@/features/tutorial";
 import { DatasetPickerDialog } from "@/features/datasets";
+import { WizardStepper } from "@/shared/ui/wizard-stepper";
+import { CheckboxIndicator } from "@/shared/ui/select-checkbox";
 import { useUserPrefs } from "@/features/settings";
 import type {
   AnnotationMode,
@@ -42,6 +44,8 @@ import { isTaggerAssistEnabled } from "../lib/feature-flag";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
+import { Input } from "@/shared/ui/primitives/input";
+import { TOUCH_FIELD } from "@/shared/ui/touch";
 
 interface TaggerSetupProps {
   onStart: (
@@ -373,7 +377,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const steps = [
     <Card key="data">
       <CardHeader>
-        <CardTitle className="text-base">
+        <CardTitle className="text-lg">
           <HelpTip text={tip("tagger.upload_file")}>
             {msg("auto.features.tagger.components.taggersetup.1")}
           </HelpTip>
@@ -424,7 +428,11 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         {libraryLoading && (
           <p className="text-sm text-muted-foreground">{msg("tagger.setup.library_loading")}</p>
         )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-xs leading-snug text-destructive">
+            {error}
+          </p>
+        )}
 
         <div className="flex items-center gap-3">
           <Separator className="flex-1" />
@@ -464,21 +472,17 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                     <button
                       key={`${col}-${i}`}
                       type="button"
-                      aria-pressed={selected}
+                      role="checkbox"
+                      aria-checked={selected}
                       onClick={() => toggleInputCol(col)}
                       className={cn(
-                        "flex min-h-[44px] w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all",
+                        "group flex min-h-[44px] w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all",
                         selected
                           ? "bg-primary/10 border border-primary/40 text-primary font-medium"
                           : "border border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                       )}
                     >
-                      <span
-                        className="size-3 rounded-[3px] border-2 flex items-center justify-center shrink-0"
-                        style={{ borderColor: selected ? "var(--primary)" : "var(--border)" }}
-                      >
-                        {selected && <Check className="size-2 text-primary" />}
-                      </span>
+                      <CheckboxIndicator checked={selected} />
                       <span className="font-mono text-xs truncate min-w-0" dir="ltr">
                         {col}
                       </span>
@@ -498,7 +502,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const taskCard = (
     <Card key="task" data-tutorial={assistAvailable ? undefined : "tagger-modes"}>
       <CardHeader>
-        <CardTitle className="text-base">
+        <CardTitle className="text-lg">
           <HelpTip text={tip("tagger.mode")}>
             {msg("auto.features.tagger.components.taggersetup.5")}
           </HelpTip>
@@ -551,11 +555,11 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                   {msg("auto.features.tagger.components.taggersetup.6")}
                 </HelpTip>
               </p>
-              <input
+              <Input
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                className="min-h-[44px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className={TOUCH_FIELD}
                 placeholder={msg("auto.features.tagger.components.taggersetup.literal.15")}
                 dir="auto"
               />
@@ -580,11 +584,11 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
               </p>
               {categories.map((cat) => (
                 <div key={cat.id} className="flex items-center gap-2">
-                  <input
+                  <Input
                     type="text"
                     value={cat.label}
                     onChange={(e) => updateCategory(cat.id, e.target.value)}
-                    className="min-h-[44px] flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    className={cn(TOUCH_FIELD, "flex-1")}
                     placeholder={msg("auto.features.tagger.components.taggersetup.literal.16")}
                     dir="auto"
                   />
@@ -594,7 +598,6 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                     onClick={() => removeCategory(cat.id)}
                     disabled={categories.length <= 2}
                     aria-label={msg("auto.features.tagger.components.taggersetup.16")}
-                    className="size-[44px] lg:size-7"
                   >
                     <Trash className="size-3.5 text-muted-foreground" />
                   </Button>
@@ -620,7 +623,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
     steps.push(
       <Card key="assist" data-tutorial="tagger-modes">
         <CardHeader>
-          <CardTitle className="text-base">{msg("tagger.assist.setup.title")}</CardTitle>
+          <CardTitle className="text-lg">{msg("tagger.assist.setup.title")}</CardTitle>
           <CardDescription>{msg("tagger.assist.setup.description")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
@@ -648,9 +651,9 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
                     {opt.label}
                   </span>
                   {opt.recommended && (
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    <Badge variant="tint" size="sm">
                       {msg("tagger.assist.setup.recommended")}
-                    </span>
+                    </Badge>
                   )}
                 </span>
                 <span className="text-xs text-muted-foreground">{opt.desc}</span>
@@ -672,65 +675,13 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-8 -mt-2 md:-mt-4" data-tutorial="tagger-setup">
-      <div className="relative">
-        <div className="flex items-center justify-between">
-          {activeSteps.map((s, i) => {
-            const reachable = i <= maxReachableStep;
-            const completed = i < step && validateStep(i);
-            const active = i === step;
-            return (
-              <div key={s.id} className="flex flex-col items-center relative z-10 flex-1">
-                <button
-                  type="button"
-                  onClick={() => handleTabClick(i)}
-                  disabled={!reachable && i > step}
-                  className={cn(
-                    "relative flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer",
-                    "size-[44px] text-sm font-semibold lg:size-10",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(124,99,80,0.4)] scale-110"
-                      : completed
-                        ? "bg-primary/15 text-primary hover:bg-primary/25"
-                        : reachable
-                          ? "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                          : "bg-muted/50 text-muted-foreground/30 cursor-not-allowed",
-                  )}
-                >
-                  {completed ? <Check className="size-4" /> : i + 1}
-                  {active && (
-                    <motion.span
-                      layoutId="tagger-step-ring"
-                      className="absolute inset-0 rounded-full border-2 border-primary"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                </button>
-                <span
-                  className={cn(
-                    "mt-2 text-[0.6875rem] font-medium transition-colors duration-200 hidden sm:block text-center",
-                    active
-                      ? "text-foreground"
-                      : completed
-                        ? "text-primary"
-                        : "text-muted-foreground",
-                  )}
-                >
-                  {s.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="absolute top-[18px] sm:top-5 inset-x-[10%] h-[2px] bg-muted -z-0 rounded-full">
-          <motion.div
-            className="h-full rounded-full"
-            style={{ background: "var(--gradient-progress)" }}
-            initial={{ width: 0 }}
-            animate={{ width: `${(step / (activeSteps.length - 1)) * 100}%` }}
-            transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
-          />
-        </div>
-      </div>
+      <WizardStepper
+        steps={activeSteps}
+        step={step}
+        maxReachableStep={maxReachableStep}
+        validateStep={validateStep}
+        onSelect={handleTabClick}
+      />
 
       {/* x-clip (not hidden): only the horizontal slide animation needs
           clipping — y stays visible so focus rings and shadows aren't cut. */}
@@ -754,12 +705,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
           modes, straight to annotating for manual) — same footer, no separate
           "start" button. */}
       <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          onClick={goPrev}
-          disabled={step === 0}
-          className="min-h-[44px] gap-2 lg:min-h-0"
-        >
+        <Button variant="outline" onClick={goPrev} disabled={step === 0} className="gap-2">
           <BackIcon className="h-4 w-4" />
           {msg("auto.features.tagger.components.taggersetup.13")}
         </Button>
@@ -769,7 +715,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
         <Button
           onClick={isLastStep ? handleStart : handleNext}
           disabled={isLastStep ? !canStart() : !validateStep(step)}
-          className="min-h-[44px] gap-2 lg:min-h-0"
+          className="gap-2"
         >
           {msg("auto.features.tagger.components.taggersetup.14")}
           <NextIcon className="h-4 w-4" />

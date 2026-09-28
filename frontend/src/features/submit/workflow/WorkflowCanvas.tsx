@@ -70,7 +70,17 @@ import {
 } from "@/shared/ui/icons";
 
 import { Button } from "@/shared/ui/primitives/button";
+import {
+  CanvasControlButton,
+  CanvasControlDivider,
+  CanvasControlGroup,
+  CanvasZoomReadout,
+} from "@/shared/ui/canvas-control-button";
 import { cn } from "@/shared/lib/utils";
+import {
+  COMPACT_POPOVER_ICON_CLASS,
+  COMPACT_POPOVER_ITEM_CLASS,
+} from "@/shared/ui/compact-popover-menu";
 import type { WorkflowDryRunStreamHandlers } from "@/shared/lib/api";
 import { formatMsg, msg } from "@/shared/lib/messages";
 import type { WorkflowDryRunResponse, WorkflowNodeSpec, WorkflowSpec } from "@/shared/types/api";
@@ -824,7 +834,7 @@ function CanvasInner({
               ref={addNodeBtnRef}
               size="sm"
               variant="outline"
-              className="h-[44px] gap-1.5 px-2.5 text-xs lg:h-7"
+              className="h-7 gap-1.5 px-2.5 text-xs"
               onClick={openAddMenuFromToolbar}
             >
               <Plus className="size-3.5" />
@@ -845,7 +855,7 @@ function CanvasInner({
           <Button
             size="sm"
             variant="outline"
-            className="h-[44px] gap-1.5 text-xs lg:h-7"
+            className="h-7 gap-1.5 text-xs"
             title={dryRun.disabledReason ?? undefined}
             onClick={() => {
               // Always clickable: a blocked run explains itself instead of
@@ -1028,7 +1038,7 @@ function CanvasInner({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.08 } }}
             transition={{ duration: 0.12, ease: "easeOut" }}
-            className="absolute z-30 min-w-44 rounded-lg border border-border/70 bg-popover p-1 text-popover-foreground shadow-xl"
+            className="absolute z-30 min-w-44 rounded-xl border border-border/60 bg-background/95 py-1.5 shadow-lg backdrop-blur-xl"
             style={{
               insetInlineStart: menu.x,
               top: menu.y,
@@ -1050,7 +1060,7 @@ function CanvasInner({
                 ))}
                 {!menu.pending && (
                   <>
-                    <div className="mx-1 my-1 h-px bg-border/70" />
+                    <div role="separator" className="mx-1 my-1 h-px bg-border/60" />
                     <MenuItem
                       icon={GridFour}
                       label={msg("workflow.toolbar.tidy")}
@@ -1073,7 +1083,7 @@ function CanvasInner({
                     setMenu(null);
                   }}
                 />
-                <div className="mx-1 my-1 h-px bg-border/70" />
+                <div role="separator" className="mx-1 my-1 h-px bg-border/60" />
                 <MenuItem
                   icon={Trash}
                   label={msg("workflow.menu.delete")}
@@ -1129,11 +1139,11 @@ function MenuItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-h-[44px] w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors lg:min-h-0",
-        danger ? "text-destructive hover:bg-destructive/10" : "text-foreground hover:bg-muted",
+        COMPACT_POPOVER_ITEM_CLASS,
+        danger && "text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10",
       )}
     >
-      <Icon className="size-3.5 shrink-0" />
+      <Icon className={cn(COMPACT_POPOVER_ICON_CLASS, danger && "text-destructive")} />
       <span dir="auto">{label}</span>
     </button>
   );
@@ -1144,57 +1154,32 @@ function ZoomControls() {
   const zoom = useStore((s) => s.transform[2]);
   return (
     <Panel position="bottom-left" className="!m-3">
-      <div className="flex items-center overflow-hidden rounded-lg border border-border/60 bg-background/95 shadow-sm backdrop-blur">
-        <ControlButton
+      <CanvasControlGroup>
+        <CanvasControlButton
           icon={MagnifyingGlassMinus}
           label={msg("workflow.controls.zoom_out")}
           onClick={() => zoomOut({ duration: 150 })}
         />
-        <button
-          type="button"
+        <CanvasZoomReadout
+          zoom={zoom}
+          label={msg("workflow.controls.zoom_reset")}
           onClick={() => zoomTo(1, { duration: 200 })}
-          title={msg("workflow.controls.zoom_reset")}
-          className="h-[44px] min-w-[44px] cursor-pointer px-1 text-center text-[0.6875rem] font-medium tabular-nums text-muted-foreground transition-colors hover:text-foreground lg:h-7 lg:min-w-12"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <ControlButton
+        />
+        <CanvasControlButton
           icon={MagnifyingGlassPlus}
           label={msg("workflow.controls.zoom_in")}
           onClick={() => zoomIn({ duration: 150 })}
         />
-        <div className="h-4 w-px bg-border/70" />
-        <ControlButton
+        <CanvasControlDivider />
+        <CanvasControlButton
           icon={ArrowCounterClockwise}
           label={msg("workflow.controls.reset")}
           // Back to the original framing — the same fit the canvas opened
           // with (mirrors the trajectory tree's reset control).
           onClick={() => fitView({ ...FIT_VIEW, duration: 300 })}
         />
-      </div>
+      </CanvasControlGroup>
     </Panel>
-  );
-}
-
-function ControlButton({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="flex size-[44px] cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:size-7"
-    >
-      <Icon className="size-3.5" />
-    </button>
   );
 }
 
@@ -1216,7 +1201,7 @@ function ToolbarButton({
       size="sm"
       variant="ghost"
       className={cn(
-        "h-[44px] gap-1.5 px-2 text-xs lg:h-7",
+        "h-7 gap-1.5 px-2 text-xs",
         active ? "bg-[#3D2E22]/8 text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
       onClick={onClick}
@@ -1266,10 +1251,10 @@ function DryRunResultBar({
       <button
         type="button"
         onClick={onDismiss}
-        className="shrink-0 text-muted-foreground hover:text-foreground"
+        className="close-button shrink-0"
         aria-label={msg("workflow.dryrun.dismiss")}
       >
-        <X className="size-3.5" />
+        <X />
       </button>
     </div>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineErrorRow } from "@/shared/ui/inline-error-row";
+import { Button } from "@/shared/ui/primitives/button";
 import * as React from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
@@ -210,15 +212,7 @@ function ListPane({
 }) {
   const isPhone = useIsPhone();
   if (response.error) {
-    return (
-      <div
-        role="status"
-        className="mx-auto flex max-w-2xl items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-[13px] text-destructive"
-      >
-        <Warning className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <span>{msg("explore.results.error")}</span>
-      </div>
-    );
+    return <InlineErrorRow message={msg("explore.results.error")} className="mx-auto max-w-2xl" />;
   }
 
   if (response.loading && response.results.length === 0) {
@@ -284,24 +278,16 @@ function ListPane({
         {(query.text.trim().length > 0 || hasFilters) && (
           <div className="flex flex-wrap items-center justify-center gap-2">
             {query.text.trim().length > 0 && (
-              <button
-                type="button"
-                onClick={onClearQuery}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-2 text-[12.5px] text-foreground/75 transition-colors cursor-pointer hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
-              >
+              <Button type="button" variant="outline" size="sm" onClick={onClearQuery}>
                 <Clock className="size-3.5" aria-hidden="true" />
                 {msg("explore.results.empty.show_recent")}
-              </button>
+              </Button>
             )}
             {hasFilters && (
-              <button
-                type="button"
-                onClick={onClearAll}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-2 text-[12.5px] text-foreground/75 transition-colors cursor-pointer hover:border-foreground/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8A882]/45"
-              >
+              <Button type="button" variant="outline" size="sm" onClick={onClearAll}>
                 <FunnelX className="size-3.5" aria-hidden="true" />
                 {msg("explore.results.empty.clear_filters")}
-              </button>
+              </Button>
             )}
           </div>
         )}

@@ -1,14 +1,10 @@
 "use client";
 
+import { ProgressBar, StorageUsageBar } from "@/shared/ui/progress-bar";
 import * as React from "react";
 import Link from "next/link";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/primitives/dialog";
+import { Dialog, DialogContent } from "@/shared/ui/primitives/dialog";
+import { DialogTitleRow } from "@/shared/ui/dialog-title-row";
 import { Button } from "@/shared/ui/primitives/button";
 import { formatMsg, msg, type MessageKey } from "@/shared/lib/messages";
 import { formatStorageSize } from "@/shared/lib/formatters";
@@ -49,19 +45,14 @@ export function StorageQuotaModal({ open, usage, loading, onClose }: StorageQuot
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{msg("storage.quota.title")}</DialogTitle>
-          <DialogDescription>{msg("storage.quota.body")}</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="w-[min(28rem,92vw)] max-w-[min(28rem,92vw)] sm:max-w-md">
+        <DialogTitleRow
+          title={msg("storage.quota.title")}
+          description={msg("storage.quota.body")}
+        />
 
         <div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#E5DDD4]">
-            <div
-              className="h-full rounded-full bg-[#3D2E22]/70 transition-[width] duration-500 ease-out"
-              style={{ width: `${usagePct}%` }}
-            />
-          </div>
+          <StorageUsageBar value={usagePct} over={quotaBytes > 0 && usedBytes > quotaBytes} />
           <p className="mt-1.5 text-end text-xs text-muted-foreground tabular-nums">
             {formatMsg("storage.quota.usage", {
               used: formatStorageSize(usedBytes),
@@ -90,12 +81,12 @@ export function StorageQuotaModal({ open, usage, loading, onClose }: StorageQuot
                           {formatStorageSize(bytes)}
                         </span>
                       </div>
-                      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#E5DDD4]/60">
-                        <div
-                          className="h-full rounded-full bg-[#3D2E22]/30"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+                      <ProgressBar
+                        value={pct}
+                        size="sm"
+                        className="mt-1 bg-[#E5DDD4]/60"
+                        fillClassName="bg-[#3D2E22]/30"
+                      />
                     </li>
                   );
                 })}
