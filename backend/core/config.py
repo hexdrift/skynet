@@ -565,6 +565,26 @@ class Settings(BaseSettings):
         ),
     )
 
+    @field_validator("code_agent_model", "generalist_agent_model", mode="before")
+    @classmethod
+    def _default_blank_agent_model(cls, value: object) -> object:
+        """Map a blank agent model id to the on-prem default alias.
+
+        The Helm chart and compose files export these keys as empty strings, and
+        an empty env var would otherwise override the field default and leave
+        the agent with no model at all.
+
+        Args:
+            value: Raw CODE_AGENT_MODEL / GENERALIST_AGENT_MODEL input.
+
+        Returns:
+            DEFAULT_AGENT_MODEL_ID when the value is a blank string, otherwise
+            the value unchanged.
+        """
+        if isinstance(value, str) and not value.strip():
+            return DEFAULT_AGENT_MODEL_ID
+        return value
+
     @field_validator("alert_min_level")
     @classmethod
     def _validate_alert_min_level(cls, v: str) -> str:

@@ -39,6 +39,8 @@ _SETTINGS_ENV_VARS = (
     "ALLOWED_ORIGINS",
     "LOG_LEVEL",
     "ADMIN_USERNAMES",
+    "CODE_AGENT_MODEL",
+    "GENERALIST_AGENT_MODEL",
 )
 
 
@@ -414,3 +416,21 @@ def test_settings_default_agent_models_use_shared_constant() -> None:
 
     assert s.code_agent_model == DEFAULT_AGENT_MODEL_ID
     assert s.generalist_agent_model == DEFAULT_AGENT_MODEL_ID
+
+
+@pytest.mark.parametrize("env_var", ["CODE_AGENT_MODEL", "GENERALIST_AGENT_MODEL"])
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_settings_blank_agent_model_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch, env_var: str, blank: str
+) -> None:
+    """A blank agent model env var (as the Helm chart exports) resolves to the on-prem default."""
+    monkeypatch.setenv(env_var, blank)
+    s = Settings(_env_file=None)
+    assert getattr(s, env_var.lower()) == DEFAULT_AGENT_MODEL_ID
+
+
+def test_settings_agent_model_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A non-blank agent model env var is kept as given."""
+    monkeypatch.setenv("GENERALIST_AGENT_MODEL", "openai/internal-llm")
+    s = Settings(_env_file=None)
+    assert s.generalist_agent_model == "openai/internal-llm"

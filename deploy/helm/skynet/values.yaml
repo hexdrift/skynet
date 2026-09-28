@@ -118,7 +118,8 @@ backend:
     # air-gap — use the bundled litellm cost map instead of fetching from GitHub on import.
     LITELLM_LOCAL_MODEL_COST_MAP: "True"
     # Set the agent models to ones your internal OpenAI-compatible gateway
-    # serves. An empty *_BASE_URL falls back to OPENAI_API_BASE.
+    # serves; an empty *_AGENT_MODEL uses the "openai/on-prem-default" alias.
+    # An empty *_BASE_URL falls back to OPENAI_API_BASE.
     CODE_AGENT_BASE_URL: ""
     CODE_AGENT_MODEL: ""
     GENERALIST_AGENT_BASE_URL: ""
