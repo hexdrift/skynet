@@ -166,6 +166,23 @@ class TestProbeMetricOnSample:
         assert probe.error is not None
         assert "kaboom" in probe.error
 
+    def test_large_result_returns_before_the_timeout(self) -> None:
+        """A ~3MB child result is drained while waiting instead of deadlocking the join."""
+        # Regression: the child blocks on the queue put until the parent reads,
+        # so join-then-read waited out the whole timeout and reported a false
+        # timeout for any result bigger than the pipe buffer.
+        probe = probe_metric_on_sample(
+            metric_code=("def metric(example, prediction, trace=None):\n    raise ValueError('x' * 3_000_000)\n"),
+            example_payload={"question": "q", "answer": "a"},
+            prediction_payload={"question": "q", "answer": "a"},
+            input_field_names=["question"],
+            timeout_seconds=20.0,
+        )
+
+        assert probe.result_kind == "error"
+        assert probe.error is not None
+        assert len(probe.error) == 3_000_000
+
     def test_broken_metric_code_surfaces_as_service_error(self) -> None:
         """A syntactically broken metric raises ``ServiceError`` from the probe entry-point."""
         with pytest.raises(ServiceError, match="syntax error"):
