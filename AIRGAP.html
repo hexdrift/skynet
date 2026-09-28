@@ -1739,6 +1739,11 @@ helm upgrade --install skynet deploy\helm\skynet ^
   </table>
   <p>Both agent model ids default to the <strong>inert alias</strong> <code>openai/on-prem-default</code> (<code>DEFAULT_AGENT_MODEL_ID</code>) — no gateway serves it, so unconfigured agents fail fast instead of silently reaching a public provider. Set every base URL to your internal gateway; the <code>*_MODEL</code> ids must exactly match models your gateway serves (the <code>gpt-5</code> value in the generated values file is only a placeholder). <code>TAGGER_ASSIST_MODEL</code> / <code>TAGGER_ASSIST_BASE_URL</code> are optional — left empty, the tagging assist reuses the generalist pair, so it stays internal automatically. The embedding model placeholder is <code>jina-embeddings-v4</code> and must return at least 512 dimensions.</p>
 
+  <div class="callout">
+    <span class="label">TODO · On-premise</span>
+    <p>The generalist agent always calls its tools through OpenAI-style native function calling (<code>tools</code> / <code>tool_choice</code> in the request, <code>tool_calls</code> in the reply); there is no text-protocol fallback. The gateway and the model behind <code>GENERALIST_AGENT_MODEL</code> must support it. On vLLM that means launching with <code>--enable-auto-tool-choice --tool-call-parser &lt;parser&gt;</code> (the parser that matches the model family, e.g. <code>hermes</code> for Qwen); on a LiteLLM proxy the backing deployment must accept <code>tools</code>. Without it, agent turns fail instead of running tools.</p>
+  </div>
+
   <h4>Gateway flavor: id prefix + base-URL suffix</h4>
   <p>The runtime is gateway-agnostic, but the two strings you hand-type differ per flavor: the model-id <strong>prefix</strong> and the base-URL <strong>suffix</strong>. Pick yours with the <strong>LLM gateway</strong> selector above. In every case repoint <code>OPENAI_API_BASE</code> at the same internal gateway and leave <code>OPENROUTER_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> / <code>FIREWORKS_AI_API_KEY</code> unset — a wrong prefix or a public default <code>404</code>s (or phones home) the moment egress is blocked.</p>
 
@@ -1752,6 +1757,7 @@ OPENAI_API_KEY=<span class="s">&lt;proxy virtual/master key&gt;</span></pre>
   </div>
   <div data-gateway="vllm">
 <pre><span class="c"># vLLM — launch with --served-model-name; OpenAI-compatible /v1</span>
+<span class="c"># The generalist's model also needs --enable-auto-tool-choice --tool-call-parser &lt;parser&gt;</span>
 CODE_AGENT_MODEL=<span class="s">openai/&lt;served-model-name&gt;</span>
 CODE_AGENT_BASE_URL=<span class="s">http://vllm.corp.internal:8000/v1</span>
 GENERALIST_AGENT_MODEL=<span class="s">openai/&lt;served-model-name&gt;</span>
