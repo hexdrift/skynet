@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { searchPublicDashboard, type SearchResult, type SearchSort } from "@/shared/lib/api";
 
 export type ExploreCorpus = "mine" | "public" | "shared";
-export type SearchType = "semantic" | "lexical";
 
 export interface SearchQueryState {
   /** The text the user is typing — updates immediately, used to drive the input value. */
@@ -40,8 +39,6 @@ export interface SearchResponseState {
   error: string | null;
   /** True when the user has typed anything or applied any filter. */
   isActive: boolean;
-  /** Which backend branch served this response — drives the per-row badge. */
-  searchType: SearchType | null;
 }
 
 const VALID_SIZES = new Set([10, 30, 50]);
@@ -127,7 +124,7 @@ export interface SearchActions {
   clearAll: () => void;
 }
 
-export interface UseSemanticSearchOptions {
+export interface UseSearchOptions {
   /** Logged-in user's name; empty string when signed out. Drives Mine corpus fetch. */
   sessionUser: string;
   /**
@@ -138,7 +135,7 @@ export interface UseSemanticSearchOptions {
   sessionReady: boolean;
 }
 
-export function useSemanticSearch(opts: UseSemanticSearchOptions): {
+export function useSearch(opts: UseSearchOptions): {
   query: SearchQueryState;
   response: SearchResponseState;
   actions: SearchActions;
@@ -167,7 +164,6 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
     loading: false,
     error: null,
     isActive: false,
-    searchType: null,
   });
 
   const updateUrl = React.useCallback(
@@ -335,7 +331,6 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
         loading: false,
         error: null,
         isActive: active,
-        searchType: data.search_type ?? null,
       });
     };
 
@@ -346,7 +341,6 @@ export function useSemanticSearch(opts: UseSemanticSearchOptions): {
         loading: false,
         error: null,
         isActive: active,
-        searchType: null,
       });
     };
 

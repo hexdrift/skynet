@@ -48,8 +48,8 @@ $IMAGE_TAG              = Get-OrDefault 'IMAGE_TAG'              '0.1.0'
 $PULL_SECRET            = Get-OrDefault 'PULL_SECRET'            'artifactory-pull-secret'
 $BACKEND_REPOSITORY     = Get-OrDefault 'BACKEND_REPOSITORY'     'skynet/backend'
 $FRONTEND_REPOSITORY    = Get-OrDefault 'FRONTEND_REPOSITORY'    'skynet/frontend'
-$POSTGRES_REPOSITORY    = Get-OrDefault 'POSTGRES_REPOSITORY'    'pgvector/pgvector'
-$EXTERNAL_DB_HOST       = Get-OrDefault 'EXTERNAL_DB_HOST'       'pgvector.internal'
+$POSTGRES_REPOSITORY    = Get-OrDefault 'POSTGRES_REPOSITORY'    'postgres'
+$EXTERNAL_DB_HOST       = Get-OrDefault 'EXTERNAL_DB_HOST'       'postgres.internal'
 $EXTERNAL_DB_SECRET     = Get-OrDefault 'EXTERNAL_DB_SECRET'     'skynet-db-password'
 $BACKEND_SECRET         = Get-OrDefault 'BACKEND_SECRET'         'skynet-backend-secrets'
 $FRONTEND_SECRET        = Get-OrDefault 'FRONTEND_SECRET'        'skynet-frontend-secrets'
@@ -60,8 +60,6 @@ $LLM_BASE_URL           = Get-OrDefault 'LLM_BASE_URL'           'https://llm-ga
 $CODE_AGENT_MODEL       = Get-OrDefault 'CODE_AGENT_MODEL'       'gpt-5'
 $GENERALIST_AGENT_MODEL = Get-OrDefault 'GENERALIST_AGENT_MODEL' 'gpt-5'
 $SEARCH_BACKEND        = Get-OrDefault 'SEARCH_BACKEND'         'lexical'
-$EMBEDDING_BASE_URL     = Get-OrDefault 'EMBEDDING_BASE_URL'     $LLM_BASE_URL
-$EMBEDDING_MODEL        = Get-OrDefault 'EMBEDDING_MODEL'        'jina-embeddings-v4'
 $OIDC_ISSUER            = Get-OrDefault 'OIDC_ISSUER'            'https://idp.internal/realms/skynet'
 $OIDC_CLIENT_ID         = Get-OrDefault 'OIDC_CLIENT_ID'         'skynet'
 $OIDC_SCOPE             = Get-OrDefault 'OIDC_SCOPE'             'openid profile email groups'
@@ -71,7 +69,6 @@ $AUTH_ADMINS            = Get-OrDefault 'AUTH_ADMINS'            ''
 $FRONTEND_HOST          = Get-OrDefault 'FRONTEND_HOST'          'skynet.apps.internal'
 $BACKEND_HOST           = Get-OrDefault 'BACKEND_HOST'           'skynet-api.apps.internal'
 $LLM_EGRESS_CIDR        = Get-OrDefault 'LLM_EGRESS_CIDR'        '10.0.5.0/24'
-$EMBEDDING_EGRESS_CIDR  = Get-OrDefault 'EMBEDDING_EGRESS_CIDR'  $LLM_EGRESS_CIDR
 $IDP_EGRESS_CIDR        = Get-OrDefault 'IDP_EGRESS_CIDR'        '10.0.6.0/24'
 $DB_EGRESS_CIDR         = Get-OrDefault 'DB_EGRESS_CIDR'         '10.0.4.0/24'
 $LDAP_EGRESS_CIDR       = Get-OrDefault 'LDAP_EGRESS_CIDR'       ''
@@ -120,7 +117,7 @@ Common environment overrides (set with `set NAME=value` in cmd or `$env:NAME='va
   REGISTRY=artifactory.example.com/skynet
   IMAGE_TAG=2026.04.30
   PULL_SECRET=artifactory-pull-secret
-  EXTERNAL_DB_HOST=pgvector.internal
+  EXTERNAL_DB_HOST=postgres.internal
   EXTERNAL_DB_SECRET=skynet-db-password
   BACKEND_SECRET=skynet-backend-secrets
   FRONTEND_SECRET=skynet-frontend-secrets
@@ -128,8 +125,6 @@ Common environment overrides (set with `set NAME=value` in cmd or `$env:NAME='va
   LLM_BASE_URL=https://llm-gateway.internal/v1
   CODE_AGENT_MODEL=gpt-5
   GENERALIST_AGENT_MODEL=gpt-5
-  EMBEDDING_BASE_URL=https://llm-gateway.internal/v1
-  EMBEDDING_MODEL=jina-embeddings-v4
   OIDC_ISSUER=https://idp.internal/realms/skynet
   OIDC_CLIENT_ID=skynet
   OIDC_SCOPE="openid profile email groups"
@@ -139,7 +134,6 @@ Common environment overrides (set with `set NAME=value` in cmd or `$env:NAME='va
   FRONTEND_HOST=skynet.apps.internal
   BACKEND_HOST=skynet-api.apps.internal
   LLM_EGRESS_CIDR=10.0.5.0/24
-  EMBEDDING_EGRESS_CIDR=10.0.5.0/24              # set separately if embedding gateway differs
   IDP_EGRESS_CIDR=10.0.6.0/24
   DB_EGRESS_CIDR=10.0.4.0/24                   # managed Postgres subnet; blank to omit dbEgress
   LDAP_EGRESS_CIDR=10.0.8.0/24                 # blank to omit ldapEgress
@@ -224,8 +218,8 @@ name only; this script does not ask for secret values or write credentials.
     Read-Prompt 'PULL_SECRET'            'Image pull secret name'
     Read-Prompt 'BACKEND_REPOSITORY'     'Backend image repository under registry'
     Read-Prompt 'FRONTEND_REPOSITORY'    'Frontend image repository under registry'
-    Read-Prompt 'POSTGRES_REPOSITORY'    'pgvector image repository under registry'
-    Read-Prompt 'EXTERNAL_DB_HOST'       'External pgvector host'
+    Read-Prompt 'POSTGRES_REPOSITORY'    'Postgres image repository under registry'
+    Read-Prompt 'EXTERNAL_DB_HOST'       'External Postgres host'
     Read-Prompt 'EXTERNAL_DB_SECRET'     'DB password Secret name'
     Read-Prompt 'BACKEND_SECRET'         'Backend Secret name'
     Read-Prompt 'FRONTEND_SECRET'        'Frontend Secret name'
@@ -237,8 +231,6 @@ name only; this script does not ask for secret values or write credentials.
     Read-Prompt 'LLM_BASE_URL'           'Internal OpenAI-compatible LLM base URL'
     Read-Prompt 'CODE_AGENT_MODEL'       'Code-agent model id served by the gateway'
     Read-Prompt 'GENERALIST_AGENT_MODEL' 'Generalist-agent model id served by the gateway'
-    Read-Prompt 'EMBEDDING_BASE_URL'     'Internal OpenAI-compatible embedding base URL'
-    Read-Prompt 'EMBEDDING_MODEL'        'Embedding model id'
     Read-Prompt 'OIDC_ISSUER'            'Internal ADFS/OIDC issuer URL'
     Read-Prompt 'OIDC_CLIENT_ID'         'ADFS/OIDC client ID'
     Read-Prompt 'OIDC_SCOPE'             'ADFS/OIDC scopes'
@@ -248,7 +240,6 @@ name only; this script does not ask for secret values or write credentials.
     Read-Prompt 'FRONTEND_HOST'          'Frontend route host'
     Read-Prompt 'BACKEND_HOST'           'Backend route host'
     Read-Prompt 'LLM_EGRESS_CIDR'        'LLM gateway egress CIDR'
-    Read-Prompt 'EMBEDDING_EGRESS_CIDR'  'Embedding gateway egress CIDR'
     Read-Prompt 'IDP_EGRESS_CIDR'        'IdP egress CIDR'
     Read-Prompt 'DB_EGRESS_CIDR'         'Managed Postgres egress CIDR (blank to omit)'
     Read-Prompt 'LDAP_EGRESS_CIDR'       'LDAP/AD controller egress CIDR (blank to omit)'
@@ -400,7 +391,7 @@ function Invoke-ValidateMigrations {
                 # pip path does. alembic/env.py never imports ldap3, so we do not
                 # require it — demanding it wrongly rejects otherwise-capable hosts.
                 Test-Need 'python'
-                Invoke-NativeProbe { python -c 'import alembic, sqlalchemy, pgvector' 2>$null }
+                Invoke-NativeProbe { python -c 'import alembic, sqlalchemy' 2>$null }
                 if ($LASTEXITCODE -ne 0) {
                     $pipArgs = @('-m', 'pip', 'install', '--quiet')
                     $pipIndexUrl    = Get-OrDefault 'PIP_INDEX_URL'    ''
@@ -413,7 +404,7 @@ function Invoke-ValidateMigrations {
                         Write-StdErr 'pip install -r requirements.txt failed; resolve dep conflicts before validate-migrations'
                         exit 1
                     }
-                    Invoke-NativeProbe { python -c 'import alembic, sqlalchemy, pgvector' 2>$null }
+                    Invoke-NativeProbe { python -c 'import alembic, sqlalchemy' 2>$null }
                     if ($LASTEXITCODE -ne 0) {
                         Write-StdErr 'backend deps still missing after pip install; aborting'
                         exit 1
@@ -505,7 +496,6 @@ function Invoke-Values {
     $caBackendMounts   = ''
     $caFrontendMounts  = ''
     $dbEgress          = ''
-    $embeddingEgress   = ''
     $ldapEgress        = ''
 
     if (-not [string]::IsNullOrEmpty($script:INTERNAL_CA_SECRET)) {
@@ -529,11 +519,6 @@ function Invoke-Values {
 
     if (-not [string]::IsNullOrEmpty($script:DB_EGRESS_CIDR)) {
         $dbEgress = "`n  # TODO: On-premise - the managed Postgres subnet. REQUIRED when`n  # postgres.enabled=false or the backend pool can never reach the DB.`n  dbEgress:`n    - cidr: `"$($script:DB_EGRESS_CIDR)`"`n      ports: [5432]"
-    }
-
-    if ((-not [string]::IsNullOrEmpty($script:EMBEDDING_EGRESS_CIDR)) -and
-        ($script:EMBEDDING_EGRESS_CIDR -ne $script:LLM_EGRESS_CIDR)) {
-        $embeddingEgress = "`n  # TODO: On-premise - use the exact embedding gateway CIDRs and ports.`n  embeddingEgress:`n    - cidr: `"$($script:EMBEDDING_EGRESS_CIDR)`"`n      ports: [443]"
     }
 
     if (-not [string]::IsNullOrEmpty($script:LDAP_EGRESS_CIDR)) {
@@ -563,12 +548,8 @@ backend:
     # TAGGER_ASSIST_BASE_URL / TAGGER_ASSIST_MODEL are optional overrides for
     # the tagging assist; left unset it reuses the generalist pair above.
     # Explore search backend: lexical (vanilla Postgres, default) | bm25 (needs
-    # the pg_search extension) | semantic (needs pgvector + the embedding gateway
-    # below). Only "semantic" makes the migrate Job run CREATE EXTENSION vector.
+    # the pg_search extension).
     SEARCH_BACKEND: "$($script:SEARCH_BACKEND)"
-    # Only used when SEARCH_BACKEND=semantic:
-    EMBEDDINGS_BASE_URL: "$($script:EMBEDDING_BASE_URL)"
-    EMBEDDINGS_MODEL: "$($script:EMBEDDING_MODEL)"
     # Air-gap: use the bundled litellm cost map; do not fetch from GitHub on import.
     LITELLM_LOCAL_MODEL_COST_MAP: "True"
 $caBackendEnv
@@ -589,8 +570,6 @@ $caBackendEnv
     AD_LDAP_USERNAME_ATTR: ""
   secrets:
     # TODO: On-premise - must contain OPENAI_API_KEY and BACKEND_AUTH_SECRET.
-    # OPENAI_API_KEY is also reused for the embedding API unless you add
-    # EMBEDDINGS_API_KEY to this Secret.
     # For an unauthenticated internal gateway, set OPENAI_API_KEY to any non-empty placeholder (e.g. "not-needed").
     # Add AD_LDAP_BIND_PASSWORD when AD_LDAP_URL is set.
     existingSecret: "$($script:BACKEND_SECRET)"
@@ -632,7 +611,7 @@ postgres:
   enabled: false
   image:
     repository: "$($script:POSTGRES_REPOSITORY)"
-    tag: pg16
+    tag: "16"
 
 openshift:
   routes:
@@ -650,7 +629,7 @@ networkPolicy:
   # TODO: On-premise - use the exact LLM gateway CIDRs and ports.
   llmEgress:
     - cidr: "$($script:LLM_EGRESS_CIDR)"
-      ports: [443]$embeddingEgress$ldapEgress
+      ports: [443]$ldapEgress
 
 migration:
   enabled: true

@@ -111,8 +111,6 @@ ENV LOG_LEVEL=INFO
 ENV LOG_FORMAT=json
 # air-gap — litellm uses its bundled cost map instead of fetching model_prices_and_context_window.json from GitHub on import.
 ENV LITELLM_LOCAL_MODEL_COST_MAP=True
-# Recommendation embeddings are served by an internal OpenAI-compatible API;
-# no model weights are loaded inside the backend container.
 # REMOTE_DB_URL must be set at runtime (e.g., via docker-compose or -e flag)
 # ENV REMOTE_DB_URL=postgresql://user:password@host:5432/skynet
 

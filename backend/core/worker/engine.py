@@ -52,7 +52,6 @@ from ..models import GridSearchRequest, GridSearchResponse, PairResult, RunReque
 from ..notifications import notify_job_completed
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
-from ..service_gateway.embedding_pipeline import embed_finished_job
 from ..service_gateway.optimization.core import _merge_usage_rows
 from ..service_gateway.optimization.trajectory import GEPA_STATE_FILENAME, GRID_PAIR_RESULT_FILENAME
 from ..storage import JobStore
@@ -796,9 +795,8 @@ class BackgroundWorker:
                             else:
                                 self._job_store.delete_gepa_checkpoint(optimization_id)
                     if pair_parent_id is not None:
-                        # Parent-level side effects (user notification and
-                        # embedding) happen ONCE at grid
-                        # finalization — a pair child only checks whether it
+                        # Parent-level side effects (user notification) happen
+                        # ONCE at grid finalization — a pair child only checks whether it
                         # was the last sibling standing.
                         self._maybe_finalize_grid(pair_parent_id)
                         return
@@ -815,8 +813,6 @@ class BackgroundWorker:
                             optimized_score=_optimized,
                         )
                         self._record_run_outcome(optimization_id, _username, final_status, overview)
-                    if final_status == "success":
-                        self._schedule_embedding_indexing(optimization_id)
                 except KeyError:
                     logger.info(
                         "Optimization %s was deleted during execution (likely cancelled), skipping result",
@@ -1098,38 +1094,6 @@ class BackgroundWorker:
             return
         if status in ("cancelled", "paused"):
             raise CancellationError()
-
-    def _schedule_embedding_indexing(self, optimization_id: str) -> None:
-        """Fire-and-forget embed the finished job for the explore search index.
-
-        Runs on a daemon thread so a slow LLM call or a missing pgvector
-        extension can never block the worker's hot path. Failures are
-        swallowed — the job itself is already marked success; the index
-        is best-effort and the startup backfill heals any gaps.
-
-        Args:
-            optimization_id: ID of the just-finished job to index.
-        """
-        threading.Thread(
-            target=self._embed_finished_job_best_effort,
-            args=(optimization_id,),
-            name=f"embed-{optimization_id[:8]}",
-            daemon=True,
-        ).start()
-
-    def _embed_finished_job_best_effort(self, optimization_id: str) -> None:
-        """Embed a finished job, swallowing failures so they never reach the worker.
-
-        A missing pgvector extension or LLM credentials issue only surfaces
-        on the indexing thread, never on the worker hot path.
-
-        Args:
-            optimization_id: ID of the finished job to embed.
-        """
-        try:
-            embed_finished_job(optimization_id, job_store=self._job_store)
-        except Exception as exc:  # isolation boundary: best-effort indexing must never impact job status
-            logger.debug("Embedding indexing for %s failed: %s", optimization_id, exc)
 
     def _record_run_outcome(
         self,
@@ -1693,8 +1657,6 @@ class BackgroundWorker:
                 message=final_message,
             )
             self._record_run_outcome(parent_optimization_id, _username, final_status, overview)
-        if final_status == "success":
-            self._schedule_embedding_indexing(parent_optimization_id)
 
     def _assemble_grid_result(
         self, parent: dict[str, Any], children: list[dict[str, Any]]

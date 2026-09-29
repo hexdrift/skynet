@@ -1,18 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Check, CircleNotch, Microphone, Square, X } from "@/shared/ui/icons";
+import { Square } from "@/shared/ui/icons";
 import { msg } from "@/shared/lib/messages";
 
-import { useLocale } from "@/shared/providers";
-import { useUserPrefs } from "@/features/settings";
 import { Button } from "@/shared/ui/primitives/button";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { cn } from "@/shared/lib/utils";
-import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 
 import { autoResizeTextarea } from "./auto-resize";
-import { formatRecSeconds, useDictation } from "./use-dictation";
 
 interface ComposerProps {
   value: string;
@@ -25,7 +21,7 @@ interface ComposerProps {
   sendAriaLabel?: string;
   stopAriaLabel?: string;
   /** Optional model selector chip rendered at the inline end of the control
-   *  row, immediately before the mic and send controls. */
+   *  row, immediately before the send control. */
   modelMenu?: React.ReactNode;
   /** Optional controls docked at the inline start of the control row, such as
    *  attachment and permission controls. */
@@ -39,11 +35,8 @@ interface ComposerProps {
 /**
  * The shared chat composer, laid out Codex-style: one bordered box holding a
  * borderless textarea with a control row docked under it — attachment and
- * permission controls at the inline start, then the model chip, dictation mic,
- * and circular send/stop button at the inline end. While dictating, the
- * textarea swaps for a recording strip (pulsing dot, timer, cancel) and the mic
- * becomes the finish control; the transcript is appended to the draft for
- * review, never auto-sent.
+ * permission controls at the inline start, then the model chip and circular
+ * send/stop button at the inline end.
  */
 export function Composer({
   value,
@@ -62,37 +55,10 @@ export function Composer({
 }: ComposerProps) {
   const inline = layout === "inline";
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
-  const { locale } = useLocale();
-  const { prefs } = useUserPrefs();
-
-  const valueRef = React.useRef(value);
-  React.useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
-  const dictation = useDictation({
-    language: locale,
-    onText: (text) => {
-      const prev = valueRef.current;
-      onChange(prev.trim() ? `${prev.replace(/\s+$/, "")} ${text}` : text);
-      // The textarea remounts from the recording strip on this same commit —
-      // focus and grow it once it's back in the tree.
-      requestAnimationFrame(() => {
-        const el = textareaRef.current;
-        if (el) {
-          el.focus();
-          autoResizeTextarea(el);
-        }
-      });
-    },
-  });
-  const dictating = dictation.state.kind !== "idle";
-  // A recording in flight keeps its controls even if the pref flips off in
-  // the settings modal mid-take.
-  const showMic = getRuntimeEnv().transcriptionEnabled && (prefs.dictationEnabled || dictating);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (disabled || streaming || dictating || !value.trim()) return;
+    if (disabled || streaming || !value.trim()) return;
     onSubmit();
     if (textareaRef.current) textareaRef.current.style.height = inline ? "36px" : "42px";
   };
@@ -117,72 +83,28 @@ export function Composer({
           inline && "flex min-h-[44px] items-end gap-1 p-1",
         )}
       >
-        {!dictating ? (
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => {
-              onChange(e.target.value);
-              autoResizeTextarea(e.target);
-            }}
-            onKeyDown={handleKeyDown}
-            disabled={disabled || streaming}
-            rows={1}
-            placeholder={placeholder}
-            className={cn(
-              "bg-transparent text-sm leading-[20px] resize-none overflow-hidden",
-              "max-h-[120px] outline-none ring-0 border-0 shadow-none",
-              "focus:outline-none focus-visible:outline-none focus-visible:ring-0",
-              "placeholder:text-muted-foreground/40",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-              inline
-                ? "h-[44px] min-w-0 flex-1 px-3 py-2 sm:h-9 [@media(hover:none)_and_(pointer:coarse)]:h-[44px]"
-                : "block h-[44px] w-full px-4 py-[11px] sm:h-[42px] [@media(hover:none)_and_(pointer:coarse)]:h-[44px]",
-            )}
-          />
-        ) : (
-          <div
-            className={cn(
-              "flex items-center gap-2 text-sm",
-              inline
-                ? "h-[44px] min-w-0 flex-1 px-3 sm:h-9 [@media(hover:none)_and_(pointer:coarse)]:h-[44px]"
-                : "h-[44px] px-4 sm:h-[42px] [@media(hover:none)_and_(pointer:coarse)]:h-[44px]",
-            )}
-            role="status"
-            aria-live="polite"
-          >
-            {dictation.state.kind === "rec" && (
-              <>
-                <span className="size-2 shrink-0 rounded-full bg-[var(--danger)] motion-safe:animate-pulse" />
-                <span className="tabular-nums text-muted-foreground" dir="ltr">
-                  {formatRecSeconds(dictation.seconds)}
-                </span>
-                <span className="truncate text-muted-foreground">
-                  {msg("agent.composer.recording")}
-                </span>
-                <button
-                  type="button"
-                  onClick={dictation.cancel}
-                  aria-label={msg("agent.composer.record_cancel")}
-                  className="close-button ms-auto shrink-0"
-                >
-                  <X />
-                </button>
-              </>
-            )}
-            {dictation.state.kind === "busy" && (
-              <>
-                <CircleNotch className="size-4 shrink-0 animate-spin text-muted-foreground" />
-                <span className="truncate text-muted-foreground">
-                  {msg("agent.composer.transcribing")}
-                </span>
-              </>
-            )}
-            {dictation.state.kind === "err" && (
-              <span className="truncate text-destructive">{dictation.state.message}</span>
-            )}
-          </div>
-        )}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            autoResizeTextarea(e.target);
+          }}
+          onKeyDown={handleKeyDown}
+          disabled={disabled || streaming}
+          rows={1}
+          placeholder={placeholder}
+          className={cn(
+            "bg-transparent text-sm leading-[20px] resize-none overflow-hidden",
+            "max-h-[120px] outline-none ring-0 border-0 shadow-none",
+            "focus:outline-none focus-visible:outline-none focus-visible:ring-0",
+            "placeholder:text-muted-foreground/40",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            inline
+              ? "h-[44px] min-w-0 flex-1 px-3 py-2 sm:h-9 [@media(hover:none)_and_(pointer:coarse)]:h-[44px]"
+              : "block h-[44px] w-full px-4 py-[11px] sm:h-[42px] [@media(hover:none)_and_(pointer:coarse)]:h-[44px]",
+          )}
+        />
 
         <div
           className={cn(
@@ -195,34 +117,6 @@ export function Composer({
           )}
           <div className="ms-auto flex min-w-0 items-center justify-end gap-1.5">
             {modelMenu}
-            {showMic &&
-              (dictation.state.kind === "rec" ? (
-                <TooltipButton tooltip={msg("agent.composer.record_finish")} side="top">
-                  <Button
-                    type="button"
-                    size="icon"
-                    onClick={dictation.finish}
-                    className="shrink-0 rounded-full"
-                    aria-label={msg("agent.composer.record_finish")}
-                  >
-                    <Check className="size-4" />
-                  </Button>
-                </TooltipButton>
-              ) : (
-                <TooltipButton tooltip={msg("agent.composer.record")} side="top">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => void dictation.start()}
-                    disabled={disabled || streaming || dictation.state.kind === "busy"}
-                    className="shrink-0 rounded-full text-muted-foreground hover:text-foreground"
-                    aria-label={msg("agent.composer.record")}
-                  >
-                    <Microphone className="size-4" />
-                  </Button>
-                </TooltipButton>
-              ))}
             {streaming && onStop ? (
               <TooltipButton tooltip={stopAriaLabel} side="top">
                 <Button
@@ -240,7 +134,7 @@ export function Composer({
                 type="submit"
                 size="icon"
                 className="shrink-0 rounded-full"
-                disabled={disabled || dictating || !value.trim()}
+                disabled={disabled || !value.trim()}
                 aria-label={sendAriaLabel}
               >
                 <svg viewBox="0 0 24 24" fill="none" className="size-4">

@@ -1,7 +1,7 @@
 {{- if .Values.postgres.enabled }}
 {{- /*
-Bundled pgvector Postgres for self-contained installs / dev. Production
-deployments should disable this and point at a managed pgvector cluster
+Bundled Postgres for self-contained installs / dev. Production
+deployments should disable this and point at a managed Postgres cluster
 via externalDatabase.
 */ -}}
 {{- $secretName := include "skynet.postgres.secretName" . -}}

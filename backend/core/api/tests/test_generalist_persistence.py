@@ -112,8 +112,8 @@ def persistence_client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, Eng
     """Mount the generalist router over a real SQLite engine with agent tables.
 
     Args:
-        monkeypatch: Pytest fixture used to stub the agent runtime, the
-            embedding hook, and the backend auth secret.
+        monkeypatch: Pytest fixture used to stub the agent runtime and the
+            backend auth secret.
 
     Returns:
         The bound ``TestClient`` and the SQLite ``Engine`` so tests can assert
@@ -129,7 +129,6 @@ def persistence_client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, Eng
     )
     monkeypatch.setattr(auth_mod.settings, "backend_auth_secret", SecretStr(_SECRET))
     monkeypatch.setattr(agent_mod, "run_generalist_agent", _fake_stream)
-    monkeypatch.setattr(agent_mod, "queue_conversation_embed", lambda *a, **k: None)
 
     store = _StubStore(engine)
     app = FastAPI()
@@ -277,12 +276,8 @@ _CONV_ID = "conv-1"
 
 
 @pytest.fixture
-def wrapper_engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
+def wrapper_engine() -> Engine:
     """Create a SQLite engine with agent tables and a seeded conversation row.
-
-    Args:
-        monkeypatch: Pytest fixture used to no-op the embedding hook so the
-            persistence path can run without a live engine background thread.
 
     Returns:
         The bound ``Engine`` holding one ``agent_conversations`` row.
@@ -295,7 +290,6 @@ def wrapper_engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
             AgentMessageModel.__table__,
         ],
     )
-    monkeypatch.setattr(agent_mod, "queue_conversation_embed", lambda *a, **k: None)
     with Session(engine) as session:
         session.add(AgentConversationModel(id=_CONV_ID, username="alice@example.com", title="hi"))
         session.commit()

@@ -33,14 +33,11 @@ from .base import JobRecord, LogEntryRecord, ProgressEventRecord
 from .checkpoint_store import GepaCheckpoint, PostgresCheckpointBlobStore, PostgresGridPairResultStore
 from .migrate import sync_migration_head
 from .models import (
-    EMBEDDING_DIM,
     SAMPLE_STAGED_ID_PREFIX,
     AgentStagedDatasetModel,
     Base,
-    ConversationEmbeddingModel,
     GepaCheckpointModel,
     GridPairResultModel,
-    JobEmbeddingModel,
     JobModel,
     LogEntryModel,
     OptimizationShareGrantModel,
@@ -319,16 +316,9 @@ class RemoteDBJobStore:
         ``DB_POOL_MAX_OVERFLOW`` so Kubernetes deployments can keep total
         Postgres connection budgets below the server cap.
 
-        pgvector bootstrap and the embedding tables are created only when
-        ``settings.embeddings_enabled`` is true *and* the pgvector extension is
-        available. If embeddings are disabled or the extension can't be created,
-        the rest of the schema is bootstrapped without the ``Vector`` columns so
-        a plain PostgreSQL without pgvector still boots (vector search stays off).
-
         Args:
             db_url: PostgreSQL DSN to connect to.
         """
-        self.vector_search_enabled = False
         # Set after the schema exists: BM25 lexical ranking via pg_search when
         # available, else explore search uses ILIKE substring matching.
         self.bm25_search_enabled = False
@@ -344,44 +334,14 @@ class RemoteDBJobStore:
             db_url,
             **_build_engine_kwargs(db_url),
         )
-        if settings.embeddings_enabled and settings.embeddings_dim != EMBEDDING_DIM:
-            # The embedding columns are a fixed-width vector(EMBEDDING_DIM). A
-            # mismatched EMBEDDINGS_DIM boots fine but pgvector then rejects every
-            # mismatched-length insert on the daemon embed thread (warn-and-drop),
-            # so explore search silently degrades to lexical. Fail loudly instead.
-            raise RuntimeError(
-                f"EMBEDDINGS_DIM={settings.embeddings_dim} does not match the "
-                f"vector({EMBEDDING_DIM}) schema column; embedding writes would be "
-                f"silently rejected. Set EMBEDDINGS_DIM={EMBEDDING_DIM}, disable "
-                "embeddings, or run a migration to change the column width."
-            )
-        if settings.embeddings_enabled and self._bootstrap_pgvector():
-            with schema_bootstrap_lock(self._engine) as conn:
-                Base.metadata.create_all(conn if conn is not None else self._engine)
-            self.vector_search_enabled = self._bootstrap_vector_indexes()
-        else:
-            # Embeddings disabled, or pgvector is unavailable on this database
-            # (managed/plain Postgres without CREATE EXTENSION privilege). Create
-            # the full schema minus the Vector(512) tables so the app still boots;
-            # otherwise CREATE TABLE job_embeddings raises UndefinedObject and
-            # propagates unguarded out of create_app(). Vector search stays off.
-            embedding_tables = {
-                JobEmbeddingModel.__table__,
-                ConversationEmbeddingModel.__table__,
-            }
-            non_embedding_tables = [table for table in Base.metadata.sorted_tables if table not in embedding_tables]
-            with schema_bootstrap_lock(self._engine) as conn:
-                Base.metadata.create_all(
-                    conn if conn is not None else self._engine,
-                    tables=non_embedding_tables,
-                )
+        with schema_bootstrap_lock(self._engine) as conn:
+            Base.metadata.create_all(conn if conn is not None else self._engine)
         # Now that the tables exist, bring Alembic in step: adopt an unstamped
         # database at head, or apply migrations pending on an adopted one. This
         # is how column-adding migrations land — create_all never ALTERs a table
         # an earlier boot already created.
         sync_migration_head(self._engine)
-        # Lexical search ranking. Independent of pgvector/embeddings: BM25
-        # serves the default (embeddings-off) explore search when pg_search is
+        # Lexical search ranking: BM25 serves explore search when pg_search is
         # installed, otherwise the ILIKE fallback handles it.
         self.bm25_search_enabled = settings.search_bm25_enabled and self._bootstrap_bm25()
         self._session_factory = sessionmaker(bind=self._engine)
@@ -408,68 +368,12 @@ class RemoteDBJobStore:
         """Return the cached worker code version for this store."""
         return getattr(self, "_code_version", settings.code_version)
 
-    def _bootstrap_pgvector(self) -> bool:
-        """Ensure the pgvector extension exists before creating Vector columns.
-
-        Safe to call repeatedly. If the database role lacks the privilege
-        to install the extension, the log line below is the operator's
-        hint to run ``CREATE EXTENSION vector`` once out-of-band.
-        """
-        try:
-            with self._engine.connect() as conn:
-                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-                conn.commit()
-            return True
-        except SQLAlchemyError as exc:
-            logger.warning(
-                "pgvector extension bootstrap failed (%s). "
-                "Recommendation service will be unavailable until an admin runs "
-                "'CREATE EXTENSION vector' on the database.",
-                exc,
-            )
-            return False
-
-    def _bootstrap_vector_indexes(self) -> bool:
-        """Create HNSW cosine indexes on the job_embeddings vector columns.
-
-        SQLAlchemy's create_all can't express HNSW, and we don't want to
-        pay for a reindex on every restart — the IF NOT EXISTS guard
-        makes the call free on warm databases.
-        """
-        statements = [
-            (
-                "CREATE INDEX IF NOT EXISTS idx_job_embeddings_summary_hnsw "
-                "ON job_embeddings USING hnsw (embedding_summary vector_cosine_ops)"
-            ),
-            (
-                "CREATE INDEX IF NOT EXISTS idx_job_embeddings_code_hnsw "
-                "ON job_embeddings USING hnsw (embedding_code vector_cosine_ops)"
-            ),
-            (
-                "CREATE INDEX IF NOT EXISTS idx_job_embeddings_schema_hnsw "
-                "ON job_embeddings USING hnsw (embedding_schema vector_cosine_ops)"
-            ),
-            (
-                "CREATE INDEX IF NOT EXISTS idx_conversation_embeddings_summary_hnsw "
-                "ON conversation_embeddings USING hnsw (embedding_summary vector_cosine_ops)"
-            ),
-        ]
-        try:
-            with self._engine.connect() as conn:
-                for stmt in statements:
-                    conn.execute(text(stmt))
-                conn.commit()
-            return True
-        except SQLAlchemyError as exc:
-            logger.warning("HNSW index bootstrap skipped: %s", exc)
-            return False
-
     def _bootstrap_bm25(self) -> bool:
         """Best-effort: enable BM25 lexical ranking via the pg_search extension.
 
         Creates the ``pg_search`` extension and a BM25 index over the ``jobs``
-        ``payload_overview`` corpus (task name/description/optimizer/model/module
-        — the text that exists when embeddings are off) so explore search ranks
+        ``payload_overview`` corpus (task name/description/optimizer/model/module)
+        so explore search ranks
         lexically with real relevance scores. Entirely optional: when pg_search
         is absent (the common case on a plain/managed Postgres without it) or the
         role can't create it, this logs and returns False and search falls back
@@ -888,8 +792,6 @@ class RemoteDBJobStore:
         try:
             session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).delete()
             session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).delete()
-            if settings.embeddings_enabled:
-                session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id == optimization_id).delete()
             session.query(GepaCheckpointModel).filter(GepaCheckpointModel.optimization_id == optimization_id).delete()
             session.query(GridPairResultModel).filter(GridPairResultModel.optimization_id == optimization_id).delete()
             self._delete_grid_pair_children(session, optimization_id)
@@ -981,7 +883,7 @@ class RemoteDBJobStore:
     def delete_jobs(self, optimization_ids: list[str]) -> int:
         """Hard-delete a batch of jobs in a single transaction.
 
-        Drops the associated log, progress-event, embedding and checkpoint rows
+        Drops the associated log, progress-event and checkpoint rows
         first then commits once, so the round-trip cost is bounded regardless of
         batch size.
 
@@ -1001,10 +903,6 @@ class RemoteDBJobStore:
             session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id.in_(optimization_ids)).delete(
                 synchronize_session=False
             )
-            if settings.embeddings_enabled:
-                session.query(JobEmbeddingModel).filter(
-                    JobEmbeddingModel.optimization_id.in_(optimization_ids)
-                ).delete(synchronize_session=False)
             session.query(GepaCheckpointModel).filter(GepaCheckpointModel.optimization_id.in_(optimization_ids)).delete(
                 synchronize_session=False
             )
@@ -1372,7 +1270,7 @@ class RemoteDBJobStore:
 
         Unlike :meth:`requeue_for_resume`, which keeps the checkpoint and
         continues GEPA where it stopped, this discards every artefact of the
-        previous attempt — logs, progress events, the search embedding, GEPA
+        previous attempt — logs, progress events, GEPA
         checkpoints and grid-pair results — and zeroes the row's runtime,
         result and attempt bookkeeping. Only the immutable identity (id, name,
         owner, payload) survives, so a worker re-runs the same configuration
@@ -1392,8 +1290,6 @@ class RemoteDBJobStore:
                 return False
             session.query(LogEntryModel).filter(LogEntryModel.optimization_id == optimization_id).delete()
             session.query(ProgressEventModel).filter(ProgressEventModel.optimization_id == optimization_id).delete()
-            if settings.embeddings_enabled:
-                session.query(JobEmbeddingModel).filter(JobEmbeddingModel.optimization_id == optimization_id).delete()
             session.query(GepaCheckpointModel).filter(GepaCheckpointModel.optimization_id == optimization_id).delete()
             session.query(GridPairResultModel).filter(GridPairResultModel.optimization_id == optimization_id).delete()
             # A distributed grid's pair children belong to the discarded
@@ -2422,7 +2318,7 @@ class RemoteDBJobStore:
             optimization_type: Restrict to a particular run type when set.
             limit: Maximum number of rows to return.
             offset: Number of rows to skip from the start.
-            with_counts: When ``False``, skip the progress/log/summary
+            with_counts: When ``False``, skip the progress/log
                 aggregate folding entirely — analytics rollups scan up to 10k
                 rows and never read those fields, so the aggregates would run
                 a 10k-element ``IN (...)`` scan for nothing.
@@ -2453,11 +2349,11 @@ class RemoteDBJobStore:
             session.close()
 
     def _rows_with_counts(self, session: Session, records: list[JobRecord]) -> list[JobRecord]:
-        """Fold progress/log counts and summary text into list rows.
+        """Fold progress/log counts into list rows.
 
-        Two aggregate queries (plus the embedding lookup) keyed on the page's
-        ``optimization_ids`` so each row carries ``progress_count`` /
-        ``log_count`` / ``summary_text`` without an N-per-row round trip. Shared
+        Two aggregate queries keyed on the page's ``optimization_ids`` so each
+        row carries ``progress_count`` / ``log_count`` without an N-per-row
+        round trip. Shared
         by :meth:`list_jobs`, :meth:`list_jobs_shared_with` and
         :meth:`list_jobs_visible_to`.
 
@@ -2491,27 +2387,10 @@ class RemoteDBJobStore:
             if optimization_ids
             else {}
         )
-        # summary_text lives in job_embeddings, which only exists on the
-        # semantic backend; skip the lookup entirely on the lexical backend so
-        # the join target isn't a missing relation (callers fall back to None).
-        summary_texts: dict[str, str | None] = (
-            {
-                row[0]: row[1]
-                for row in session.query(
-                    JobEmbeddingModel.optimization_id,
-                    JobEmbeddingModel.summary_text,
-                )
-                .filter(JobEmbeddingModel.optimization_id.in_(optimization_ids))
-                .all()
-            }
-            if optimization_ids and settings.embeddings_enabled
-            else {}
-        )
         for record in records:
             oid = str(record["optimization_id"])
             record["progress_count"] = progress_counts.get(oid, 0)
             record["log_count"] = log_counts.get(oid, 0)
-            record["summary_text"] = summary_texts.get(oid)
         return records
 
     def list_jobs_shared_with(self, username: str, *, limit: int = 50, offset: int = 0) -> list[JobRecord]:
@@ -2603,13 +2482,13 @@ class RemoteDBJobStore:
             optimization_type: Restrict to a particular run type when set.
             limit: Maximum number of rows to return.
             offset: Number of rows to skip from the start.
-            with_counts: When ``False``, skip the progress/log/summary
+            with_counts: When ``False``, skip the progress/log
                 aggregate folding, as in :meth:`list_jobs` — the dashboard
                 analytics scan never reads those fields.
 
         Returns:
             Matching ``JobRecord`` rows in newest-first order with
-            ``progress_count`` / ``log_count`` / ``summary_text`` folded in
+            ``progress_count`` / ``log_count`` folded in
             when ``with_counts``, and ``result`` pruned to its summary
             scalars as in :meth:`list_jobs`.
         """

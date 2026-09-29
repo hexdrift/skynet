@@ -1,7 +1,7 @@
 """Tests for the telemetry router (ingest + admin reads).
 
 Mounts ``create_telemetry_router`` on an in-memory SQLite store (the sibling
-routers' pattern: a ``RemoteDBJobStore`` subclass that skips the pgvector
+routers' pattern: a ``RemoteDBJobStore`` subclass that skips the Postgres-only
 bootstrap so ``Base.metadata.create_all`` stands up every table). Covers the
 public ingest contract — anonymous acceptance, server-trusted attribution, the
 batch/property caps, and the kill switch — plus the admin-only aggregates and
@@ -36,7 +36,7 @@ _NONADMIN = AuthenticatedUser(username="bob", role="user", groups=())
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite store for telemetry-router tests (no pgvector)."""
+    """In-memory SQLite store for telemetry-router tests (no Postgres)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

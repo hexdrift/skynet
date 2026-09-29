@@ -41,10 +41,6 @@ class UserPreferencesUpdate(BaseModel):
         default=None,
         description="Enable AI-assisted tagging in new labeling sessions.",
     )
-    dictation_enabled: bool | None = Field(
-        default=None,
-        description="Show voice dictation in the shared composer.",
-    )
 
 
 class UserPreferencesUpdateResponse(BaseModel):

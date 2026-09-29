@@ -3,7 +3,7 @@
 Exercises the producer/consumer wiring task that connects the personal dataset
 library to optimization submission against an in-memory SQLite store (the
 sibling routers' pattern: a ``RemoteDBJobStore`` subclass that skips the
-pgvector bootstrap so ``Base.metadata.create_all`` stands up every table). The
+Postgres-only bootstrap so ``Base.metadata.create_all`` stands up every table). The
 submissions router is mounted alongside the library router with a worker signal
 stub, so a by-reference submit, the dataset→optimizations reverse link, and
 saving a run's dataset all round-trip through real rows.
@@ -44,7 +44,7 @@ _MAPPING = {"inputs": {"q": "question"}, "outputs": {"a": "answer"}}
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for the link tests (no pgvector)."""
+    """In-memory SQLite job store for the link tests (no Postgres)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

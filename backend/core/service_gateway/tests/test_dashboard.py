@@ -28,31 +28,18 @@ def test_invalidate_public_dashboard_cache_resets_state() -> None:
     assert dashboard._CACHE["payload"] is None
 
 
-def test_fingerprint_includes_embedding_and_completion_freshness() -> None:
-    """An in-place embedding refresh changes the public-dashboard fingerprint."""
+def test_fingerprint_includes_count_and_completion_freshness() -> None:
+    """A newly completed or resumed job changes the public-dashboard fingerprint."""
     session = MagicMock(name="session")
-    embedded = MagicMock(name="embedded-result")
-    embedded.mappings.return_value.first.return_value = {
-        "n": 2,
-        "updated_max_ts": datetime(2026, 8, 2, 12, 0, tzinfo=UTC),
-        "created_max_ts": datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+    session.execute.return_value.mappings.return_value.first.return_value = {
+        "n": 3,
         "completed_max_ts": datetime(2026, 8, 2, 11, 0, tzinfo=UTC),
+        "created_max_ts": datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
     }
-    unembedded = MagicMock(name="unembedded-result")
-    unembedded.mappings.return_value.first.return_value = {
-        "n": 1,
-        "completed_max_ts": datetime(2026, 8, 2, 10, 0, tzinfo=UTC),
-        "created_max_ts": datetime(2026, 8, 1, 10, 0, tzinfo=UTC),
-    }
-    session.execute.side_effect = [embedded, unembedded]
 
-    fingerprint = dashboard._fetch_fingerprint(session, "job_embeddings")
+    fingerprint = dashboard._fetch_fingerprint(session)
 
-    assert fingerprint == (
-        "2|2026-08-02T12:00:00+00:00|2026-08-01T12:00:00+00:00|"
-        "2026-08-02T11:00:00+00:00|1|2026-08-02T10:00:00+00:00|"
-        "2026-08-01T10:00:00+00:00"
-    )
+    assert fingerprint == "3|2026-08-02T11:00:00+00:00|2026-08-01T12:00:00+00:00"
 
 
 def test_corpus_fetch_has_no_artificial_point_cap() -> None:
@@ -60,7 +47,7 @@ def test_corpus_fetch_has_no_artificial_point_cap() -> None:
     session = MagicMock(name="session")
     session.execute.return_value.mappings.return_value.all.return_value = []
 
-    assert dashboard._fetch_corpus_points(session, "job_embeddings") == []
+    assert dashboard._fetch_corpus_points(session) == []
     statement = session.execute.call_args.args[0]
     assert "LIMIT" not in statement.text.upper()
 
@@ -82,9 +69,6 @@ def test_user_facing_corpus_sql_keeps_legacy_rows_and_drops_internal_rows() -> N
                 "CREATE TABLE jobs (optimization_id TEXT, optimization_type TEXT, "
                 "payload_overview TEXT, parent_optimization_id TEXT)"
             )
-        )
-        conn.execute(
-            text("CREATE TABLE job_embeddings (optimization_id TEXT, optimization_type TEXT)")
         )
         conn.execute(
             text("INSERT INTO jobs VALUES (:id, :otype, :payload, :parent)"),
@@ -116,8 +100,6 @@ def test_user_facing_corpus_sql_keeps_legacy_rows_and_drops_internal_rows() -> N
             conn.execute(
                 text(
                     "SELECT j.optimization_id FROM jobs j "
-                    "LEFT JOIN job_embeddings je "
-                    "ON je.optimization_id = j.optimization_id "
                     f"WHERE {dashboard._USER_FACING_CORPUS_SQL} "
                     "ORDER BY j.optimization_id"
                 )
@@ -146,14 +128,12 @@ def _sqlite_jsonb_typeof(value: str | None) -> str | None:
 
 
 def test_corpus_metric_sql_falls_back_to_job_scores() -> None:
-    """Unembedded rows resolve their own job scores for the displayed score/delta.
+    """Rows resolve their own job scores for the displayed score/delta.
 
     Executes the real metric-fallback SQL against an in-memory schema — the
     SQL that fills each result row's ``baseline_metric``/``optimized_metric``.
-    The embedded pair must win when present; otherwise runs read
-    ``latest_metrics`` then ``result`` and grid jobs read
-    ``result.best_pair``, mirroring the embedding pipeline's
-    ``_extract_scores``. Rows with no numeric pair anywhere (including a
+    Runs read ``latest_metrics`` then ``result`` and grid jobs read
+    ``result.best_pair``. Rows with no numeric pair anywhere (including a
     malformed non-numeric value, which must not error) resolve to NULL. The
     ``optimized - baseline`` ordering here is only the assertion vehicle for
     the resolved values, not a production sort.
@@ -171,12 +151,6 @@ def test_corpus_metric_sql_falls_back_to_job_scores() -> None:
             text(
                 "CREATE TABLE jobs (optimization_id TEXT, payload_overview TEXT, "
                 "latest_metrics TEXT, result TEXT, created_at TEXT)"
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE TABLE job_embeddings (optimization_id TEXT, "
-                "baseline_metric REAL, optimized_metric REAL)"
             )
         )
         conn.execute(
@@ -214,13 +188,6 @@ def test_corpus_metric_sql_falls_back_to_job_scores() -> None:
                     "created": "2026-07-22",
                 },
                 {
-                    "id": "embedded",
-                    "overview": None,
-                    "metrics": '{"optimized_test_metric": 11.0}',
-                    "result": '{"baseline_test_metric": 10.0}',
-                    "created": "2026-07-21",
-                },
-                {
                     "id": "scoreless",
                     "overview": None,
                     "metrics": None,
@@ -236,15 +203,10 @@ def test_corpus_metric_sql_falls_back_to_job_scores() -> None:
                 },
             ],
         )
-        conn.execute(
-            text("INSERT INTO job_embeddings VALUES ('embedded', 10.0, 30.0)")
-        )
         ranked = (
             conn.execute(
                 text(
                     "SELECT j.optimization_id FROM jobs j "
-                    "LEFT JOIN job_embeddings je "
-                    "ON je.optimization_id = j.optimization_id "
                     f"ORDER BY ({dashboard._CORPUS_OPTIMIZED_METRIC_SQL} - "
                     f"{dashboard._CORPUS_BASELINE_METRIC_SQL}) DESC NULLS LAST, "
                     "j.created_at DESC"
@@ -254,7 +216,6 @@ def test_corpus_metric_sql_falls_back_to_job_scores() -> None:
             .all()
         )
     assert ranked == [
-        "embedded",
         "papillon",
         "grid",
         "flat",
@@ -288,61 +249,6 @@ def test_log_and_fetch_popular_queries_ranks_by_count() -> None:
     assert {"query": "dspy mipro", "count": 1} in popular
 
 
-def test_job_embeddings_relation_degrades_when_table_absent() -> None:
-    """The explore join falls back to an empty stand-in when job_embeddings is gone.
-
-    Mirrors a plain Postgres where RemoteJobStore skipped the Vector tables: the
-    presence probe finds nothing, so the corpus / facets / search SQL reads
-    ``jobs`` alone instead of raising ``UndefinedTable`` (which the browser would
-    surface as a "can't connect to the server" failure). The jobs-only query
-    itself is Postgres-specific (``::`` casts, ``WHERE FALSE``) and is validated
-    against a real table-less Postgres out-of-band, not here on SQLite.
-    """
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    store = SimpleNamespace(engine=engine)
-    dashboard._EMBEDDINGS_TABLE_PRESENT.pop(engine, None)
-    assert dashboard._job_embeddings_table_present(store) is False
-    assert dashboard._job_embeddings_relation(store) == dashboard._EMPTY_JOB_EMBEDDINGS_REL
-
-
-def test_job_embeddings_relation_uses_real_table_when_present(monkeypatch) -> None:
-    """When the table exists, the join targets ``job_embeddings`` unchanged."""
-    monkeypatch.setattr(dashboard, "_job_embeddings_table_present", lambda _store: True)
-    assert dashboard._job_embeddings_relation(SimpleNamespace(engine=object())) == "job_embeddings"
-
-
-def test_search_optimizations_forces_lexical_when_embeddings_table_absent(monkeypatch) -> None:
-    """A semantic backend with no ``job_embeddings`` table must avoid ``_search_semantic``.
-
-    Regression: with ``SEARCH_BACKEND=semantic`` but the table never created (an
-    airgap deploy without pgvector), an owner/shared scope whose corpus has no
-    unembedded success rows fell straight through to ``_search_semantic`` — which
-    references ``job_embeddings`` by name and raised ``UndefinedTable`` -> 500,
-    surfacing in the browser as "failed to load results" for the Mine / Shared
-    tabs while the public scope (diverted to lexical by the unembedded probe)
-    kept working. The dispatcher now forces lexical whenever the table is absent.
-    """
-    monkeypatch.setattr(dashboard.settings, "embeddings_enabled", True)
-    monkeypatch.setattr(dashboard, "_job_embeddings_table_present", lambda _store: False)
-
-    def _must_not_run(**_kwargs: object) -> dict[str, object]:
-        raise AssertionError("semantic/bm25 search must not run without the table")
-
-    monkeypatch.setattr(dashboard, "_search_semantic", _must_not_run)
-    monkeypatch.setattr(dashboard, "_search_bm25", _must_not_run)
-    sentinel = {"results": [], "total": 0, "matched_ids": [], "search_type": "lexical"}
-    monkeypatch.setattr(dashboard, "_search_lexical", lambda **_kwargs: sentinel)
-
-    out = dashboard.search_optimizations(
-        job_store=SimpleNamespace(engine=object()),
-        query="anything",
-        owner_username="someone@example.com",
-    )
-    assert out is sentinel
-
-
 def test_fetch_corpus_facets_counts_each_dimension_against_the_other_filters(monkeypatch) -> None:
     """Every dimension's count excludes its own filter and applies the others.
 
@@ -352,7 +258,6 @@ def test_fetch_corpus_facets_counts_each_dimension_against_the_other_filters(mon
     full: each branch keeps only positive counts, ranks by count, and is
     capped, while a NULL-value row per dimension carries the distinct total.
     """
-    monkeypatch.setattr(dashboard, "_job_embeddings_relation", lambda _store: "job_embeddings")
     session = MagicMock()
     session.__enter__.return_value = session
     session.execute.return_value.mappings.return_value.all.return_value = [
@@ -415,7 +320,6 @@ def test_fetch_corpus_facets_counts_each_dimension_against_the_other_filters(mon
 
 def test_fetch_corpus_facets_value_query_matches_every_dimension_and_escapes_like(monkeypatch) -> None:
     """A value search narrows every dimension with an escaped ILIKE substring, and the limit is capped."""
-    monkeypatch.setattr(dashboard, "_job_embeddings_relation", lambda _store: "job_embeddings")
     session = MagicMock()
     session.__enter__.return_value = session
     session.execute.return_value.mappings.return_value.all.return_value = []
@@ -439,7 +343,6 @@ def test_fetch_corpus_facets_value_query_matches_every_dimension_and_escapes_lik
 
 def test_fetch_corpus_facets_dimension_restricts_the_query_to_one_dimension(monkeypatch) -> None:
     """One open picker queries only its own dimension, still counted against the other filters."""
-    monkeypatch.setattr(dashboard, "_job_embeddings_relation", lambda _store: "job_embeddings")
     session = MagicMock()
     session.__enter__.return_value = session
     session.execute.return_value.mappings.return_value.all.return_value = [
@@ -490,7 +393,6 @@ def test_search_lexical_orders_by_creation_time_for_sort(monkeypatch, sort: str,
 
     dashboard._search_lexical(
         job_store=SimpleNamespace(engine=object()),
-        je_rel="job_embeddings",
         query="",
         models=None,
         optimizers=None,

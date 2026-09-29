@@ -2,7 +2,7 @@
 
 SQLite is used to avoid requiring a live Postgres instance for the fast CI gate.
 ``SQLiteJobStore`` bypasses ``RemoteDBJobStore.__init__`` so the fast suite can
-avoid PostgreSQL-only engine options and pgvector bootstrap calls.
+avoid PostgreSQL-only engine options and bootstrap calls.
 
 Two additional behaviours depend on a real Postgres instance and are explicitly skipped
 here with a clear reason:
@@ -40,7 +40,7 @@ class SQLiteJobStore(RemoteDBJobStore):
     Overrides only ``__init__`` to:
     - Use ``StaticPool`` (required for sqlite:///:memory: across multiple
       session factory calls to share one connection).
-    - Skip PostgreSQL-only pgvector bootstrap calls.
+    - Skip PostgreSQL-only bootstrap calls.
     """
 
     def __init__(self, db_url: str = "sqlite:///:memory:") -> None:

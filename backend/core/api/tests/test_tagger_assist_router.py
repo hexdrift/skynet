@@ -62,7 +62,7 @@ _SESSION_BODY = {
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for assist-router tests (no pgvector).
+    """In-memory SQLite job store for assist-router tests (no Postgres).
 
     Beyond the tagging-session tables this one also services the job-row
     methods (``create_job`` / ``set_payload_overview`` / status reads), so the

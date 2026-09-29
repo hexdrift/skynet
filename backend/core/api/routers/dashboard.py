@@ -148,10 +148,8 @@ class SearchResponse(BaseModel):
     # Every ``optimization_id`` that satisfies the query + filters, capped
     # at SEARCH_MATCHED_IDS_CAP.
     matched_ids: list[str]
-    # Which dispatch branch the gateway took. The /explore UI surfaces this
-    # on every result row so users see whether they got embedding-ranked or
-    # ILIKE-matched hits.
-    search_type: Literal["semantic", "lexical"] | None = None
+    # Which dispatch branch the gateway took: BM25-ranked or ILIKE-matched.
+    search_type: Literal["lexical", "bm25"] | None = None
 
 
 class SearchLogRequest(BaseModel):
@@ -291,14 +289,14 @@ def create_dashboard_router(*, job_store: Any) -> APIRouter:
         "/dashboard/search",
         response_model=SearchResponse,
         status_code=200,
-        summary="Semantic + structured search across optimizations",
+        summary="Text + structured search across optimizations",
         tags=["agent"],
     )
     def public_search(
         request: SearchRequest,
         current_user: AuthenticatedUserDep,
     ) -> SearchResponse:
-        """Rank embedded jobs by pgvector similarity (or by date).
+        """Rank jobs by BM25 relevance when available, else match them lexically.
 
         Args:
             request: The query, filters, sort, and paging parameters.

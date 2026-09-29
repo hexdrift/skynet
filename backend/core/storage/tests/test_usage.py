@@ -1,7 +1,7 @@
 """Tests for unified per-user storage accounting (``core.storage.usage``).
 
 Runs against an in-memory SQLite engine (the sibling job-store tests' pattern: a
-``RemoteDBJobStore`` subclass that skips the pgvector bootstrap so
+``RemoteDBJobStore`` subclass that skips the Postgres-only bootstrap so
 ``Base.metadata.create_all`` stands up every table). Covers the compact-JSON
 sizer, the empty-user fast path, and the ``jobs.stored_bytes`` write path that
 the optimizations category sums.
@@ -20,12 +20,10 @@ from sqlalchemy.pool import StaticPool
 
 from core.config import settings
 from core.storage.models import (
-    EMBEDDING_DIM,
     SAMPLE_STAGED_ID_PREFIX,
     AgentStagedDatasetModel,
     Base,
     DatasetModel,
-    JobEmbeddingModel,
     LogEntryModel,
 )
 from core.storage.remote import RemoteDBJobStore
@@ -40,7 +38,7 @@ from core.storage.usage import (
 
 
 class _SQLiteJobStore(RemoteDBJobStore):
-    """RemoteDBJobStore on in-memory SQLite (skips the pgvector bootstrap)."""
+    """RemoteDBJobStore on in-memory SQLite (skips the Postgres-only bootstrap)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""
@@ -124,15 +122,8 @@ def test_compute_user_storage_is_owner_scoped(store: _SQLiteJobStore) -> None:
     assert alice.total == alice.breakdown["optimizations"]
 
 
-def test_byproducts_fold_into_optimization_footprint(
-    store: _SQLiteJobStore, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Logs and embeddings count toward the owning optimization, not a category of their own."""
-    # job_embeddings exists (and thus has rows to count) only on the semantic
-    # backend; usage accounting now skips it when embeddings are disabled, so
-    # pin the flag on for the embedding-bytes assertion below. The SQLite test
-    # store creates every table regardless, which is why this must be explicit.
-    monkeypatch.setattr(settings, "embeddings_enabled", True)
+def test_byproducts_fold_into_optimization_footprint(store: _SQLiteJobStore) -> None:
+    """Logs count toward the owning optimization, not a category of their own."""
     store.create_job("job-1", username="alice")
     store.update_job("job-1", payload={"a": 1})
 
@@ -143,13 +134,11 @@ def test_byproducts_fold_into_optimization_footprint(
     message = "x" * 100
     with store._session_factory() as session:
         session.add(LogEntryModel(optimization_id="job-1", level="INFO", logger="t", message=message))
-        session.add(JobEmbeddingModel(optimization_id="job-1", user_id="alice"))
         session.commit()
 
-    embedding_bytes = EMBEDDING_DIM * 4 * 3
     usage = compute_user_storage(store.engine, "alice")
     assert set(usage.breakdown) == set(STORAGE_CATEGORIES)
-    assert usage.breakdown["optimizations"] == base + len(message) + embedding_bytes
+    assert usage.breakdown["optimizations"] == base + len(message)
     assert usage.total == usage.breakdown["optimizations"]
 
     item = compute_user_storage_category_items(store.engine, "alice", "optimizations")[0]
@@ -284,7 +273,7 @@ def test_category_items_non_deletable_category_is_empty(store: _SQLiteJobStore) 
     """A byproduct category (no standalone artifact) yields an empty list."""
     store.create_job("job-x", username="alice")
     store.update_job("job-x", payload={"a": 1})
-    assert compute_user_storage_category_items(store.engine, "alice", "embeddings") == []
+    assert compute_user_storage_category_items(store.engine, "alice", "logs") == []
     assert compute_user_storage_category_items(store.engine, "alice", "bogus") == []
 
 

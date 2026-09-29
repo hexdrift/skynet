@@ -1,7 +1,7 @@
 """Tests for the agent-history conversation router's bulk-delete route.
 
 Mounts the conversation router on an in-memory SQLite store (the sibling
-routers' pattern: a ``RemoteDBJobStore`` subclass that skips the pgvector
+routers' pattern: a ``RemoteDBJobStore`` subclass that skips the Postgres-only
 bootstrap so ``Base.metadata.create_all`` stands up the conversation tables).
 Covers the per-id outcomes of ``POST /agent/conversations/bulk-delete``: owned
 rows delete, duplicates collapse, unknown and other-users' ids are skipped, and
@@ -28,7 +28,7 @@ _ALICE = AuthenticatedUser(username="alice", role="user", groups=())
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for agent-history tests (no pgvector)."""
+    """In-memory SQLite job store for agent-history tests (no Postgres)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

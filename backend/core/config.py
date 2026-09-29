@@ -67,19 +67,6 @@ class Settings(BaseSettings):
         description="Optional operator-managed Groq key for centrally configured models.",
     )
     anthropic_api_key: SecretStr | None = Field(default=None, description="Anthropic API key for Claude models")
-    transcription_base_url: str = Field(
-        default="",
-        alias="TRANSCRIPTION_BASE_URL",
-        description=(
-            "OpenAI-compatible speech-to-text API base inside the private network. "
-            "Unset disables dictation and its UI."
-        ),
-    )
-    transcription_api_key: SecretStr | None = Field(
-        default=None,
-        alias="TRANSCRIPTION_API_KEY",
-        description="Optional bearer token for the configured transcription endpoint.",
-    )
     smtp_host: str | None = Field(
         default=None,
         alias="SMTP_HOST",
@@ -105,11 +92,6 @@ class Settings(BaseSettings):
         default=True,
         alias="SMTP_STARTTLS",
         description="Upgrade the SMTP connection with STARTTLS.",
-    )
-    transcription_model: str = Field(
-        default="whisper-large-v3-turbo",
-        alias="TRANSCRIPTION_MODEL",
-        description="Model identifier sent to the OpenAI-compatible transcription endpoint.",
     )
     byok_vault_key: SecretStr | None = Field(
         default=None,
@@ -652,70 +634,7 @@ class Settings(BaseSettings):
             "back to generalist_agent_base_url."
         ),
     )
-    embeddings_base_url: str = Field(
-        default="",
-        description="Internal OpenAI-compatible embedding API base URL, e.g. https://llm.internal/v1",
-    )
-    embeddings_model: str = Field(
-        default="jina-embeddings-v4",
-        description=(
-            "Embedding model id exposed by embeddings_base_url. "
-            "The model must return at least embeddings_dim values. "
-            "Jina v4 is multilingual (89 languages incl. Hebrew) and supports "
-            "asymmetric retrieval LoRA adapters via the request ``task`` field — "
-            "the gateway passes ``retrieval.query`` for searches and "
-            "``retrieval.passage`` for indexed summaries so Hebrew↔English and "
-            "same-language pairs all score correctly."
-        ),
-    )
-    embeddings_api_key: SecretStr | None = Field(
-        default=None,
-        description=(
-            "Optional bearer token for the embedding API. Falls back to OPENAI_API_KEY "
-            "when unset so a shared internal gateway secret can be reused."
-        ),
-    )
-    embeddings_dim: int = Field(
-        default=512,
-        ge=64,
-        le=2048,
-        description=(
-            "Head-truncated dimension stored in job_embeddings.embedding_summary. "
-            "Must match the schema; changing requires a migration."
-        ),
-    )
-    # TODO: On-prem / air-gap — leave EMBEDDINGS_SUMMARY_MODEL empty so the
-    # pipeline reuses code_agent_model (which already points at your internal
-    # gateway). Setting this to a public-provider id would route summarisation
-    # calls outside the air-gap.
-    embeddings_summary_model: str = Field(
-        default="",
-        description=(
-            "LiteLLM model id used to summarise a finished job before embedding. "
-            "Falls back to code_agent_model when empty."
-        ),
-    )
-    embedding_index_sweep_interval_seconds: float = Field(
-        default=60.0,
-        ge=5.0,
-        le=3600.0,
-        description=(
-            "Seconds between bounded repair passes for missing or stale Explore "
-            "embeddings."
-        ),
-        alias="EMBEDDING_INDEX_SWEEP_INTERVAL",
-    )
-    embedding_index_sweep_batch_size: int = Field(
-        default=25,
-        ge=1,
-        le=500,
-        description=(
-            "Maximum number of successful jobs re-indexed during one Explore "
-            "embedding repair pass."
-        ),
-        alias="EMBEDDING_INDEX_SWEEP_BATCH_SIZE",
-    )
-    search_backend: Literal["lexical", "bm25", "semantic"] = Field(
+    search_backend: Literal["lexical", "bm25"] = Field(
         default="lexical",
         alias="SEARCH_BACKEND",
         description=(
@@ -726,19 +645,13 @@ class Settings(BaseSettings):
             "extensions — neither the migrate Job nor the app runs CREATE EXTENSION.\n"
             "  bm25: requires the pg_search extension. Ranks lexical search with "
             "BM25 relevance; degrades to ILIKE when pg_search is absent.\n"
-            "  semantic: requires the pgvector extension. Embedding (vector) "
-            "search; also enables the embedding pipeline and the job_embeddings "
-            "migration schema, so only this profile runs CREATE EXTENSION vector. "
-            "Set EMBEDDINGS_BASE_URL/MODEL alongside it.\n"
-            "Accepts the synonyms vanilla/ilike->lexical, pg_search/paradedb->bm25, "
-            "embeddings/vector/pgvector->semantic."
+            "Accepts the synonyms vanilla/ilike->lexical, pg_search/paradedb->bm25."
         ),
     )
     # Derived from search_backend by _resolve_search_backend below — SEARCH_BACKEND
-    # is the only switch operators set. Kept as plain fields (not properties) so the
-    # test suite can patch them per-case; any EMBEDDINGS_ENABLED / SEARCH_BM25_ENABLED
-    # left in the environment is overridden by the value derived from SEARCH_BACKEND.
-    embeddings_enabled: bool = Field(default=False)
+    # is the only switch operators set. Kept as a plain field (not a property) so
+    # the test suite can patch it per-case; any SEARCH_BM25_ENABLED left in the
+    # environment is overridden by the value derived from SEARCH_BACKEND.
     search_bm25_enabled: bool = Field(default=False)
 
     @field_validator("search_backend", mode="before")
@@ -746,8 +659,8 @@ class Settings(BaseSettings):
     def _normalize_search_backend(cls, value: object) -> object:
         """Trim, lower-case and map synonyms for SEARCH_BACKEND before validation.
 
-        Lets operators write 'vanilla' / 'pgvector' / ' BM25 ' and still land on
-        one of the canonical lexical/bm25/semantic values the Literal accepts.
+        Lets operators write 'vanilla' / 'pg_search' / ' BM25 ' and still land on
+        one of the canonical lexical/bm25 values the Literal accepts.
 
         Args:
             value: Raw SEARCH_BACKEND input (string from env, or anything else).
@@ -768,28 +681,21 @@ class Settings(BaseSettings):
             "pg_search": "bm25",
             "pgsearch": "bm25",
             "paradedb": "bm25",
-            "embeddings": "semantic",
-            "embedding": "semantic",
-            "vector": "semantic",
-            "pgvector": "semantic",
         }
         return synonyms.get(normalized, normalized)
 
     @model_validator(mode="after")
     def _resolve_search_backend(self) -> Settings:
-        """Derive the embedding / BM25 flags from the single SEARCH_BACKEND knob.
+        """Derive the BM25 flag from the single SEARCH_BACKEND knob.
 
-        SEARCH_BACKEND is authoritative so the three profiles stay mutually
-        exclusive: ``embeddings_enabled`` (pgvector + embedding pipeline + the
-        job_embeddings migration schema) is on only for 'semantic', and
-        ``search_bm25_enabled`` (pg_search ranking) only for 'bm25'. 'lexical'
-        leaves both off, so neither the migrate Job nor the running app issues a
-        CREATE EXTENSION against a vanilla Postgres.
+        SEARCH_BACKEND is authoritative: ``search_bm25_enabled`` (pg_search
+        ranking) is on only for 'bm25'. 'lexical' leaves it off, so neither the
+        migrate Job nor the running app issues a CREATE EXTENSION against a
+        vanilla Postgres.
 
         Returns:
-            This settings instance with the derived flags applied.
+            This settings instance with the derived flag applied.
         """
-        self.embeddings_enabled = self.search_backend == "semantic"
         self.search_bm25_enabled = self.search_backend == "bm25"
         return self
 

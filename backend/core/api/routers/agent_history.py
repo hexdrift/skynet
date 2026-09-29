@@ -17,17 +17,15 @@ from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, text
+from sqlalchemy import or_
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, load_only
 
-from ...config import settings
 from ...models import (
     BulkDeleteByIdsRequest,
     BulkDeleteByIdsResponse,
     BulkDeleteByIdsSkipped,
 )
-from ...service_gateway.embedding_pipeline.embeddings import get_embedder
 from ...storage.models import AgentConversationModel, AgentMessageModel
 from ..auth import AuthenticatedUser, get_authenticated_user
 from ..errors import DomainError
@@ -150,25 +148,6 @@ def create_agent_history_router(*, job_store) -> APIRouter:
         """
         with Session(job_store.engine) as session:
             query_clean = (q or "").strip()
-            if query_clean and _can_use_semantic_search(session, user.username):
-                ranked_ids = _semantic_conversation_ids(
-                    session, user.username, query_clean, pinned=pinned, cap=MAX_LIST * 2
-                )
-                if ranked_ids is not None:
-                    page_ids = ranked_ids[offset : offset + limit]
-                    if not page_ids:
-                        return []
-                    rows_by_id = {
-                        cast(str, row.id): row
-                        for row in session.query(AgentConversationModel)
-                        .filter(AgentConversationModel.id.in_(page_ids))
-                        .all()
-                    }
-                    ordered = [rows_by_id[i] for i in page_ids if i in rows_by_id]
-                    previews = _fetch_previews(session, list(rows_by_id.keys()))
-                    return [
-                        _row_to_summary(r, previews.get(cast(str, r.id))) for r in ordered
-                    ]
             query = session.query(AgentConversationModel).filter(
                 AgentConversationModel.username == user.username
             )
@@ -411,118 +390,6 @@ def purge_stale_conversations(engine: Engine, *, threshold_days: int) -> int:
     if deleted:
         logger.info("Purged %d stale agent conversation(s) older than %d days", deleted, threshold_days)
     return int(deleted)
-
-
-def _vector_literal(vector: list[float]) -> str:
-    """Format a Python float list as a pgvector text literal.
-
-    Args:
-        vector: The query embedding as a list of floats.
-
-    Returns:
-        The pgvector ``"[v1,v2,...]"`` literal — pgvector parses this on input.
-    """
-    return "[" + ",".join(f"{v:.7f}" for v in vector) + "]"
-
-
-def _can_use_semantic_search(session: Session, username: str) -> bool:
-    """Return whether the caller's owned conversations are fully embedded.
-
-    Matches the dispatch shape in :func:`dashboard.search_optimizations`:
-    semantic search is only used when every in-scope row has a vector, so
-    a partially-embedded corpus stays fully searchable instead of silently
-    dropping unembedded rows.
-
-    Args:
-        session: Active SQLAlchemy session.
-        username: Authenticated caller; only their conversations are
-            considered.
-
-    Returns:
-        True when ``settings.embeddings_enabled`` is true and no owned
-        conversation lacks a usable embedding row.
-    """
-    if not settings.embeddings_enabled:
-        return False
-    try:
-        row = session.execute(
-            text(
-                "SELECT 1 FROM agent_conversations c "
-                "LEFT JOIN conversation_embeddings e ON e.conversation_id = c.id "
-                "WHERE c.username = :username "
-                "  AND (e.conversation_id IS NULL OR e.embedding_summary IS NULL) "
-                "LIMIT 1"
-            ),
-            {"username": username},
-        ).first()
-        return row is None
-    except Exception as exc:
-        logger.warning("Conversation semantic-eligibility probe failed: %s", exc)
-        return False
-
-
-def _semantic_conversation_ids(
-    session: Session,
-    username: str,
-    query: str,
-    *,
-    pinned: bool | None,
-    cap: int,
-) -> list[str] | None:
-    """Rank the caller's conversations by pgvector cosine distance.
-
-    Args:
-        session: Active SQLAlchemy session.
-        username: Authenticated caller; rows are filtered to this user.
-        query: Pre-trimmed free-text query embedded as ``retrieval.query``.
-        pinned: Optional pinned filter mirroring the route argument.
-        cap: Maximum number of IDs to return (covers paging).
-
-    Returns:
-        Ordered conversation IDs (most similar first), or ``None`` when
-        the embedder is unavailable or the ranked query fails — the caller
-        should fall back to lexical in either case.
-    """
-    embedder = get_embedder()
-    if not embedder.available():
-        return None
-    vector = embedder.encode(query, task="retrieval.query")
-    if vector is None:
-        return None
-    params: dict[str, Any] = {
-        "username": username,
-        "query_vec": _vector_literal(vector),
-        "limit": cap,
-    }
-    where_parts = [
-        "c.username = :username",
-        "e.embedding_summary IS NOT NULL",
-    ]
-    if pinned is not None:
-        where_parts.append("c.pinned = :pinned")
-        params["pinned"] = pinned
-    where_sql = " AND ".join(where_parts)
-    try:
-        rows = (
-            session.execute(
-                text(
-                    "SELECT c.id "
-                    "FROM agent_conversations c "
-                    "INNER JOIN conversation_embeddings e ON e.conversation_id = c.id "
-                    f"WHERE {where_sql} "
-                    "ORDER BY e.embedding_summary <=> CAST(:query_vec AS vector) ASC, "
-                    "         c.updated_at DESC "
-                    "LIMIT :limit"
-                ),
-                params,
-            )
-            .mappings()
-            .all()
-        )
-    except Exception as exc:
-        logger.warning("Semantic conversation search failed: %s", exc)
-        return None
-    return [str(row["id"]) for row in rows]
 
 
 def _fetch_previews(session: Session, conversation_ids: list[str]) -> dict[str, str]:

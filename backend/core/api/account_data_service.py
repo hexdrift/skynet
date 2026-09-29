@@ -17,14 +17,12 @@ from ..storage.models import (
     AgentStagedDatasetModel,
     ApiTokenModel,
     ByokProviderKeyModel,
-    ConversationEmbeddingModel,
     DatasetBlobModel,
     DatasetModel,
     DatasetShareGrantModel,
     DatasetShareLinkModel,
     GepaCheckpointModel,
     GridPairResultModel,
-    JobEmbeddingModel,
     JobModel,
     LogEntryModel,
     NotificationPreferenceModel,
@@ -125,9 +123,6 @@ def delete_account(session: Session, username: str) -> AccountDeletionSummary:
         deleted += _delete_rows(session, delete(JobModel).where(JobModel.optimization_id.in_(job_ids)))
 
     deleted += _delete_rows(
-        session, delete(JobEmbeddingModel).where(JobEmbeddingModel.user_id == username)
-    )
-    deleted += _delete_rows(
         session,
         delete(OptimizationShareLinkModel).where(OptimizationShareLinkModel.created_by == username),
     )
@@ -208,10 +203,6 @@ def delete_account(session: Session, username: str) -> AccountDeletionSummary:
             session,
             delete(AgentMessageModel).where(AgentMessageModel.conversation_id.in_(conversation_ids)),
         )
-    deleted += _delete_rows(
-        session,
-        delete(ConversationEmbeddingModel).where(ConversationEmbeddingModel.username == username),
-    )
     deleted += _delete_rows(
         session,
         delete(AgentConversationModel).where(AgentConversationModel.username == username),

@@ -1,19 +1,15 @@
 "use client";
 
-import { ScorePill } from "@/shared/ui/outcome-chip";
 import * as React from "react";
 import Link from "next/link";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import type { SearchResult } from "@/shared/lib/api";
-import type { SearchType } from "../hooks/use-semantic-search";
 import { formatExactDate } from "../lib/format";
 
 interface ResultsListProps {
   results: SearchResult[];
   /** Highlight any token from the query inside the title/snippet. Empty = no highlight. */
   highlight: string;
-  /** Which backend branch served the query — drives the per-row source badge. */
-  searchType: SearchType | null;
   /** Keyboard-highlighted row index, or -1. Driven by the search input's ↑/↓. */
   activeIndex: number;
   /** Fired when a row is opened — the explicit-commit signal for query trending. */
@@ -23,15 +19,13 @@ interface ResultsListProps {
 /**
  * Vertically-rhythmic list of search hits. Each row is a single-tap card:
  * title, two-line summary, and a thin meta strip carrying the run's exact
- * creation date at the end — plus a relevance badge at the start on
- * semantic searches.
+ * creation date at the end.
  *
  * Hover lifts the title to full-opacity; the row itself is the open affordance.
  */
 export function ResultsList({
   results,
   highlight,
-  searchType,
   activeIndex,
   onResultOpen,
 }: ResultsListProps) {
@@ -45,7 +39,6 @@ export function ResultsList({
             index={index}
             active={index === activeIndex}
             tokens={tokens}
-            searchType={searchType}
             onOpen={onResultOpen}
           />
         </li>
@@ -59,14 +52,12 @@ function ResultRow({
   index,
   active,
   tokens,
-  searchType,
   onOpen,
 }: {
   row: SearchResult;
   index: number;
   active: boolean;
   tokens: string[];
-  searchType: SearchType | null;
   onOpen: () => void;
 }) {
   const title = row.task_name?.trim() || msg("explore.row.no_summary");
@@ -103,9 +94,6 @@ function ResultRow({
       )}
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-foreground/50">
-        {searchType === "semantic" && row.relevance != null && (
-          <RelevanceBadge relevance={row.relevance} />
-        )}
         <time
           dateTime={row.created_at ?? undefined}
           title={row.created_at ?? undefined}
@@ -115,19 +103,6 @@ function ResultRow({
         </time>
       </div>
     </Link>
-  );
-}
-
-function RelevanceBadge({ relevance }: { relevance: number }) {
-  // Cosine similarity is in [-1, 1] but in practice falls in [0, 1] for
-  // sentence embeddings. Clamp defensively and render as a 0–100 score so
-  // users have an intuitive ranking signal next to each row.
-  const pct = Math.max(0, Math.min(1, relevance)) * 100;
-  const label = formatMsg("explore.row.relevance", { pct: pct.toFixed(0) });
-  return (
-    <ScorePill tone="neutral" title={msg("explore.row.relevance.title")}>
-      <span>{label}</span>
-    </ScorePill>
   );
 }
 

@@ -69,7 +69,6 @@ services:
       API_URL: ${FRONTEND_API_URL:-http://localhost:8000}
       BACKEND_INTERNAL_URL: http://api:8000
       AUTH_URL: ${FRONTEND_URL:-http://localhost:3001}
-      TRANSCRIPTION_ENABLED: ${TRANSCRIPTION_ENABLED:-false}
     depends_on:
       api:
         condition: service_healthy

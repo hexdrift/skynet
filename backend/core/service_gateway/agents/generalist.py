@@ -960,7 +960,7 @@ _ALWAYS_TOOLS = frozenset(
         # Generalized wizard patch — any editable field, partial updates.
         "update_wizard_state",
         "update_user_preferences",
-        # Semantic + structured search across every public optimization. The
+        # Text + structured search across every public optimization. The
         # agent uses it to surface comparable runs ("find me sentiment jobs
         # that beat 0.8 with GEPA") before the user has filled the wizard.
         "public_search_dashboard_search_post",
@@ -1568,7 +1568,7 @@ Capabilities worth knowing about:
   preference on or off, call ``update_user_preferences``. Supported fields
   are ``expand_advanced``, ``lite_mode``,
   ``wizard_code_assist`` (``auto`` or ``manual``), ``wizard_split_mode``
-  (``auto`` or ``manual``), ``tagger_assist``, and ``dictation_enabled``.
+  (``auto`` or ``manual``), and ``tagger_assist``.
   Bundle all requested changes into one call and end the turn with a
   concise status.
   The tool updates this browser's device-scoped settings; it does not
@@ -1622,7 +1622,7 @@ Capabilities worth knowing about:
   just flagged as wrong.
 * Logs: ``get_job_logs`` returns the log trail when the user is
   debugging a failed run.
-* Cross-corpus search: ``public_search`` does semantic + structured
+* Cross-corpus search: ``public_search`` does text + structured
   search over every public optimization (free-text query in any
   language, plus optional models / optimizers / optimization_types /
   date filters, sorted by relevance / newest / oldest). Use it when the

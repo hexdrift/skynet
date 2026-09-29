@@ -594,7 +594,7 @@ def enforce_storage_quota(job_store, username: str, incoming_bytes: int) -> None
     """Raise if persisting ``incoming_bytes`` would exceed the storage budget.
 
     The unified per-user storage total (jobs, datasets, logs, agent chats,
-    staged uploads, embeddings) plus the incoming write is compared against the
+    staged uploads) plus the incoming write is compared against the
     user's effective byte budget. This is the single gate that supersedes the
     legacy per-job count cap and the per-library dataset quota.
 

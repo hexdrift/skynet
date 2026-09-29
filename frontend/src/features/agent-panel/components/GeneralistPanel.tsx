@@ -265,10 +265,8 @@ export function GeneralistPanel({ wizardState }: GeneralistPanelProps = {}) {
   React.useEffect(() => {
     if (!drawerOpen) return;
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    // 400ms matches the explore SearchBar so the embedding API (Jina v4)
-    // sees one request per typing pause instead of one per keystroke.
-    // Shorter intervals trigger transient rate-limit failures that surface
-    // to the user as "search could not happen".
+    // 400ms matches the explore SearchBar so the search API sees one
+    // request per typing pause instead of one per keystroke.
     searchDebounceRef.current = setTimeout(() => {
       void store.refresh({ q: searchQuery.trim() || undefined });
     }, 400);

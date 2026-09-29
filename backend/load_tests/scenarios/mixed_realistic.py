@@ -3,7 +3,7 @@
 Each virtual user ramps in once, authenticates once, and then follows a
 stateful journey through the same API families the product drives in parallel:
 optimization submission, dashboard reads, analytics, dataset profiling and
-validation, semantic Explore search, production frontend delivery, model
+validation, Explore search, production frontend delivery, model
 discovery, job summaries, and long-lived SSE progress streams.
 The mock LM keeps the run free of provider cost while real API replicas,
 PgBouncer, Redis, Postgres, and workers remain in the measured path.
@@ -75,8 +75,6 @@ class _JourneyMetrics:
         """Create empty aggregate and operation collectors."""
         self.overall = ScenarioMetrics("mixed_realistic")
         self._operations: dict[str, ScenarioMetrics] = {}
-        self.semantic_responses = 0
-        self.semantic_fallbacks = 0
 
     def record(self, operation: str, *, status_code: int, latency_seconds: float) -> None:
         """Record one request in both metric views.
@@ -302,7 +300,7 @@ async def _browse_once(
             "dataset_profile",
             "dataset_validate",
             "models",
-            "semantic_search",
+            "explore_search",
             "frontend",
         ),
         weights=(32, 14, 10, 10, 10, 14, 10),
@@ -345,10 +343,10 @@ async def _browse_once(
     elif action == "models":
         url = f"{config.api_base_url}/models"
         operation = "models_catalog"
-    elif action == "semantic_search":
+    elif action == "explore_search":
         method = "POST"
         url = f"{config.api_base_url}/dashboard/search"
-        operation = "semantic_search"
+        operation = "explore_search"
         json_body = {
             "query": "classification quality",
             "sort": "relevance",
@@ -362,7 +360,7 @@ async def _browse_once(
         operation = "frontend_login" if frontend_path == "/login" else "frontend_session"
         request_headers = {}
 
-    response = await _request(
+    await _request(
         client,
         journey_metrics,
         method=method,
@@ -371,16 +369,6 @@ async def _browse_once(
         operation=operation,
         json_body=json_body,
     )
-    if action != "semantic_search" or response is None or response.status_code != 200:
-        return
-    try:
-        search_type = response.json().get("search_type")
-    except ValueError:
-        search_type = None
-    if search_type == "semantic":
-        journey_metrics.semantic_responses += 1
-    else:
-        journey_metrics.semantic_fallbacks += 1
 
 
 async def run(config: MixedRealisticConfig) -> ScenarioResult:
@@ -502,14 +490,6 @@ async def run(config: MixedRealisticConfig) -> ScenarioResult:
             ),
             "operation_counts": {name: int(operation["requests"]) for name, operation in operation_results.items()},
             "operation_latency": operation_results,
-            "semantic_search_responses": journey_metrics.semantic_responses,
-            "semantic_search_fallbacks": journey_metrics.semantic_fallbacks,
-            "semantic_search_fallback_percent": round(
-                100.0
-                * journey_metrics.semantic_fallbacks
-                / max(journey_metrics.semantic_responses + journey_metrics.semantic_fallbacks, 1),
-                3,
-            ),
             "job_status_counts_at_end": status_counts,
         },
     )
@@ -533,14 +513,6 @@ async def run(config: MixedRealisticConfig) -> ScenarioResult:
     if status_counts.get("success", 0) < accepted_submissions:
         extra_violations.append(
             f"only {status_counts.get('success', 0)}/{accepted_submissions} accepted submissions completed successfully",
-        )
-    if journey_metrics.semantic_responses == 0:
-        extra_violations.append("no Explore search response confirmed semantic pgvector execution")
-    semantic_attempts = journey_metrics.semantic_responses + journey_metrics.semantic_fallbacks
-    semantic_fallback_percent = 100.0 * journey_metrics.semantic_fallbacks / max(semantic_attempts, 1)
-    if semantic_fallback_percent > 5.0:
-        extra_violations.append(
-            f"{semantic_fallback_percent:.1f}% of Explore searches fell back from semantic mode",
         )
     frontend_requests = sum(
         int(operation_results.get(name, {}).get("requests", 0))

@@ -28,7 +28,7 @@ import {
   FACET_LIMIT_STEP,
   facetsFromPoints,
 } from "../lib/facet-options";
-import { useSemanticSearch } from "../hooks/use-semantic-search";
+import { useSearch } from "../hooks/use-search";
 import { useRecentQueries } from "../hooks/use-recent-queries";
 import { usePopularQueries } from "../hooks/use-popular-queries";
 import { useResultKeyboardNav } from "../hooks/use-result-keyboard-nav";
@@ -60,7 +60,7 @@ export function ExploreView() {
     return () => window.removeEventListener("tutorial-exited", onExit);
   }, []);
 
-  const { query, response, actions, appliedFilterCount } = useSemanticSearch({
+  const { query, response, actions, appliedFilterCount } = useSearch({
     sessionUser,
     sessionReady: status !== "loading",
   });
@@ -278,11 +278,11 @@ function ListPane({
   hasFilters,
   sessionUser,
 }: {
-  query: ReturnType<typeof useSemanticSearch>["query"];
-  response: ReturnType<typeof useSemanticSearch>["response"];
+  query: ReturnType<typeof useSearch>["query"];
+  response: ReturnType<typeof useSearch>["response"];
   activeIndex: number;
-  onSetPage: ReturnType<typeof useSemanticSearch>["actions"]["setPage"];
-  onSetSort: ReturnType<typeof useSemanticSearch>["actions"]["setSort"];
+  onSetPage: ReturnType<typeof useSearch>["actions"]["setPage"];
+  onSetSort: ReturnType<typeof useSearch>["actions"]["setSort"];
   onClearAll: () => void;
   onClearQuery: () => void;
   onResultOpen: () => void;
@@ -391,7 +391,6 @@ function ListPane({
         <ResultsList
           results={response.results}
           highlight={query.text}
-          searchType={response.searchType}
           activeIndex={activeIndex}
           onResultOpen={onResultOpen}
         />

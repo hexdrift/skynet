@@ -42,7 +42,7 @@ Skynet has been installed as release "{{ .Release.Name }}" in namespace "{{ .Rel
 {{- if and (not .Values.externalDatabase.enabled) .Values.postgres.enabled }}
 
 6. Postgres (bundled, single-replica)
-   The bundled pgvector StatefulSet runs ONE pod backed by a {{ .Values.postgres.persistence.size }} PVC.
+   The bundled Postgres StatefulSet runs ONE pod backed by a {{ .Values.postgres.persistence.size }} PVC.
    Trade-offs to plan for before going to prod:
 
    - Node drains cause a brief outage. The PDB is OFF by default — a
@@ -60,7 +60,7 @@ Skynet has been installed as release "{{ .Release.Name }}" in namespace "{{ .Rel
      query load grows; horizontal scale is not supported by this chart.
 
    For real production loads, set externalDatabase.enabled=true and point
-   at a managed pgvector cluster (Crunchy, CloudNativePG, RDS, etc.), then
+   at a managed Postgres cluster (Crunchy, CloudNativePG, RDS, etc.), then
    redeploy with postgres.enabled=false to remove the bundled StatefulSet.
 {{- end }}
 
