@@ -21,10 +21,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # internal gateway. The placeholder cannot silently target a public provider.
 DEFAULT_AGENT_MODEL_ID = "openai/on-prem-default"
 
-# SEARCH_BACKEND values that selected the removed pgvector search; rejected
-# explicitly so a stale config fails loudly rather than silently degrading.
-_REMOVED_SEMANTIC_BACKENDS = frozenset({"semantic", "embeddings", "embedding", "vector", "pgvector"})
-
 
 # Keyed on the raw CSV rather than cached on the instance: tests monkeypatch
 # the source strings at runtime, and an instance-level cache would go stale.
@@ -649,9 +645,7 @@ class Settings(BaseSettings):
             "extensions — neither the migrate Job nor the app runs CREATE EXTENSION.\n"
             "  bm25: requires the pg_search extension. Ranks lexical search with "
             "BM25 relevance; degrades to ILIKE when pg_search is absent.\n"
-            "Accepts the synonyms vanilla/ilike->lexical, pg_search/paradedb->bm25. "
-            "The removed 'semantic' backend (and its embeddings/vector/pgvector "
-            "synonyms) is rejected at startup."
+            "Accepts the synonyms vanilla/ilike->lexical, pg_search/paradedb->bm25."
         ),
     )
     # Derived from search_backend by _resolve_search_backend below — SEARCH_BACKEND
@@ -674,11 +668,6 @@ class Settings(BaseSettings):
         Returns:
             The canonical backend name when a string synonym matches, otherwise
             the value unchanged for the Literal validator to accept or reject.
-
-        Raises:
-            ValueError: When the value names the removed semantic backend, so an
-                old deployment config fails at boot with a pointer to the fix
-                instead of a bare Literal mismatch.
         """
         if not isinstance(value, str):
             return value
@@ -693,11 +682,6 @@ class Settings(BaseSettings):
             "pgsearch": "bm25",
             "paradedb": "bm25",
         }
-        if normalized in _REMOVED_SEMANTIC_BACKENDS:
-            raise ValueError(
-                f"SEARCH_BACKEND={value.strip()!r} is no longer supported: semantic "
-                "(embedding) search was removed. Set SEARCH_BACKEND to 'lexical' or 'bm25'."
-            )
         return synonyms.get(normalized, normalized)
 
     @model_validator(mode="after")

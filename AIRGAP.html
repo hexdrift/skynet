@@ -1200,7 +1200,7 @@ Get-FileHash -Algorithm SHA256 backend-2026.04.30.tar</span></pre>
     <li><strong><code>SEARCH_BACKEND=lexical</code> (default) — no extension.</strong> Explore search uses <code>ILIKE</code> substring matching on a vanilla Postgres. The migrations run no <code>CREATE EXTENSION</code>, so a database with no extension privilege installs cleanly. Recommended when you can't add extensions in the air gap.</li>
     <li><strong><code>SEARCH_BACKEND=bm25</code> — needs <code>pg_search</code>.</strong> Ranked lexical search via the ParadeDB <code>pg_search</code> extension; degrades to <code>ILIKE</code> if it's absent (best-effort, never blocks boot).</li>
   </ul>
-  <p>These are the only two accepted values. The retired <code>semantic</code> value is rejected: the backend fails at startup with a clear error, so change it before upgrading.</p>
+  <p>These are the only two accepted values.</p>
 
   <div data-search="bm25">
   <h3>Optional: <code>pg_search</code> for BM25 lexical ranking</h3>
@@ -1561,7 +1561,7 @@ BACKEND_AUTH_SECRET</pre>
   -f deploy\helm\skynet\values-airgap.generated.yaml ^
   --set-json <span class="s">"migration.command=[\"alembic\",\"stamp\",\"0001_onprem\"]"</span></span></pre>
 
-  <p>The migration chain is short: <code>0001_onprem</code> is the squashed baseline and creates the complete extension-free schema straight from the SQLAlchemy models; <code>0002_drop_embeddings</code> drops the retired embedding tables if present (a no-op on a fresh install) and is the current head. A fresh database needs only <code>alembic upgrade head</code>.</p>
+  <p>The migration chain is a single squashed baseline: <code>0001_onprem</code> creates the complete extension-free schema straight from the SQLAlchemy models. It is both the baseline and the current head, so a fresh database needs only <code>alembic upgrade head</code>.</p>
 
   <p>Only run the <code>alembic stamp 0001_onprem</code> path when the live schema genuinely matches the models — i.e. it was created outside Alembic from this same revision. Stamping tells Alembic the DB is current and skips schema creation entirely, so stamping a partial or older schema leaves it broken. When in doubt, diff the live schema against a scratch DB migrated from empty, and verify with <code>alembic heads</code> (and <code>alembic current</code> against the live DB) from <code>backend/</code> before deciding.</p>
 
@@ -1680,7 +1680,7 @@ helm upgrade --install skynet deploy\helm\skynet ^
   <ul>
     <li>The rendered backend <code>NetworkPolicy</code> egress is <strong>not</strong> <code>0.0.0.0/0</code> — every egress slot lists an exact internal CIDR.</li>
     <li>An authenticated admin API call returns <code>200</code> (confirms <code>BACKEND_AUTH_SECRET</code> matches across both Secrets).</li>
-    <li><code>alembic current</code> against the live DB equals the head <code>0002_drop_embeddings</code>.</li>
+    <li><code>alembic current</code> against the live DB equals the head <code>0001_onprem</code>.</li>
     <li>No pod attempts DNS resolution for any public host.</li>
   </ul>
 </section>

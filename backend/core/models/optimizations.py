@@ -173,9 +173,6 @@ class OptimizationSummaryResponse(_JobResponseBase):
 
     best_pair_label: str | None = None
 
-    # Always null in this edition: the AI-authored summaries it carried came
-    # from the removed embedding pipeline. Kept so the response shape (and the
-    # frontend types reading it) stay stable.
     summary_text: str | None = None
 
     # Caller's share role (viewer/editor/owner) when this run was reached

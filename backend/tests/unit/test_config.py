@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 
 from core.config import DEFAULT_AGENT_MODEL_ID, Settings
 
@@ -443,10 +442,3 @@ def test_settings_search_backend_maps_synonyms(monkeypatch: pytest.MonkeyPatch, 
     assert s.search_backend == expected
     assert s.search_bm25_enabled is (expected == "bm25")
 
-
-@pytest.mark.parametrize("raw", ["semantic", "Embeddings", "pgvector", "vector"])
-def test_settings_search_backend_rejects_removed_semantic(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
-    """The removed semantic backend and its synonyms fail at startup with a pointer to the fix."""
-    monkeypatch.setenv("SEARCH_BACKEND", raw)
-    with pytest.raises(ValidationError, match=r"semantic \(embedding\) search was removed"):
-        Settings(_env_file=None)
