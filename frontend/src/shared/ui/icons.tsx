@@ -108,7 +108,6 @@ import { MagicWand as MagicWandBase } from "@phosphor-icons/react/dist/ssr/Magic
 import { MagnifyingGlass as MagnifyingGlassBase } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { MagnifyingGlassMinus as MagnifyingGlassMinusBase } from "@phosphor-icons/react/dist/ssr/MagnifyingGlassMinus";
 import { MagnifyingGlassPlus as MagnifyingGlassPlusBase } from "@phosphor-icons/react/dist/ssr/MagnifyingGlassPlus";
-import { Microphone as MicrophoneBase } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { Minus as MinusBase } from "@phosphor-icons/react/dist/ssr/Minus";
 import { MinusCircle as MinusCircleBase } from "@phosphor-icons/react/dist/ssr/MinusCircle";
 import { Package as PackageBase } from "@phosphor-icons/react/dist/ssr/Package";
@@ -259,7 +258,6 @@ export const MagicWand = /* @__PURE__ */ bold(MagicWandBase);
 export const MagnifyingGlass = /* @__PURE__ */ bold(MagnifyingGlassBase);
 export const MagnifyingGlassMinus = /* @__PURE__ */ bold(MagnifyingGlassMinusBase);
 export const MagnifyingGlassPlus = /* @__PURE__ */ bold(MagnifyingGlassPlusBase);
-export const Microphone = /* @__PURE__ */ bold(MicrophoneBase);
 export const Minus = /* @__PURE__ */ bold(MinusBase);
 export const MinusCircle = /* @__PURE__ */ bold(MinusCircleBase);
 export const Package = /* @__PURE__ */ bold(PackageBase);

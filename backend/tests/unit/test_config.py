@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from core.config import DEFAULT_AGENT_MODEL_ID, Settings
 
@@ -19,8 +20,6 @@ _SETTINGS_ENV_VARS = (
     "WORKER_POLL_INTERVAL",
     "WORKER_STALE_THRESHOLD",
     "JOB_MAX_ATTEMPTS",
-    "EMBEDDING_INDEX_SWEEP_INTERVAL",
-    "EMBEDDING_INDEX_SWEEP_BATCH_SIZE",
     "PROGRESS_EVENTS_PER_JOB_CAP",
     "LOG_ENTRIES_PER_JOB_CAP",
     "CANCEL_POLL_INTERVAL",
@@ -41,6 +40,7 @@ _SETTINGS_ENV_VARS = (
     "ADMIN_USERNAMES",
     "CODE_AGENT_MODEL",
     "GENERALIST_AGENT_MODEL",
+    "SEARCH_BACKEND",
 )
 
 
@@ -91,14 +91,6 @@ def test_settings_defaults_job_max_attempts() -> None:
     s = Settings(_env_file=None)
 
     assert s.job_max_attempts == 3
-
-
-def test_settings_defaults_embedding_index_repair() -> None:
-    """Embedding repair defaults to a one-minute interval and 25-row batch."""
-    s = Settings(_env_file=None)
-
-    assert s.embedding_index_sweep_interval_seconds == 60.0
-    assert s.embedding_index_sweep_batch_size == 25
 
 
 def test_settings_defaults_cancel_poll_interval() -> None:
@@ -434,3 +426,27 @@ def test_settings_agent_model_env_override(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("GENERALIST_AGENT_MODEL", "openai/internal-llm")
     s = Settings(_env_file=None)
     assert s.generalist_agent_model == "openai/internal-llm"
+
+
+def test_settings_search_backend_defaults_to_lexical() -> None:
+    """With no SEARCH_BACKEND set, search is lexical and BM25 ranking is off."""
+    s = Settings(_env_file=None)
+    assert s.search_backend == "lexical"
+    assert s.search_bm25_enabled is False
+
+
+@pytest.mark.parametrize(("raw", "expected"), [(" BM25 ", "bm25"), ("pg_search", "bm25"), ("vanilla", "lexical")])
+def test_settings_search_backend_maps_synonyms(monkeypatch: pytest.MonkeyPatch, raw: str, expected: str) -> None:
+    """Synonyms normalize to a canonical backend and derive the BM25 flag."""
+    monkeypatch.setenv("SEARCH_BACKEND", raw)
+    s = Settings(_env_file=None)
+    assert s.search_backend == expected
+    assert s.search_bm25_enabled is (expected == "bm25")
+
+
+@pytest.mark.parametrize("raw", ["semantic", "Embeddings", "pgvector", "vector"])
+def test_settings_search_backend_rejects_removed_semantic(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+    """The removed semantic backend and its synonyms fail at startup with a pointer to the fix."""
+    monkeypatch.setenv("SEARCH_BACKEND", raw)
+    with pytest.raises(ValidationError, match=r"semantic \(embedding\) search was removed"):
+        Settings(_env_file=None)

@@ -16,7 +16,7 @@ import { categoryLabel } from "../lib/categories";
  * Top-level /storage page: the account-wide cleanup surface. A usage gauge over
  * the caller's budget, then a per-category breakdown where each category opens a
  * drawer listing all of its items for in-place deletion. Byproduct bytes (logs,
- * progress events, embeddings) are folded by the backend into the footprint of
+ * progress events) are folded by the backend into the footprint of
  * the optimization or chat that owns them, so every row here is deletable.
  */
 export function StorageView() {

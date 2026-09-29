@@ -106,11 +106,9 @@ QUEUE_METRICS_REFRESH_SECONDS = 5.0
 # fleet-wide key for a specific cross-replica gate.
 #
 # ``ORPHAN_SWEEP`` — leader election for the periodic orphan-recovery sweeper.
-# ``STARTUP_WORK`` — one-pod-only gate for idempotent startup tasks (schema
-# touch-ups, embedding backfill/purge) so a rolling deploy of N replicas runs
-# the work once, not N times.
+# 742137000002 was the retired startup-work gate; keys are never reused so a
+# mixed-version rollout cannot collide on it.
 ORPHAN_SWEEP_LOCK_KEY = 742137000001
-STARTUP_WORK_LOCK_KEY = 742137000002
 STALE_CONVERSATION_SWEEP_LOCK_KEY = 742137000003
 STAGED_DATASET_SWEEP_LOCK_KEY = 742137000004
 _request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")

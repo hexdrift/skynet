@@ -99,8 +99,6 @@ backend:
     ALERT_EMAIL_MAX_PER_HOUR: "20"
     ALERT_THROTTLE_SECONDS: "300"
     POSTHOG_HOST: ""
-    TRANSCRIPTION_BASE_URL: ""
-    TRANSCRIPTION_MODEL: "whisper-large-v3-turbo"
     # Explore search engine — also decides which Postgres extension the deploy
     # needs. The single knob to switch search profiles:
     #   "lexical"  (default): vanilla Postgres, no extension, ILIKE search. The
@@ -108,13 +106,7 @@ backend:
     #              an air-gapped database you can't add extensions to.
     #   "bm25":    needs the pg_search extension (ranked lexical; degrades to
     #              ILIKE if pg_search is absent).
-    #   "semantic": needs the pgvector extension + the embedding gateway below
-    #              (vector search; the only profile whose migrate Job runs
-    #              CREATE EXTENSION vector and writes the job_embeddings schema).
     SEARCH_BACKEND: "lexical"
-    # Only used when SEARCH_BACKEND=semantic.
-    EMBEDDINGS_BASE_URL: ""
-    EMBEDDINGS_MODEL: "jina-embeddings-v4"
     # air-gap — use the bundled litellm cost map instead of fetching from GitHub on import.
     LITELLM_LOCAL_MODEL_COST_MAP: "True"
     # Set the agent models to ones your internal OpenAI-compatible gateway
@@ -148,13 +140,10 @@ backend:
       OPENAI_API_KEY: ""
       ANTHROPIC_API_KEY: ""
       FIREWORKS_AI_API_KEY: ""
-      # Optional. If empty, OPENAI_API_KEY is reused for the embedding API.
-      EMBEDDINGS_API_KEY: ""
       # Must match frontend.secrets.data.BACKEND_AUTH_SECRET.
       BACKEND_AUTH_SECRET: ""
       # Fernet key for encrypted provider connections. Required to save BYOK.
       BYOK_VAULT_KEY: ""
-      TRANSCRIPTION_API_KEY: ""
       LOG_SHIP_TOKEN: ""
       POSTHOG_PROJECT_API_KEY: ""
       # REMOTE_DB_URL is composed below — see externalDatabase / postgres stanzas.
@@ -276,7 +265,6 @@ frontend:
     # Break-glass admin users only. Prefer AUTH_ADMIN_GROUPS for normal admin assignment.
     AUTH_ADMINS: ""
     BACKEND_AUTH_TOKEN_TTL_SECONDS: "900"
-    TRANSCRIPTION_ENABLED: "false"
     NODE_EXTRA_CA_CERTS: ""
     # Set to the deployed version so the UI footer reflects it. Defaults to a
     # stale 0.1.0 when unset.
@@ -347,7 +335,7 @@ frontend:
       failureThreshold: 2
 
 # ─────────────────────────────────────────────────────────────────────────────
-# External database (preferred for prod) — bring your own pgvector-enabled Postgres.
+# External database (preferred for prod) — bring your own Postgres.
 # ─────────────────────────────────────────────────────────────────────────────
 externalDatabase:
   enabled: false
@@ -372,8 +360,8 @@ externalDatabase:
 postgres:
   enabled: true
   image:
-    repository: pgvector/pgvector
-    tag: pg16
+    repository: postgres
+    tag: "16"
     pullPolicy: IfNotPresent
   auth:
     database: skynet
@@ -510,7 +498,7 @@ networkPolicy:
   # ("backend may reach api.openai.com on 443 only"). Use this when the
   # cluster default-denies egress; otherwise leave empty.
   #
-  # If egressCidrs, llmEgress, embeddingEgress, ldapEgress, AND dbEgress are all
+  # If egressCidrs, llmEgress, ldapEgress, AND dbEgress are all
   # empty, the chart falls back to wide-open egress (0.0.0.0/0 except link-local).
   # The moment ANY of them is set, the chart treats it as the explicit
   # allowlist and removes the wide-open fallback — anything you forget here
@@ -523,15 +511,6 @@ networkPolicy:
   #     - cidr: 10.0.5.0/24      # internal LLM gateway
   #       ports: [443, 8443]
   llmEgress: []
-  # Backend-only embedding API egress allowlist. Omit when the embedding API
-  # lives behind the same CIDR as llmEgress; set it when recommendations use a
-  # separate embedding gateway.
-  #
-  # Example:
-  #   embeddingEgress:
-  #     - cidr: 10.0.9.0/24      # internal embedding gateway
-  #       ports: [443]
-  embeddingEgress: []
   # Backend-only LDAP / Active Directory egress allowlist. Same shape as
   # llmEgress; default port is 636 (ldaps). Set this when the admin-tab
   # username autocomplete needs to reach a domain controller and the cluster

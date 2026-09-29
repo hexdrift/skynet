@@ -21,7 +21,7 @@ name: skynet-loadtest
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:16
     environment:
       POSTGRES_DB: skynet_loadtest
       POSTGRES_USER: skynet
@@ -44,7 +44,6 @@ services:
       dockerfile: Dockerfile
     environment:
       REMOTE_DB_URL: postgresql://skynet:loadtest@postgres:5432/skynet_loadtest
-      SEARCH_BACKEND: "semantic"
     command: ["alembic", "upgrade", "head"]
     depends_on:
       postgres:
@@ -125,11 +124,6 @@ services:
       LOG_LEVEL: WARNING
       LOG_FORMAT: text
       SKYNET_CODE_VERSION: loadtest
-      SEARCH_BACKEND: "semantic"
-      EMBEDDINGS_BASE_URL: http://mock-lm:9000/v1
-      EMBEDDINGS_MODEL: mock-embedding
-      EMBEDDINGS_DIM: "512"
-      EMBEDDINGS_SUMMARY_MODEL: openai/mock-model
     expose:
       - "8000"
     # No host ports — every host-side request goes through the nginx LB.
@@ -175,11 +169,6 @@ services:
       LOG_LEVEL: WARNING
       LOG_FORMAT: text
       SKYNET_CODE_VERSION: loadtest
-      SEARCH_BACKEND: "semantic"
-      EMBEDDINGS_BASE_URL: http://mock-lm:9000/v1
-      EMBEDDINGS_MODEL: mock-embedding
-      EMBEDDINGS_DIM: "512"
-      EMBEDDINGS_SUMMARY_MODEL: openai/mock-model
     depends_on:
       postgres:
         condition: service_healthy

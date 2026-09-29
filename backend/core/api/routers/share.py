@@ -64,7 +64,6 @@ from ...notifications import (
 )
 from ...service_gateway.dashboard import invalidate_public_dashboard_cache
 from ...service_gateway.datasets.split_counts import split_counts_for_version
-from ...service_gateway.embedding_pipeline import set_embedding_privacy
 from ...service_gateway.language_models import build_language_model
 from ...storage.models import (
     AgentConversationModel,
@@ -748,10 +747,8 @@ def create_share_router(*, job_store) -> APIRouter:
         """Flip an optimization's authenticated-Explorer visibility (owner-only).
 
         Toggles the ``is_private`` flag the Explore public corpus filters on.
-        Writes it to ``payload_overview`` **and** the denormalized
-        ``job_embeddings.is_private`` column (what the corpus query actually
-        reads), then invalidates the cached public dashboard so the change shows
-        immediately. Explorer publication and named-share access are separate.
+        Writes it to ``payload_overview``, then invalidates the cached public
+        dashboard so the change shows immediately. Explorer publication and named-share access are separate.
 
         Args:
             optimization_id: Optimization to update.
@@ -770,7 +767,6 @@ def create_share_router(*, job_store) -> APIRouter:
             overview = parse_overview(get_job_no_payload(job_store, optimization_id))
             overview[PAYLOAD_OVERVIEW_IS_PRIVATE] = req.is_private
             job_store.set_payload_overview(optimization_id, overview)
-            set_embedding_privacy(job_store, optimization_id, req.is_private)
             invalidate_public_dashboard_cache()
             return _sharing_state(session, optimization_id, owner)
 

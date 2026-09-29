@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -26,7 +25,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-EMBEDDING_DIM = 512
 JSON_STORE = JSON().with_variant(JSONB(), "postgresql")
 
 
@@ -482,54 +480,6 @@ class UserStorageQuotaOverrideModel(Base):
     updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
-class JobEmbeddingModel(Base):
-    """Per-job embedding row backing the recommendation service.
-
-    One row is written after a job finishes successfully. Three named
-    aspects are embedded independently so a similarity search can
-    weigh them separately (``summary`` = LLM-authored task description,
-    ``code`` = signature + metric source, ``schema`` = dataset schema
-    digest). All use the configured embedding API model,
-    MRL-truncated to ``EMBEDDING_DIM``.
-
-    Metadata (``optimization_type``, ``winning_model``, ``winning_rank``)
-    is denormalized from ``jobs`` so the search can filter and rerank
-    without an extra join per-candidate. ``updated_at`` advances on every
-    refresh so dashboard caches can detect resumed jobs without replacing the
-    row.
-    """
-
-    __tablename__ = "job_embeddings"
-
-    optimization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
-    optimization_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
-    winning_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    winning_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC), index=True
-    )
-    embedding_summary: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
-    embedding_code: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
-    embedding_schema: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
-    is_recommendable: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="false", index=True
-    )
-    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", index=True)
-    baseline_metric: Mapped[float | None] = mapped_column(Float, nullable=True)
-    optimized_metric: Mapped[float | None] = mapped_column(Float, nullable=True)
-    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    signature_code: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metric_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    optimizer_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    optimizer_kwargs: Mapped[dict[str, Any] | None] = mapped_column(JSON_STORE, nullable=True)
-    module_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    task_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-
 class AgentConversationModel(Base):
     """Persisted generalist-agent conversation header.
 
@@ -592,35 +542,6 @@ class AgentMessageModel(Base):
     )
 
     __table_args__ = (Index("ix_agent_messages_conv_created", "conversation_id", "created_at"),)
-
-
-class ConversationEmbeddingModel(Base):
-    """Per-conversation embedding row backing the agent-history search.
-
-    Mirrors :class:`JobEmbeddingModel` so the search dispatch and the
-    backfill / purge plumbing can be lifted from the optimization corpus
-    with a different source table. The ``summary_text`` column holds the
-    exact prose that was embedded — concatenated user turns (and a slice
-    of assistant replies) capped to a budget — so lexical fallback can hit
-    the same text the vector was built from.
-    """
-
-    __tablename__ = "conversation_embeddings"
-
-    conversation_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey("agent_conversations.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    username: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    embedding_summary: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
-    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Snapshot of ``conversation.updated_at`` at embed time. Used by the
-    # backfill sweep to detect stale rows (conversation got new turns after
-    # the last embed) without diffing message content.
-    embedded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
-    )
 
 
 # Staged copies of bundled sample datasets carry this id prefix so storage

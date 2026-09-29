@@ -2,7 +2,7 @@
 
 Mounts the usage router beside the dataset-library router on one in-memory
 SQLite store (the sibling routers' pattern: a ``RemoteDBJobStore`` subclass that
-skips the pgvector bootstrap so ``Base.metadata.create_all`` stands up every
+skips the Postgres-only bootstrap so ``Base.metadata.create_all`` stands up every
 table). Confirms the meter is zero for a fresh user, reports the configured
 budget, and reflects saved data through the same total the save/run gate reads.
 """
@@ -29,7 +29,7 @@ _ROWS = [{"q": "2+2", "a": "4"}, {"q": "3+3", "a": "6"}]
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for usage-router tests (no pgvector)."""
+    """In-memory SQLite job store for usage-router tests (no Postgres)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

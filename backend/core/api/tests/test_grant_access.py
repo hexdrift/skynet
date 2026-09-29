@@ -7,7 +7,7 @@ graceful fallback to owner-only when the job store exposes no grant engine
 (the in-memory/local store used offline and in some unit tests).
 
 The store mirrors the in-memory SQLite pattern of the sibling router tests: a
-``RemoteDBJobStore`` subclass that skips the pgvector bootstrap and seeds rows
+``RemoteDBJobStore`` subclass that skips the Postgres-only bootstrap and seeds rows
 directly.
 """
 
@@ -37,7 +37,7 @@ from ..sharing_access import ShareRole
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store (skips the pgvector bootstrap)."""
+    """In-memory SQLite job store (skips the Postgres-only bootstrap)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

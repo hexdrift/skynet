@@ -19,7 +19,7 @@ interface ToolEntry {
 // Curated subset of TOOL_META. Bulk variants are folded into their singular
 // counterparts so the user sees distinct capabilities, not API permutations.
 // Sorted by severity tier (info → warning → destructive), with the most
-// distinctive capabilities — auto-fill, semantic search, diagnostics — leading
+// distinctive capabilities — auto-fill, search, diagnostics — leading
 // the info group so the carousel opens on something memorable rather than a
 // rename action.
 const FEATURED_TOOLS: readonly string[] = [

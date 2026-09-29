@@ -53,12 +53,6 @@ from ..models import HEALTH_STATUS_OK, HealthResponse, QueueStatusResponse
 from ..notifications import configure_notification_preferences
 from ..registry import ServiceRegistry
 from ..service_gateway import DspyService
-from ..service_gateway.embedding_pipeline import (
-    backfill_missing_conversation_embeddings,
-    purge_orphan_conversation_embeddings,
-    purge_orphan_embeddings,
-    start_embedding_index_sweeper,
-)
 from ..service_gateway.service_builder import wire_registry_aliases
 from ..storage import get_job_store
 from ..worker.engine import BackgroundWorker, get_worker
@@ -67,8 +61,6 @@ from .errors import DomainError
 from .mcp_mount import mount_mcp_on_app
 from .model_catalog import prewarm_catalog
 from .observability import (
-    STARTUP_WORK_LOCK_KEY,
-    advisory_lock,
     get_request_id,
     install_metrics,
     install_request_id_middleware,
@@ -106,7 +98,6 @@ from .routers.tagger_assist import create_tagger_assist_router
 from .routers.tagging_session_share import create_tagging_session_share_router
 from .routers.tagging_sessions import create_tagging_session_router
 from .routers.telemetry import create_telemetry_router
-from .routers.transcription import create_transcription_router
 from .routers.usage import create_usage_router
 from .routers.user_preferences import create_user_preferences_router
 from .routers.wizard import create_wizard_router
@@ -693,7 +684,6 @@ def create_app(
     orphan_sweeper = None
     stale_conversation_sweeper = None
     staged_dataset_sweeper = None
-    embedding_sweeper = None
     loop_lag_monitor = None
 
     @asynccontextmanager
@@ -712,7 +702,6 @@ def create_app(
             queue_metrics_refresher, \
             staged_dataset_sweeper, \
             stale_conversation_sweeper, \
-            embedding_sweeper, \
             worker
         # Reclaim jobs whose worker lease has expired. Under multi-pod scaling
         # this only fails rows whose ``lease_expires_at`` is in the past — a
@@ -755,39 +744,6 @@ def create_app(
         # ~15-20s for the cold-cache parallel probe to settle.
         prewarm_catalog()
 
-        # Embedding orphan cleanup is idempotent but redundantly expensive
-        # across a rolling deploy. The advisory lock makes one replica the
-        # leader so the cleanup runs once per restart, not once per pod.
-        # Continuous missing/stale-row repair runs below on every replica and
-        # uses its own advisory lock so it survives leader restarts.
-        engine = getattr(job_store, "engine", None)
-        with advisory_lock(engine, STARTUP_WORK_LOCK_KEY) as is_startup_leader:
-            if is_startup_leader and settings.embeddings_enabled:
-                # The periodic sweeper owns embedding retries; this startup
-                # pass only removes rows whose source job was deleted.
-                try:
-                    purge_orphan_embeddings(job_store)
-                except Exception as exc:
-                    logger.warning("Embedding orphan cleanup failed: %s", exc)
-                if engine is not None:
-                    try:
-                        purge_orphan_conversation_embeddings(engine)
-                        conv_queued = backfill_missing_conversation_embeddings(engine)
-                        if conv_queued:
-                            logger.info(
-                                "Conversation embedding backfill queued for %d row(s)",
-                                conv_queued,
-                            )
-                    except Exception as exc:
-                        logger.warning("Conversation embedding backfill scan failed: %s", exc)
-            elif is_startup_leader:
-                logger.info("Embedding maintenance skipped — embeddings disabled (lexical backend)")
-            else:
-                logger.info("Embedding maintenance skipped — peer replica is leader")
-
-        if settings.embeddings_enabled:
-            embedding_sweeper = start_embedding_index_sweeper(job_store)
-
         # SIGTERM handler can only be registered on the main interpreter
         # thread. ``threading.current_thread()`` lets us detect when the
         # lifespan is running inside a worker thread (e.g. uvicorn reload).
@@ -826,8 +782,6 @@ def create_app(
                 stale_conversation_sweeper.stop()
             if staged_dataset_sweeper:
                 staged_dataset_sweeper.stop()
-            if embedding_sweeper:
-                embedding_sweeper.stop()
             if loop_lag_monitor:
                 loop_lag_monitor.stop()
 
@@ -1182,7 +1136,6 @@ def create_app(
         return HealthResponse(
             status=HEALTH_STATUS_OK,
             registered_assets=snapshot,
-            vector_search_enabled=getattr(job_store, "vector_search_enabled", None),
         )
 
     app.add_middleware(CacheControlMiddleware)
@@ -1260,7 +1213,6 @@ def create_app(
     app.include_router(create_registry_router(registry=registry), tags=["Registry"])
     app.include_router(create_code_validation_router(), tags=["Code Validation"])
     app.include_router(create_mcp_probe_router(), tags=["Code Validation"])
-    app.include_router(create_transcription_router(), tags=["Transcription"])
     app.include_router(create_code_agent_router(job_store=job_store), tags=["Code Validation"])
     app.include_router(create_generalist_agent_router(job_store=job_store), tags=["Optimizations"])
     app.include_router(create_agent_memory_router(job_store=job_store), tags=["Optimizations"])

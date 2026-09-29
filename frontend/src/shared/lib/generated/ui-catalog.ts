@@ -3,13 +3,6 @@
 export type MessageKey =
   | "agent.approval.confirm_failed"
   | "agent.composer.attach"
-  | "agent.composer.mic_unavailable"
-  | "agent.composer.record"
-  | "agent.composer.record_cancel"
-  | "agent.composer.record_finish"
-  | "agent.composer.recording"
-  | "agent.composer.transcribe_failed"
-  | "agent.composer.transcribing"
   | "agent.error.context_too_long"
   | "agent.model_menu.effort_high"
   | "agent.model_menu.effort_low"
@@ -252,8 +245,6 @@ export type MessageKey =
   | "auto.features.agent.panel.components.searchresultscard.empty"
   | "auto.features.agent.panel.components.searchresultscard.no_title"
   | "auto.features.agent.panel.components.searchresultscard.running"
-  | "auto.features.agent.panel.components.searchresultscard.type_lexical"
-  | "auto.features.agent.panel.components.searchresultscard.type_semantic"
   | "auto.features.agent.panel.components.submitsummarycard.1"
   | "auto.features.agent.panel.components.submitsummarycard.literal.1"
   | "auto.features.agent.panel.components.submitsummarycard.template.1"
@@ -1593,8 +1584,6 @@ export type MessageKey =
   | "explore.results.error"
   | "explore.row.no_summary"
   | "explore.row.open_aria"
-  | "explore.row.relevance"
-  | "explore.row.relevance.title"
   | "explore.search.aria"
   | "explore.search.clear"
   | "explore.search.placeholder"
@@ -1763,8 +1752,6 @@ export type MessageKey =
   | "settings.admin.storage.used"
   | "settings.admin.storage.username"
   | "settings.admin.storage.view_list"
-  | "settings.agent.dictation.description"
-  | "settings.agent.dictation.label"
   | "settings.agent.memory.entry.description"
   | "settings.agent.memory.entry.label"
   | "settings.agent.memory.recall.description"
@@ -2666,13 +2653,6 @@ export type MessageKey =
 export const UI_MESSAGES: Record<MessageKey, string> = {
   "agent.approval.confirm_failed": "אישור הפעולה לא נקלט — נסו שוב",
   "agent.composer.attach": "צירוף דאטאסט",
-  "agent.composer.mic_unavailable": "אין גישה למיקרופון",
-  "agent.composer.record": "הכתבה קולית",
-  "agent.composer.record_cancel": "ביטול ההקלטה",
-  "agent.composer.record_finish": "סיום ההקלטה ותמלול",
-  "agent.composer.recording": "מקליט...",
-  "agent.composer.transcribe_failed": "התמלול נכשל — אפשר לנסות שוב",
-  "agent.composer.transcribing": "מתמלל...",
   "agent.error.context_too_long": "השיחה ארוכה מדי עבור חלון ההקשר של המודל — התחילו שיחה חדשה או קצרו את ההודעה",
   "agent.model_menu.effort_high": "גבוהה",
   "agent.model_menu.effort_low": "נמוכה",
@@ -2915,8 +2895,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.agent.panel.components.searchresultscard.empty": "אין תוצאות שתואמות לחיפוש.",
   "auto.features.agent.panel.components.searchresultscard.no_title": "ללא שם",
   "auto.features.agent.panel.components.searchresultscard.running": "מחפש…",
-  "auto.features.agent.panel.components.searchresultscard.type_lexical": "מילולי",
-  "auto.features.agent.panel.components.searchresultscard.type_semantic": "סמנטי",
   "auto.features.agent.panel.components.submitsummarycard.1": "פתח/י",
   "auto.features.agent.panel.components.submitsummarycard.literal.1": "הגשה נכשלה",
   "auto.features.agent.panel.components.submitsummarycard.template.1": "ה{p1} הוגשה",
@@ -3073,8 +3051,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.agent.panel.lib.tool.meta.literal.54": "מילוי טופס אוטומטי",
   "auto.features.agent.panel.lib.tool.meta.literal.55": "ממלא את שדות ההגשה — דאטאסט, פרומפט (Signature), פונקציית מדידה (Metric) ומודל — לפי השיחה.",
   "auto.features.agent.panel.lib.tool.meta.literal.56": "מלא/מלאי",
-  "auto.features.agent.panel.lib.tool.meta.literal.57": "חיפוש סמנטי בריצות",
-  "auto.features.agent.panel.lib.tool.meta.literal.58": "חיפוש בטקסט חופשי על פני כל הריצות הציבוריות, לפי כוונה במקום מילים מדויקות.",
+  "auto.features.agent.panel.lib.tool.meta.literal.57": "חיפוש בריצות",
+  "auto.features.agent.panel.lib.tool.meta.literal.58": "חיפוש בטקסט חופשי על פני כל הריצות הציבוריות.",
   "auto.features.agent.panel.lib.tool.meta.literal.59": "חפש/י",
   "auto.features.agent.panel.lib.tool.meta.literal.6": "הריצה תיעצר כעת. התוצאות שכבר הושגו יישמרו, אבל לא ניתן להמשיך מנקודה זו.",
   "auto.features.agent.panel.lib.tool.meta.literal.60": "תוצאות פר־דוגמה",
@@ -3895,7 +3873,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.360": "בדף הריצה הלשוניות מפרידות בין הציונים והמסלול (סקירה), הרצה על קלט חדש (שימוש), הנתונים, הקוד, התוצר, הלוגים ופעילות המודלים. אפשר להשהות ריצה פעילה: היא נשמרת בנקודת ביקורת ועוברת לסטטוס",
   "auto.features.tutorial.components.concepts.guide.literal.361": ". כשממשיכים אותה היא חוזרת לעבוד מאותה נקודה, ואפשר גם להריץ אותה מחדש מההתחלה.",
   "auto.features.tutorial.components.concepts.guide.literal.362": "חיפוש ולוח הבקרה",
-  "auto.features.tutorial.components.concepts.guide.literal.363": "דף החיפוש מוצא ריצות לפי משימה, מודל או אופטימייזר, גם לפי משמעות ולא רק לפי מילים מדויקות, ופאנל המסננים מצמצם לפי תאריך, סוג ריצה, מודול, מודל ואופטימייזר. בלוח הבקרה לחיצה על עמודה או פלח בגרף מסננת לפיהם את שאר הנתונים.",
+  "auto.features.tutorial.components.concepts.guide.literal.363": "דף החיפוש מוצא ריצות לפי משימה, מודל או אופטימייזר, ופאנל המסננים מצמצם לפי תאריך, סוג ריצה, מודול, מודל ואופטימייזר. בלוח הבקרה לחיצה על עמודה או פלח בגרף מסננת לפיהם את שאר הנתונים.",
   "auto.features.tutorial.components.concepts.guide.literal.364": "אחסון",
   "auto.features.tutorial.components.concepts.guide.literal.365": "דף האחסון מראה כמה מהמכסה בשימוש ומה תופס מקום: דאטאסטים, אופטימיזציות, שיחות עם הסוכן וקבצים זמניים. משם מוחקים פריטים שכבר לא צריך. כשעוברים את המכסה השמירה נחסמת עד שמפנים מקום.",
   "auto.features.tutorial.components.concepts.guide.literal.39": "החלקים של תוכנית DSPy",
@@ -3990,15 +3968,15 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.steps.literal.30": "אפשר להתחיל מקובץ CSV, ‏JSON או Excel, להשתמש בדאטאסט שמור, או לבחור «יצירת דאטאסט סינתטי» כדי לבנות שורות מתוך ראיון קצר. בוחרים עמודת טקסט אחת או יותר, מצב תיוג ידני, קו-פיילוט או אוטופיילוט, ומתארים את המשימה כשצריך. מפגשי התיוג נשמרים, ניתנים לשיתוף לצפייה או לעריכה, ואת התיוג המוגמר אפשר להעביר ישירות לספריית הדאטאסטים.",
   "auto.features.tutorial.lib.steps.literal.31": "דרכים לתייג",
   "auto.features.tutorial.lib.steps.literal.32": "במצב ידני כל החלטה נשארת אצלך. קו-פיילוט מראיין אותך, בונה רובריקה ועובד לצדך עד שהוא מגיע לסף הבדיקה. אוטופיילוט מתייג את השורות שנותרו ומסמן מקרים לא ודאיים לבדיקה. מפגשי תיוג בסיוע AI מציגים הערכת עלות מראש, שומרים מקור ורמת ביטחון, ומסתיימים בסבב בדיקה לפני ייצוא או שמירה בספרייה.",
-  "auto.features.tutorial.lib.steps.literal.38": "חיפוש סמנטי",
+  "auto.features.tutorial.lib.steps.literal.38": "חיפוש",
   "auto.features.tutorial.lib.steps.literal.4": "לא שווה את המחיר, איכות נמוכה",
   "auto.features.tutorial.lib.steps.literal.41": "אותה תוכנית משופרת זמינה גם דרך REST API. אפשר להעתיק את נקודת הקצה או להשתמש בקטעי Python, ‏JavaScript ו-cURL המוכנים כשרוצים לשלב אותה במוצר.",
   "auto.features.tutorial.lib.steps.literal.44": "צ'אט עם הסוכן",
   "auto.features.tutorial.lib.steps.literal.46": "עץ המועמדים",
   "auto.features.tutorial.lib.steps.literal.48": "GEPA יוצר מועמדים חדשים לפרומפט, ומכל מועמד יכולים להיווצר מועמדים בדור הבא. בעץ רואים את הציון של כל מועמד ואת הקשר בין הורה לילד, וגם הצעות שנדחו מופיעות כצמתים מקווקווים. הסליידר שמעל הגרף מדפדף בין הדורות, ולחיצה על צומת פותחת מגירה עם הפרומפט המלא, ציונים לכל דוגמה והמשוב שהוביל לשיפור או לדחייה.",
-  "auto.features.tutorial.lib.steps.literal.49": "חיפוש חופשי בכל הריצות במערכת — שלך או של משתמשים אחרים. הקלד/הקלידי תיאור באנגלית או בעברית, ו-Skynet ימצא ריצות עם משמעות דומה, ולא רק התאמות מילים. כשהשדה ריק מוצעות חיפושים אחרונים שלך וחיפושים נפוצים, ואפשר למקד את השדה מכל מקום במקלדת. אפשר לסנן לפי מודלים, אופטימייזרים, סטטוס וטווח תאריכים, ולעיין ברשימת תוצאות מדורגת.",
+  "auto.features.tutorial.lib.steps.literal.49": "חיפוש חופשי בכל הריצות במערכת — שלך או של משתמשים אחרים. הקלד/הקלידי תיאור באנגלית או בעברית, ו-Skynet ימצא ריצות תואמות. כשהשדה ריק מוצעות חיפושים אחרונים שלך וחיפושים נפוצים, ואפשר למקד את השדה מכל מקום במקלדת. אפשר לסנן לפי מודלים, אופטימייזרים, סטטוס וטווח תאריכים, ולעיין ברשימת תוצאות מדורגת.",
   "auto.features.tutorial.lib.steps.literal.5": "חוויית קנייה נעימה, אחזור שוב",
-  "auto.features.tutorial.lib.steps.literal.50": "אפשר לבקש מהסוכן הכללי להסביר את המוצר, למצוא מידע או לעבוד עם טופס ההגשה הנוכחי. שיחות יכולות לרוץ במקביל ונשמרות בהיסטוריה. אפשר לבחור מודל, להכתיב במיקרופון, לבדוק פעילות כלים ולהגדיר במצב האמון אילו פעולות דורשות אישור. הזיכרון וברירות המחדל של הסוכן נמצאים בהגדרות.",
+  "auto.features.tutorial.lib.steps.literal.50": "אפשר לבקש מהסוכן הכללי להסביר את המוצר, למצוא מידע או לעבוד עם טופס ההגשה הנוכחי. שיחות יכולות לרוץ במקביל ונשמרות בהיסטוריה. אפשר לבחור מודל, לבדוק פעילות כלים ולהגדיר במצב האמון אילו פעולות דורשות אישור. הזיכרון וברירות המחדל של הסוכן נמצאים בהגדרות.",
   "auto.features.tutorial.lib.steps.literal.9": "לוח שימוש",
   "auto.features.tutorial.lib.steps.template.1": "טבלת {p1}",
   "auto.features.tutorial.lib.steps.template.16": "העלאת {p1}",
@@ -4256,8 +4234,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "explore.results.error": "טעינת התוצאות נכשלה. נסה/נסי שוב.",
   "explore.row.no_summary": "ללא תיאור משימה",
   "explore.row.open_aria": "פתיחת {name}",
-  "explore.row.relevance": "{pct}%",
-  "explore.row.relevance.title": "ציון התאמה — עד כמה הריצה תואמת את כוונת השאילתה",
   "explore.search.aria": "חפש/חפשי בארכיון האופטימיזציות הציבורי",
   "explore.search.clear": "נקה/נקי את החיפוש",
   "explore.search.placeholder": "חפש/חפשי אופטימיזציות לפי משימה, מודל או אופטימייזר",
@@ -4267,7 +4243,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "explore.sort.recent": "החדשות ביותר",
   "explore.sort.recent.tip": "מיון לפי זמן — {term.optimizationTypeRunPlural} החדשות ביותר מופיעות ראשונות",
   "explore.sort.relevance": "התאמה",
-  "explore.sort.relevance.tip": "מיון לפי התאמה לכוונת החיפוש — התוצאות המתאימות ביותר מופיעות ראשונות",
+  "explore.sort.relevance.tip": "מיון לפי התאמה לחיפוש — התוצאות המתאימות ביותר מופיעות ראשונות",
   "explore.suggest.clear": "נקה/נקי",
   "explore.suggest.popular": "חיפושים פופולריים",
   "explore.suggest.recent": "חיפושים אחרונים",
@@ -4426,8 +4402,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.admin.storage.used": "בשימוש",
   "settings.admin.storage.username": "שם משתמש",
   "settings.admin.storage.view_list": "פתח/י את הרשימה",
-  "settings.agent.dictation.description": "הצגת כפתור המיקרופון בתיבת הכתיבה",
-  "settings.agent.dictation.label": "הכתבה קולית",
   "settings.agent.memory.entry.description": "האורך המרבי של זיכרון בודד, בתווים",
   "settings.agent.memory.entry.label": "אורך זיכרון מרבי",
   "settings.agent.memory.recall.description": "כמה טקסט חיפוש בזיכרון מחזיר, בתווים",

@@ -39,7 +39,7 @@ _SESSION_BODY = {
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for session-sharing tests (no pgvector)."""
+    """In-memory SQLite job store for session-sharing tests (no Postgres)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

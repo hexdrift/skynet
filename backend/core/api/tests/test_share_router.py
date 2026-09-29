@@ -6,7 +6,7 @@ member CRUD, role gating), the access-gated public composite read
 (``POST /share/{token}/serve``).
 
 The store mirrors the in-memory SQLite pattern of the sibling routers: a
-``RemoteDBJobStore`` subclass that skips the pgvector bootstrap and seeds
+``RemoteDBJobStore`` subclass that skips the Postgres-only bootstrap and seeds
 ``JobModel`` rows directly. The serve test monkeypatches the program loader and
 language-model builder on the ``share`` module so it never touches a real model.
 """
@@ -32,7 +32,7 @@ from ..routers.share import create_share_router
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for share-router tests (skips pgvector bootstrap)."""
+    """In-memory SQLite job store for share-router tests (skips the Postgres-only bootstrap)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

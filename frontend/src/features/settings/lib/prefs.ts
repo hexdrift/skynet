@@ -15,19 +15,12 @@ export interface UserPrefs {
   // AI co-tagging in the tagger: the master toggle (off = today's fully
   // manual tagger).
   taggerAssist: boolean;
-  // Shows/hides the dictation mic in the shared composer.
-  dictationEnabled: boolean;
 }
 
 export type AgentPreferencePatch = Partial<
   Pick<
     UserPrefs,
-    | "expandAdvanced"
-    | "liteMode"
-    | "wizardCodeAssist"
-    | "wizardSplitMode"
-    | "taggerAssist"
-    | "dictationEnabled"
+    "expandAdvanced" | "liteMode" | "wizardCodeAssist" | "wizardSplitMode" | "taggerAssist"
   >
 >;
 
@@ -37,7 +30,6 @@ const AGENT_PREFERENCE_FIELDS: Record<string, keyof AgentPreferencePatch> = {
   wizard_code_assist: "wizardCodeAssist",
   wizard_split_mode: "wizardSplitMode",
   tagger_assist: "taggerAssist",
-  dictation_enabled: "dictationEnabled",
 };
 
 function parsePreferenceResult(value: unknown): Record<string, unknown> | null {
@@ -83,7 +75,6 @@ export const PREF_KEYS: Record<keyof UserPrefs, string> = {
   wizardSplitMode: "skynet.prefs.wizard.split-mode",
   agentTrustMode: "skynet.prefs.agent.trust-mode",
   taggerAssist: "skynet.prefs.tagger.assist",
-  dictationEnabled: "skynet.prefs.composer.dictation",
 };
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -93,7 +84,6 @@ export const DEFAULT_PREFS: UserPrefs = {
   wizardSplitMode: "auto",
   agentTrustMode: "ask",
   taggerAssist: true,
-  dictationEnabled: true,
 };
 
 // `skynet.prefs.advanced-mode` belonged to a retired toggle; a stale value in an

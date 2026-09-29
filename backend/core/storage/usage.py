@@ -3,9 +3,9 @@
 A single number — the sum of every table a user's data lands in — backs the
 storage budget that is enforced at submit/save time and surfaced in the usage
 meter. Bytes are attributed to the standalone artifact that owns them: a job's
-``payload`` + ``result`` plus the logs, progress events and embeddings it spawns
-all count as the optimization's footprint, and a conversation's messages plus
-its embeddings count as the chat's. The two dominant contributors (a job's
+``payload`` + ``result`` plus the logs and progress events it spawns all count
+as the optimization's footprint, and a conversation's messages count as the
+chat's. The two dominant contributors (a job's
 columns and the dataset blobs) are read from precomputed indexed columns
 (``jobs.stored_bytes`` / ``datasets.byte_size``); the byproducts that fold into
 them are sized live with a dialect-aware byte expression so the meter and the
@@ -19,22 +19,18 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import Engine, Text, cast, func, literal, select
+from sqlalchemy import Engine, Text, cast, func, select
 from sqlalchemy.orm import Session
 
-from ..config import settings
 from ..constants import PAYLOAD_OVERVIEW_NAME
 from .models import (
-    EMBEDDING_DIM,
     SAMPLE_STAGED_ID_PREFIX,
     AgentConversationModel,
     AgentMessageModel,
     AgentStagedDatasetModel,
-    ConversationEmbeddingModel,
     DatasetModel,
     GepaCheckpointModel,
     GridPairResultModel,
-    JobEmbeddingModel,
     JobModel,
     LogEntryModel,
     ProgressEventModel,
@@ -42,17 +38,9 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# A stored pgvector is dim×4 bytes (float32). ``job_embeddings`` holds three
-# such vectors per row; ``conversation_embeddings`` holds one. Counted by row
-# rather than measured because ``octet_length`` does not apply to the vector
-# type and casting it to text would size the decimal repr, not the storage.
-_VECTOR_BYTES = EMBEDDING_DIM * 4
-_JOB_EMBEDDING_ROW_BYTES = _VECTOR_BYTES * 3
-_CONVERSATION_EMBEDDING_ROW_BYTES = _VECTOR_BYTES
-
 # The categories shown in the storage breakdown. Each is a standalone artifact
 # the user can open in a cleanup drawer and delete directly. Bytes that exist
-# only because of a parent — logs, progress events and embeddings — are folded
+# only because of a parent — logs and progress events — are folded
 # into that parent's footprint (optimization or chat) rather than listed on
 # their own, so every category here is independently deletable.
 STORAGE_CATEGORIES = (
@@ -82,7 +70,7 @@ class StorageItem:
     ``"staged_upload"`` and ``id`` is that object's primary key, so the cleanup
     UI can deep-link to it and route its delete. ``bytes`` is the object's full
     footprint — for an optimization or chat it includes the byproducts folded
-    into it (logs, progress events, embeddings) — so the per-item sizes sum back
+    into it (logs, progress events) — so the per-item sizes sum back
     to the category total the meter reports, and deleting the item frees exactly
     that many bytes.
     """
@@ -199,37 +187,15 @@ def compute_user_storage(engine: Engine, username: str) -> StorageUsage:
                 AgentStagedDatasetModel.id.not_like(f"{SAMPLE_STAGED_ID_PREFIX}%"),
             )
         )
-        # job_embeddings / conversation_embeddings only exist on the semantic
-        # backend; on SEARCH_BACKEND=lexical the tables are never created, so
-        # there is nothing to count and the query would hit a missing relation.
-        job_embedding_rows = (
-            scalar(
-                select(func.count(JobEmbeddingModel.optimization_id)).where(JobEmbeddingModel.user_id == normalized)
-            )
-            if settings.embeddings_enabled
-            else 0
-        )
-        conversation_embedding_rows = (
-            scalar(
-                select(func.count(ConversationEmbeddingModel.conversation_id)).where(
-                    ConversationEmbeddingModel.username == normalized
-                )
-            )
-            if settings.embeddings_enabled
-            else 0
-        )
-        optimization_embeddings = job_embedding_rows * _JOB_EMBEDDING_ROW_BYTES
-        chat_embeddings = conversation_embedding_rows * _CONVERSATION_EMBEDDING_ROW_BYTES
 
     breakdown = {
         "optimizations": optimizations
         + logs
         + progress_events
         + checkpoints
-        + grid_pairs
-        + optimization_embeddings,
+        + grid_pairs,
         "datasets": datasets,
-        "agent_chats": agent_chats + chat_embeddings,
+        "agent_chats": agent_chats,
         "staged_uploads": staged_uploads,
     }
     return StorageUsage(total=sum(breakdown.values()), breakdown=breakdown)
@@ -347,7 +313,7 @@ def compute_user_storage_category_items(
     :func:`compute_user_storage_items` — which merges a capped top-N across
     categories — this returns the full set for a single category so the drawer
     shows all of the user's data, not just the biggest. An optimization's or
-    chat's size folds in its byproducts (logs, progress events, embeddings)
+    chat's size folds in its byproducts (logs, progress events)
     exactly as :func:`compute_user_storage` attributes them, so the per-item
     sizes sum back to that category's meter total.
 
@@ -355,7 +321,7 @@ def compute_user_storage_category_items(
         engine: The shared SQLAlchemy engine all storage tables live on.
         username: The owner whose items are listed; matched case-insensitively.
         category: One of :data:`STORAGE_CATEGORIES`. Any other value — including
-            a folded-away byproduct name such as ``embeddings`` — yields an empty
+            a folded-away byproduct name such as ``logs`` — yields an empty
             list rather than scanning.
         limit: Defensive upper bound on rows returned for the category.
 
@@ -381,13 +347,6 @@ def compute_user_storage_category_items(
                 .where(ProgressEventModel.optimization_id == JobModel.optimization_id)
                 .scalar_subquery()
             )
-            embedding_bytes = (
-                select(func.count(JobEmbeddingModel.optimization_id) * _JOB_EMBEDDING_ROW_BYTES)
-                .where(JobEmbeddingModel.optimization_id == JobModel.optimization_id)
-                .scalar_subquery()
-                if settings.embeddings_enabled
-                else literal(0)
-            )
             checkpoint_bytes = (
                 select(func.coalesce(func.sum(GepaCheckpointModel.stored_bytes), 0))
                 .where(GepaCheckpointModel.optimization_id == JobModel.optimization_id)
@@ -404,7 +363,6 @@ def compute_user_storage_category_items(
                 + progress_bytes
                 + checkpoint_bytes
                 + grid_pair_bytes
-                + embedding_bytes
             ).label("footprint")
             optimization_rows = session.execute(
                 select(JobModel.optimization_id, JobModel.payload_overview, footprint)
@@ -435,14 +393,7 @@ def compute_user_storage_category_items(
             chat_bytes = func.sum(
                 _byte_size(AgentMessageModel.content, dialect) + _byte_size(AgentMessageModel.tool_calls, dialect)
             )
-            embedding_bytes = (
-                select(func.count(ConversationEmbeddingModel.conversation_id) * _CONVERSATION_EMBEDDING_ROW_BYTES)
-                .where(ConversationEmbeddingModel.conversation_id == AgentConversationModel.id)
-                .scalar_subquery()
-                if settings.embeddings_enabled
-                else literal(0)
-            )
-            footprint = (func.coalesce(chat_bytes, 0) + embedding_bytes).label("chat_size")
+            footprint = func.coalesce(chat_bytes, 0).label("chat_size")
             conversation_rows = session.execute(
                 select(AgentConversationModel.id, AgentConversationModel.title, footprint)
                 .join(AgentMessageModel, AgentMessageModel.conversation_id == AgentConversationModel.id)

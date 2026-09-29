@@ -1716,24 +1716,6 @@ export async function claimSharedTaggerSession(token: string) {
   return res;
 }
 
-/** Transcript of one dictated clip plus which STT provider produced it. */
-export interface TranscriptionResult {
-  text: string;
-  provider: string;
-}
-
-/** Transcribe one recorded clip; ``language`` is a soft BCP-47 locale hint. */
-export async function transcribeAudio(
-  audio: Blob,
-  filename: string,
-  language?: string,
-): Promise<TranscriptionResult> {
-  const form = new FormData();
-  form.append("audio", audio, filename);
-  if (language) form.append("language", language);
-  return request<TranscriptionResult>("/transcribe", { method: "POST", body: form });
-}
-
 /** Bulk-delete the caller's pending (staged) uploads. */
 async function bulkDeleteStagedUploads(ids: string[]): Promise<BulkDeleteResult> {
   const res = await request<BulkDeleteResult>("/usage/storage/staged/bulk-delete", {
@@ -2532,8 +2514,8 @@ export interface SearchResponse {
   results: SearchResult[];
   total: number;
   matched_ids: string[];
-  /** Which backend branch served the response — drives per-row source badges. */
-  search_type?: "semantic" | "lexical";
+  /** Which lexical backend served the response (ILIKE or pg_search BM25). */
+  search_type?: "lexical" | "bm25";
 }
 
 export function searchPublicDashboard(

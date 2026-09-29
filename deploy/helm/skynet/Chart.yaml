@@ -2,7 +2,7 @@ apiVersion: v2
 name: skynet
 description: |
   Skynet — FastAPI backend with embedded worker, Next.js frontend, and
-  optional bundled pgvector Postgres. Targets OpenShift, scales horizontally
+  optional bundled Postgres. Targets OpenShift, scales horizontally
   via HPAs and a DB-backed worker claim queue.
 type: application
 version: 0.1.0
@@ -19,6 +19,6 @@ keywords:
   - fastapi
   - nextjs
   - openshift
-  - pgvector
+  - postgres
 annotations:
   category: AI/Platform

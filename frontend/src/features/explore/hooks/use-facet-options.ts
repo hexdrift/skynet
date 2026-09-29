@@ -8,7 +8,7 @@ import {
   type FacetOption,
 } from "@/shared/lib/api";
 import { FACET_LIMIT } from "../lib/facet-options";
-import type { ExploreCorpus } from "./use-semantic-search";
+import type { ExploreCorpus } from "./use-search";
 
 /** Keystrokes settle for this long before a value search hits the backend. */
 const SEARCH_DEBOUNCE_MS = 180;

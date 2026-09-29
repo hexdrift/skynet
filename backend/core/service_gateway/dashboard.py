@@ -25,7 +25,6 @@ import logging
 import re
 import threading
 import time
-import weakref
 from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -45,7 +44,6 @@ from ..constants import (
     PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE,
     PAYLOAD_OVERVIEW_OPTIMIZER_NAME,
 )
-from .embedding_pipeline.embeddings import get_embedder
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +66,7 @@ _CACHE: dict[str, Any] = {"fingerprint": None, "at": 0.0, "payload": None}
 # their parent grid — excluded here the same way RemoteDBJobStore's
 # _top_level_jobs() keeps them out of listings.
 _USER_FACING_CORPUS_SQL = (
-    "(COALESCE(je.optimization_type, j.optimization_type, "
+    "(COALESCE(j.optimization_type, "
     f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE}', "
     f"'{OPTIMIZATION_TYPE_RUN}') "
     f"IN ('{OPTIMIZATION_TYPE_RUN}', '{OPTIMIZATION_TYPE_GRID_SEARCH}') "
@@ -90,45 +88,14 @@ _SHARED_GRANT_SCOPE_SQL = (
     "AND j.username IS DISTINCT FROM :shared_with_username"
 )
 
-# Columns the explore/corpus SQL reads off a job's embedding row. When the
-# job_embeddings table is absent — embeddings disabled or pgvector unavailable,
-# in which case RemoteJobStore deliberately skips the Vector tables so a plain
-# Postgres still boots — every success job is unembedded. Joining this empty,
-# typed relation in the table's place makes each LEFT JOIN behave exactly like
-# "table exists, holds no rows": the queries fall back to payload_overview via
-# the COALESCEs they already apply, instead of raising UndefinedTable (which the
-# browser then sees as a CORS / "can't connect" failure on /dashboard/*).
-_EMPTY_JOB_EMBEDDINGS_REL = (
-    "(SELECT "
-    "NULL::text AS optimization_id, "
-    "NULL::text AS optimization_type, "
-    "NULL::text AS winning_model, "
-    "NULL::text AS optimizer_name, "
-    "NULL::text AS module_name, "
-    "NULL::text AS task_name, "
-    "NULL::text AS summary_text, "
-    "NULL::double precision AS baseline_metric, "
-    "NULL::double precision AS optimized_metric, "
-    "NULL::boolean AS is_private, "
-    "NULL::timestamptz AS created_at, "
-    "NULL::timestamptz AS updated_at, "
-    "NULL::text AS embedding_summary "
-    "WHERE FALSE)"
-)
-
-_EMBEDDINGS_TABLE_PRESENT: weakref.WeakKeyDictionary[Any, bool] = weakref.WeakKeyDictionary()
-
 
 def _jobs_metric_sql(key: str) -> str:
-    """Build the jobs-side SQL fallback for one embedded metric column.
+    """Build the SQL expression reading one metric off a job's own scores.
 
-    Mirrors the embedding pipeline's ``_extract_scores`` lookup order so the
-    lexical/BM25 paths rank and render unembedded rows from the same numbers
-    the pipeline would have embedded: grid jobs read ``result.best_pair``
-    first, everything else reads ``latest_metrics`` then ``result``. The
-    ``jsonb_typeof`` guard skips non-numeric values instead of failing the
-    whole search on one malformed row, matching the pipeline's ``float()``
-    try/except. ``CAST`` spelling (not ``::``) keeps the fragment executable
+    Grid jobs read ``result.best_pair`` first, everything else reads
+    ``latest_metrics`` then ``result``. The ``jsonb_typeof`` guard skips
+    non-numeric values instead of failing the whole search on one malformed
+    row. ``CAST`` spelling (not ``::``) keeps the fragment executable
     on the sqlite test harness.
 
     Args:
@@ -158,131 +125,42 @@ def _jobs_metric_sql(key: str) -> str:
     )
 
 
-# The embedded metric when present, else the job's own scores. Keeps each
-# result row's score pair meaningful on the lexical/BM25 paths, where
-# unembedded rows (embeddings disabled, table absent, or backfill still
-# running) would otherwise all carry NULL metrics.
-_CORPUS_BASELINE_METRIC_SQL = (
-    f"COALESCE(je.baseline_metric, {_jobs_metric_sql('baseline_test_metric')})"
-)
-_CORPUS_OPTIMIZED_METRIC_SQL = (
-    f"COALESCE(je.optimized_metric, {_jobs_metric_sql('optimized_test_metric')})"
-)
+_CORPUS_BASELINE_METRIC_SQL = _jobs_metric_sql("baseline_test_metric")
+_CORPUS_OPTIMIZED_METRIC_SQL = _jobs_metric_sql("optimized_test_metric")
 
 
-def _job_embeddings_table_present(job_store: Any) -> bool:
-    """Return whether the ``job_embeddings`` table exists, cached per engine.
-
-    The schema is fixed for a process's lifetime, so the catalog lookup runs
-    once per engine. ``to_regclass`` yields NULL (not an error) when the
-    relation is absent, so the probe never raises on a healthy connection; any
-    probe failure is treated as "absent" so the caller degrades safely.
-
-    Args:
-        job_store: A store exposing a SQLAlchemy ``engine`` attribute.
-
-    Returns:
-        True when the table is present, False otherwise.
-    """
-    engine = job_store.engine
-    cached = _EMBEDDINGS_TABLE_PRESENT.get(engine)
-    if cached is not None:
-        return cached
-    try:
-        with Session(engine) as session:
-            present = bool(
-                session.execute(text("SELECT to_regclass('job_embeddings')")).scalar()
-            )
-    except Exception as exc:
-        logger.warning("job_embeddings presence probe failed, assuming absent: %s", exc)
-        present = False
-    _EMBEDDINGS_TABLE_PRESENT[engine] = present
-    return present
-
-
-def _job_embeddings_relation(job_store: Any) -> str:
-    """Return the SQL relation to stand in for ``job_embeddings`` in explore joins.
-
-    The real table when it exists, else an empty typed relation (see
-    :data:`_EMPTY_JOB_EMBEDDINGS_REL`) so the corpus / facets / lexical-search
-    queries degrade to a jobs-only read on a database where the Vector tables
-    were never created, rather than raising ``UndefinedTable``.
-
-    Args:
-        job_store: A store exposing a SQLAlchemy ``engine`` attribute.
-
-    Returns:
-        ``"job_embeddings"`` when the table is present, otherwise the empty
-        stand-in relation.
-    """
-    if _job_embeddings_table_present(job_store):
-        return "job_embeddings"
-    return _EMPTY_JOB_EMBEDDINGS_REL
-
-
-def _fetch_fingerprint(session: Session, je_rel: str) -> str:
+def _fetch_fingerprint(session: Session) -> str:
     """Cheap content fingerprint over the searchable corpus.
 
-    Used as the cache key. Includes both embedded and unembedded public
-    success jobs so backfill progress (or new submissions while embeddings
-    are off) reliably invalidates the cached corpus payload. The embedding
-    ``updated_at`` and job completion timestamp make a resumed optimization
-    invalidate the cache even when its row already existed.
+    Used as the cache key. The job completion timestamp makes a resumed
+    optimization invalidate the cache even when its row already existed.
 
     Args:
         session: Active SQLAlchemy session.
-        je_rel: SQL relation to use for the ``job_embeddings`` join (the real
-            table, or the empty stand-in when it does not exist).
 
     Returns:
         An opaque compact fingerprint containing counts and freshness maxima.
     """
-    embedded = (
-        session.execute(
-            text(
-                "SELECT COUNT(*) AS n, MAX(je.updated_at) AS updated_max_ts, "
-                "MAX(je.created_at) AS created_max_ts, "
-                "MAX(j.completed_at) AS completed_max_ts "
-                f"FROM {je_rel} je "
-                "INNER JOIN jobs j ON j.optimization_id = je.optimization_id "
-                "WHERE j.status = 'success' "
-                f"AND {_USER_FACING_CORPUS_SQL} "
-                "AND je.embedding_summary IS NOT NULL AND je.is_private = FALSE"
-            )
-        )
-        .mappings()
-        .first()
-    )
-    unembedded = (
+    row = (
         session.execute(
             text(
                 "SELECT COUNT(*) AS n, MAX(j.completed_at) AS completed_max_ts, "
                 "MAX(j.created_at) AS created_max_ts "
                 "FROM jobs j "
-                f"LEFT JOIN {je_rel} je ON je.optimization_id = j.optimization_id "
                 "WHERE j.status = 'success' "
                 f"AND {_USER_FACING_CORPUS_SQL} "
-                "AND (je.optimization_id IS NULL OR je.embedding_summary IS NULL) "
                 "AND NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE)"
             )
         )
         .mappings()
         .first()
     )
-    e_n = int(embedded["n"]) if embedded else 0
-    e_updated_ts = embedded["updated_max_ts"] if embedded else None
-    e_created_ts = embedded["created_max_ts"] if embedded else None
-    e_completed_ts = embedded["completed_max_ts"] if embedded else None
-    u_n = int(unembedded["n"]) if unembedded else 0
-    u_completed_ts = unembedded["completed_max_ts"] if unembedded else None
-    u_created_ts = unembedded["created_max_ts"] if unembedded else None
-    return (
-        f"{e_n}|{e_updated_ts.isoformat() if e_updated_ts else 'none'}|"
-        f"{e_created_ts.isoformat() if e_created_ts else 'none'}|"
-        f"{e_completed_ts.isoformat() if e_completed_ts else 'none'}|"
-        f"{u_n}|{u_completed_ts.isoformat() if u_completed_ts else 'none'}|"
-        f"{u_created_ts.isoformat() if u_created_ts else 'none'}"
-    )
+    n = int(row["n"]) if row else 0
+    completed_ts = row["completed_max_ts"] if row else None
+    created_ts = row["created_max_ts"] if row else None
+    completed = completed_ts.isoformat() if completed_ts else "none"
+    created = created_ts.isoformat() if created_ts else "none"
+    return f"{n}|{completed}|{created}"
 
 
 def _as_float(value: Any) -> float | None:
@@ -302,18 +180,14 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
-def _fetch_corpus_points(session: Session, je_rel: str) -> list[dict[str, Any]]:
+def _fetch_corpus_points(session: Session) -> list[dict[str, Any]]:
     """Return every public success-state job as a corpus point.
 
     Drives the /explore list view's corpus count, filters, and
-    model/optimizer options. Both embedded and unembedded jobs are
-    included via a ``LEFT JOIN`` that prefers the embedding row's values
-    and falls back to ``payload_overview`` for jobs not yet embedded.
+    model/optimizer options, read straight off ``payload_overview``.
 
     Args:
         session: An open SQLAlchemy session bound to the job-store engine.
-        je_rel: SQL relation to use for the ``job_embeddings`` join (the real
-            table, or the empty stand-in when it does not exist).
 
     Returns:
         A list of point dicts carrying the metadata the /explore payload
@@ -324,25 +198,22 @@ def _fetch_corpus_points(session: Session, je_rel: str) -> list[dict[str, Any]]:
         session.execute(
             text(
                 "SELECT j.optimization_id, "
-                "COALESCE(je.optimization_type, j.optimization_type) AS optimization_type, "
-                f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+                "j.optimization_type AS optimization_type, "
+                f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}' "
                 "AS winning_model, "
                 f"{_CORPUS_BASELINE_METRIC_SQL} AS baseline_metric, "
         f"{_CORPUS_OPTIMIZED_METRIC_SQL} AS optimized_metric, "
-                "je.summary_text, "
-                f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) AS task_name, "
-                f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+                f"j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}' AS task_name, "
+                f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}' "
                 "AS module_name, "
-                f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+                f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}' "
                 "AS optimizer_name, "
                 "j.created_at, "
                 f"j.payload_overview->>'{PAYLOAD_OVERVIEW_DESCRIPTION}' AS task_description "
                 "FROM jobs j "
-                f"LEFT JOIN {je_rel} je ON je.optimization_id = j.optimization_id "
                 "WHERE j.status = 'success' "
                 f"AND {_USER_FACING_CORPUS_SQL} "
-                "AND NOT COALESCE(je.is_private, "
-                "(j.payload_overview->>'is_private')::boolean, FALSE) "
+                "AND NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE) "
                 "ORDER BY j.created_at DESC, j.optimization_id DESC "
             )
         )
@@ -351,7 +222,7 @@ def _fetch_corpus_points(session: Session, je_rel: str) -> list[dict[str, Any]]:
     )
     points: list[dict[str, Any]] = []
     for row in rows:
-        summary = row["summary_text"] or row.get("task_description")
+        summary = row["task_description"]
         if isinstance(summary, str) and len(summary) > SUMMARY_TEXT_MAX:
             summary = summary[:SUMMARY_TEXT_MAX].rstrip() + "…"
         points.append(
@@ -385,9 +256,8 @@ def fetch_public_dashboard(*, job_store: Any) -> dict[str, Any]:
         ``{"points": [...]}`` — one entry per public success-state job.
     """
     engine = job_store.engine
-    je_rel = _job_embeddings_relation(job_store)
     with Session(engine) as session:
-        fingerprint = _fetch_fingerprint(session, je_rel)
+        fingerprint = _fetch_fingerprint(session)
         now = time.time()
         with _LOCK:
             cached = _CACHE
@@ -398,7 +268,7 @@ def fetch_public_dashboard(*, job_store: Any) -> dict[str, Any]:
             ):
                 return cached["payload"]
 
-        payload = {"points": _fetch_corpus_points(session, je_rel)}
+        payload = {"points": _fetch_corpus_points(session)}
         with _LOCK:
             _CACHE["fingerprint"] = fingerprint
             _CACHE["at"] = now
@@ -465,8 +335,7 @@ def fetch_corpus_facets(
     number of runs it would leave when combined with every *other* active
     filter, while its own dimension's selection is ignored (selections inside
     a dimension are OR'd, so applying them would zero out every unselected
-    sibling). The free-text query is deliberately not part of the context —
-    semantic ranking has no crisp matched set to count against.
+    sibling). The free-text query is deliberately not part of the context.
 
     A dimension can hold thousands of distinct values (every model id ever
     optimized against), so no dimension is ever returned in full: each is
@@ -478,8 +347,7 @@ def fetch_corpus_facets(
     The UI opens one dimension's picker at a time, so ``dimension`` restricts
     the work to that dimension; the others come back empty with a zero total.
 
-    The scope predicate and the payload-first / embedded-first ``COALESCE``
-    derivation mirror :func:`_fetch_corpus_points` and :func:`_search_lexical`
+    The scope predicate and the ``payload_overview`` derivation mirror :func:`_fetch_corpus_points` and :func:`_search_lexical`
     exactly, so every value returned here lines up with a run the same scope
     can actually filter to.
 
@@ -522,10 +390,7 @@ def fetch_corpus_facets(
         scope_sql = _SHARED_GRANT_SCOPE_SQL
         params["shared_with_username"] = shared_with_username
     else:
-        scope_sql = (
-            "NOT COALESCE(je.is_private, "
-            "(j.payload_overview->>'is_private')::boolean, FALSE)"
-        )
+        scope_sql = "NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE)"
     date_parts: list[str] = []
     if date_from is not None:
         date_parts.append("AND j.created_at >= :date_from")
@@ -551,18 +416,16 @@ def fetch_corpus_facets(
     corpus_cte = (
         "WITH corpus AS ("
         "SELECT "
-        f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}' "
         "AS model, "
-        f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}' "
         "AS optimizer, "
-        f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}' "
         "AS module, "
-        "COALESCE(je.optimization_type, j.optimization_type, "
+        "COALESCE(j.optimization_type, "
         f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZATION_TYPE}', "
         f"'{OPTIMIZATION_TYPE_RUN}') AS run_type "
         "FROM jobs j "
-        f"LEFT JOIN {_job_embeddings_relation(job_store)} je "
-        "ON je.optimization_id = j.optimization_id "
         f"WHERE j.status = 'success' AND {_USER_FACING_CORPUS_SQL} AND {scope_sql} "
         + " ".join(date_parts)
         + ")"
@@ -724,18 +587,6 @@ def fetch_popular_queries(
     return [{"query": row[0], "count": int(row[1])} for row in rows]
 
 
-def _vector_literal(vector: list[float]) -> str:
-    """Format a Python float list as a pgvector text literal.
-
-    Args:
-        vector: The query embedding as a list of floats.
-
-    Returns:
-        The pgvector ``"[v1,v2,...]"`` literal — pgvector parses this on input.
-    """
-    return "[" + ",".join(f"{v:.7f}" for v in vector) + "]"
-
-
 def search_optimizations(
     *,
     job_store: Any,
@@ -753,32 +604,24 @@ def search_optimizations(
     owner_username: str | None = None,
     shared_with_username: str | None = None,
 ) -> dict[str, Any]:
-    """Search the optimization corpus, semantic when possible, lexical otherwise.
+    """Search the optimization corpus with BM25 when available, ILIKE otherwise.
 
-    Dispatch rules:
-
-    * ``embeddings_enabled`` is off → lexical.
-    * The corpus contains any success-state job that lacks a summary embedding
-      → lexical (so partially-embedded corpora stay fully searchable instead
-      of silently hiding the unembedded rows).
-    * A query is supplied but the embedder can't encode it → lexical.
-    * Otherwise → semantic (pgvector cosine similarity).
-
-    Both paths support the same structured filters, paging, and sort modes.
-    Lexical results have ``relevance = None`` since there's no continuous
-    similarity score to surface.
+    BM25 serves a relevance-sorted query when ``search_bm25_enabled`` is on and
+    the store has the ``pg_search`` index; every other request, and any BM25
+    failure, goes to the ILIKE lexical search. Both paths support the same
+    structured filters and paging. Lexical results have ``relevance = None``
+    since there's no continuous similarity score to surface.
 
     Args:
         job_store: Job store exposing the SQLAlchemy ``engine`` attribute.
-        query: Free-text query (embedded server-side when semantic) or ``None``.
-        models: Optional model whitelist (matches embedded ``winning_model`` or
-            the payload-overview model name for unembedded jobs).
+        query: Free-text query or ``None``.
+        models: Optional model whitelist (matches the payload-overview model name).
         optimizers: Optional optimizer whitelist.
         optimization_types: Optional ``optimization_type`` whitelist.
         tasks: Optional ``task_name`` whitelist (matched against the same
-            payload-overview-first COALESCE the corpus options derive from).
+            payload-overview value the corpus options derive from).
         modules: Optional ``module_name`` whitelist (matched against the same
-            embedded-first COALESCE the corpus options derive from).
+            payload-overview value the corpus options derive from).
         date_from: Inclusive lower bound on ``created_at`` (date precision).
         date_to: Inclusive upper bound on ``created_at`` (date precision).
         sort: One of :data:`SEARCH_SORTS`.
@@ -795,7 +638,7 @@ def search_optimizations(
 
     Returns:
         ``{"results": [...], "total": int, "matched_ids": [...], "search_type": str}``,
-        where ``search_type`` is ``"semantic"`` or ``"lexical"`` depending on
+        where ``search_type`` is ``"bm25"`` or ``"lexical"`` depending on
         which dispatch branch served the query.
     """
     if sort not in SEARCH_SORTS:
@@ -803,89 +646,40 @@ def search_optimizations(
     page = max(1, page)
     size = max(1, min(SEARCH_PAGE_SIZE_MAX, size))
 
-    je_rel = _job_embeddings_relation(job_store)
     query_clean = (query or "").strip()
 
-    use_lexical = not settings.embeddings_enabled
-    query_vector: list[float] | None = None
-
-    # The semantic branch references job_embeddings by name, so on a database
-    # where that table was never created (e.g. an airgap deploy without
-    # pgvector) it raises UndefinedTable -> 500 -- which the browser surfaces as
-    # a CORS/"failed to load" error on /dashboard/search. The unembedded-job
-    # probe only diverts scopes that have in-scope success rows, so an empty
-    # "mine"/"shared" corpus would otherwise fall straight through to the broken
-    # semantic query. Degrade every scope to lexical when the table is absent;
-    # the lexical/bm25 paths already use the empty-relation stand-in.
-    if not use_lexical and not _job_embeddings_table_present(job_store):
-        logger.info("search_optimizations: job_embeddings table absent, using lexical search")
-        use_lexical = True
-
-    if not use_lexical:
-        if _has_unembedded_success_jobs(
-            job_store,
-            owner_username=owner_username,
-            shared_with_username=shared_with_username,
-        ):
-            use_lexical = True
-        elif query_clean:
-            query_vector = get_embedder().encode(query_clean, task="retrieval.query")
-            if query_vector is None:
-                logger.info("search_optimizations: query embedding unavailable, using lexical")
-                use_lexical = True
-
-    if use_lexical:
-        # BM25 ranks by relevance, so it only serves the relevance sort with a
-        # query present; explicit recent/oldest sorts keep the ILIKE path's
-        # ordering. Any pg_search failure degrades to the ILIKE search below.
-        if (
-            query_clean
-            and sort == SEARCH_SORT_RELEVANCE
-            and settings.search_bm25_enabled
-            and getattr(job_store, "bm25_search_enabled", False)
-        ):
-            try:
-                return _search_bm25(
-                    job_store=job_store,
-                    je_rel=je_rel,
-                    query=query_clean,
-                    models=models,
-                    optimizers=optimizers,
-                    optimization_types=optimization_types,
-                    tasks=tasks,
-                    modules=modules,
-                    date_from=date_from,
-                    date_to=date_to,
-                    page=page,
-                    size=size,
-                    owner_username=owner_username,
-                    shared_with_username=shared_with_username,
-                )
-            except SQLAlchemyError as exc:
-                logger.warning(
-                    "BM25 search failed (%s); falling back to ILIKE lexical search.", exc
-                )
-        return _search_lexical(
-            job_store=job_store,
-            je_rel=je_rel,
-            query=query_clean,
-            models=models,
-            optimizers=optimizers,
-            optimization_types=optimization_types,
-            tasks=tasks,
-            modules=modules,
-            date_from=date_from,
-            date_to=date_to,
-            sort=sort,
-            page=page,
-            size=size,
-            owner_username=owner_username,
-            shared_with_username=shared_with_username,
-        )
-
-    return _search_semantic(
+    # BM25 ranks by relevance, so it only serves the relevance sort with a
+    # query present; explicit recent/oldest sorts keep the ILIKE path's
+    # ordering. Any pg_search failure degrades to the ILIKE search below.
+    if (
+        query_clean
+        and sort == SEARCH_SORT_RELEVANCE
+        and settings.search_bm25_enabled
+        and getattr(job_store, "bm25_search_enabled", False)
+    ):
+        try:
+            return _search_bm25(
+                job_store=job_store,
+                query=query_clean,
+                models=models,
+                optimizers=optimizers,
+                optimization_types=optimization_types,
+                tasks=tasks,
+                modules=modules,
+                date_from=date_from,
+                date_to=date_to,
+                page=page,
+                size=size,
+                owner_username=owner_username,
+                shared_with_username=shared_with_username,
+            )
+        except SQLAlchemyError as exc:
+            logger.warning(
+                "BM25 search failed (%s); falling back to ILIKE lexical search.", exc
+            )
+    return _search_lexical(
         job_store=job_store,
-        query_vector=query_vector,
+        query=query_clean,
         models=models,
         optimizers=optimizers,
         optimization_types=optimization_types,
@@ -901,262 +695,14 @@ def search_optimizations(
     )
 
 
-def _has_unembedded_success_jobs(
-    job_store: Any,
-    *,
-    owner_username: str | None = None,
-    shared_with_username: str | None = None,
-) -> bool:
-    """Return True if any in-scope successful job lacks a summary embedding row.
-
-    Cheap ``LIMIT 1`` probe used to decide whether the search dispatcher
-    should fall back to lexical matching. The query is index-friendly
-    (``jobs.status`` is indexed) and short-circuits as soon as one
-    qualifying row is found.
-
-    Args:
-        job_store: Job store exposing the SQLAlchemy ``engine`` attribute.
-        owner_username: When set, restrict the probe to that user's jobs so a
-            mine-corpus query isn't downgraded to lexical because some other
-            user has unembedded rows.
-        shared_with_username: When set (and ``owner_username`` is not), restrict
-            the probe to jobs shared with that user via a member grant.
-
-    Returns:
-        True when at least one in-scope success-state job has no embedding,
-        False otherwise (including on transient query failure — we prefer
-        the semantic path to a hard error).
-    """
-    params: dict[str, Any] = {}
-    if owner_username is not None:
-        scope_sql = "j.username = :owner_username"
-        params["owner_username"] = owner_username
-    elif shared_with_username is not None:
-        scope_sql = _SHARED_GRANT_SCOPE_SQL
-        params["shared_with_username"] = shared_with_username
-    else:
-        scope_sql = "NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE)"
-    je_rel = _job_embeddings_relation(job_store)
-    try:
-        with Session(job_store.engine) as session:
-            row = session.execute(
-                text(
-                    "SELECT 1 FROM jobs j "
-                    f"LEFT JOIN {je_rel} je ON je.optimization_id = j.optimization_id "
-                    "WHERE j.status = 'success' "
-                    f"AND {_USER_FACING_CORPUS_SQL} "
-                    "AND (je.optimization_id IS NULL OR je.embedding_summary IS NULL) "
-                    f"AND {scope_sql} "
-                    "LIMIT 1"
-                ),
-                params,
-            ).first()
-            return row is not None
-    except Exception as exc:
-        logger.warning("Unembedded-job probe failed, assuming all embedded: %s", exc)
-        return False
-
-
-def _search_semantic(
-    *,
-    job_store: Any,
-    query_vector: list[float] | None,
-    models: list[str] | None,
-    optimizers: list[str] | None,
-    optimization_types: list[str] | None,
-    tasks: list[str] | None,
-    modules: list[str] | None,
-    date_from: date | None,
-    date_to: date | None,
-    sort: str,
-    page: int,
-    size: int,
-    owner_username: str | None = None,
-    shared_with_username: str | None = None,
-) -> dict[str, Any]:
-    """Rank the embedded corpus by pgvector cosine similarity (or by date).
-
-    Args:
-        job_store: Job store exposing the SQLAlchemy ``engine`` attribute.
-        query_vector: Encoded query vector, or ``None`` when no probe is given.
-        models: Optional ``winning_model`` whitelist.
-        optimizers: Optional ``optimizer_name`` whitelist.
-        optimization_types: Optional ``optimization_type`` whitelist.
-        tasks: Optional ``task_name`` whitelist.
-        modules: Optional ``module_name`` whitelist.
-        date_from: Inclusive lower bound on ``created_at``.
-        date_to: Inclusive upper bound on ``created_at``.
-        sort: One of :data:`SEARCH_SORTS`.
-        page: 1-indexed page number.
-        size: Page size (already clamped).
-        owner_username: When set, scope to that user (including private rows)
-            instead of the public corpus.
-        shared_with_username: When set (and ``owner_username`` is not), scope to
-            jobs shared with that user via a member grant.
-
-    Returns:
-        ``{"results": [...], "total": int, "matched_ids": [...], "search_type": "semantic"}``.
-    """
-    use_similarity = query_vector is not None and sort == SEARCH_SORT_RELEVANCE
-
-    # INNER JOIN with jobs so deleted/orphan embedding rows can't leak through,
-    # and so the status filter is enforced regardless of how the embedding row
-    # was written.
-    from_sql = (
-        "FROM job_embeddings je "
-        "INNER JOIN jobs j ON j.optimization_id = je.optimization_id"
-    )
-    where_parts: list[str] = [
-        "j.status = 'success'",
-        _USER_FACING_CORPUS_SQL,
-        "je.embedding_summary IS NOT NULL",
-    ]
-    params: dict[str, Any] = {}
-    if owner_username is not None:
-        where_parts.append("j.username = :owner_username")
-        params["owner_username"] = owner_username
-    elif shared_with_username is not None:
-        where_parts.append(_SHARED_GRANT_SCOPE_SQL)
-        params["shared_with_username"] = shared_with_username
-    else:
-        where_parts.append("je.is_private = FALSE")
-    if models:
-        where_parts.append("je.winning_model = ANY(:models)")
-        params["models"] = list(models)
-    if optimizers:
-        where_parts.append("je.optimizer_name = ANY(:optimizers)")
-        params["optimizers"] = list(optimizers)
-    if optimization_types:
-        where_parts.append("je.optimization_type = ANY(:optimization_types)")
-        params["optimization_types"] = list(optimization_types)
-    # Match the same payload-first / embedded-first COALESCE the corpus options
-    # derive from (``_fetch_corpus_points``) so a filter value always lines up
-    # with the chip the user picked, even for jobs renamed after embedding.
-    if tasks:
-        where_parts.append(
-            f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) "
-            "= ANY(:tasks)"
-        )
-        params["tasks"] = list(tasks)
-    if modules:
-        where_parts.append(
-            f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
-            "= ANY(:modules)"
-        )
-        params["modules"] = list(modules)
-    if date_from is not None:
-        where_parts.append("je.created_at >= :date_from")
-        params["date_from"] = date_from
-    if date_to is not None:
-        where_parts.append("je.created_at < :date_to_excl")
-        params["date_to_excl"] = date_to + timedelta(days=1)
-
-    where_sql = " AND ".join(where_parts)
-
-    if use_similarity:
-        params["query_vec"] = _vector_literal(query_vector)  # type: ignore[arg-type]
-        order_sql = "je.embedding_summary <=> CAST(:query_vec AS vector) ASC, je.created_at DESC"
-        relevance_sql = "1 - (je.embedding_summary <=> CAST(:query_vec AS vector))"
-    elif sort == SEARCH_SORT_OLDEST:
-        order_sql = "je.created_at ASC, je.optimization_id ASC"
-        relevance_sql = "NULL::float"
-    else:
-        order_sql = "je.created_at DESC, je.optimization_id DESC"
-        relevance_sql = "NULL::float"
-
-    engine = job_store.engine
-    with Session(engine) as session:
-        # Pull every match in rank order up to the id cap so total and
-        # matched_ids cover the full result set, then page in Python.
-        ranked_rows = (
-            session.execute(
-                text(
-                    "SELECT je.optimization_id, j.payload_overview, "
-                    f"{relevance_sql} AS relevance "
-                    f"{from_sql} "
-                    f"WHERE {where_sql} "
-                    f"ORDER BY {order_sql} "
-                    "LIMIT :ids_cap"
-                ),
-                {**params, "ids_cap": SEARCH_MATCHED_IDS_CAP},
-            )
-            .mappings()
-            .all()
-        )
-
-        leaders = [row["optimization_id"] for row in ranked_rows]
-        relevance_by_id = {
-            row["optimization_id"]: _as_float(row.get("relevance")) for row in ranked_rows
-        }
-        total = len(leaders)
-        offset = (page - 1) * size
-        page_ids = leaders[offset : offset + size]
-
-        page_rows: list[Mapping[str, Any]] = []
-        if page_ids:
-            # COALESCE the user-renamable fields against payload_overview so a
-            # job that was renamed after embedding shows the current name in
-            # the search results, not the stale embedded snapshot.
-            page_rows = (
-                session.execute(
-                    text(
-                        "SELECT je.optimization_id, je.optimization_type, je.winning_model, "
-                        "je.baseline_metric, je.optimized_metric, je.summary_text, "
-                        f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) AS task_name, "
-                        "je.module_name, je.optimizer_name, je.created_at "
-                        f"{from_sql} "
-                        "WHERE je.optimization_id = ANY(:page_ids)"
-                    ),
-                    {"page_ids": page_ids},
-                )
-                .mappings()
-                .all()
-            )
-
-    by_id = {row["optimization_id"]: row for row in page_rows}
-    results: list[dict[str, Any]] = []
-    for opt_id in page_ids:
-        row = by_id.get(opt_id)
-        if row is None:
-            continue
-        summary = row["summary_text"]
-        if isinstance(summary, str) and len(summary) > SUMMARY_TEXT_MAX:
-            summary = summary[:SUMMARY_TEXT_MAX].rstrip() + "…"
-        results.append(
-            {
-                "optimization_id": opt_id,
-                "optimization_type": row["optimization_type"],
-                "winning_model": row["winning_model"],
-                "baseline_metric": _as_float(row["baseline_metric"]),
-                "optimized_metric": _as_float(row["optimized_metric"]),
-                "summary_text": summary,
-                "task_name": row["task_name"],
-                "module_name": row["module_name"],
-                "optimizer_name": row["optimizer_name"],
-                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                "relevance": relevance_by_id.get(opt_id),
-            }
-        )
-    return {
-        "results": results,
-        "total": total,
-        "matched_ids": leaders,
-        "search_type": "semantic",
-    }
-
-
-# Lexical text matched against the union of these fields. The COALESCE order
-# matters: embedded fields are authoritative (post-optimization winners,
-# canonical summaries) and fall back to payload_overview values for jobs
-# that haven't been embedded yet.
+# Lexical text matched against the union of these payload_overview fields.
 _LEXICAL_HAYSTACK_SQL = (
     "lower(coalesce("
-    "  coalesce(j.payload_overview->>'name', je.task_name, '') || ' ' || "
-    "  coalesce(je.summary_text, '') || ' ' || "
+    "  coalesce(j.payload_overview->>'name', '') || ' ' || "
     "  coalesce(j.payload_overview->>'description', '') || ' ' || "
-    "  coalesce(je.optimizer_name, j.payload_overview->>'optimizer_name', '') || ' ' || "
-    "  coalesce(je.winning_model, j.payload_overview->>'model_name', '') || ' ' || "
-    "  coalesce(je.module_name, j.payload_overview->>'module_name', ''), "
+    "  coalesce(j.payload_overview->>'optimizer_name', '') || ' ' || "
+    "  coalesce(j.payload_overview->>'model_name', '') || ' ' || "
+    "  coalesce(j.payload_overview->>'module_name', ''), "
     "''))"
 )
 
@@ -1190,7 +736,6 @@ def _lexical_tokens(query: str) -> list[str]:
 def _search_lexical(
     *,
     job_store: Any,
-    je_rel: str,
     query: str,
     models: list[str] | None,
     optimizers: list[str] | None,
@@ -1207,11 +752,8 @@ def _search_lexical(
 ) -> dict[str, Any]:
     """Lexical ILIKE search across the corpus.
 
-    Walks ``jobs LEFT JOIN job_embeddings`` so unembedded successful jobs
-    are still returned — their text comes from ``payload_overview`` rather
-    than the LLM-authored summary, structured filters fall back to the
-    payload values when the embedding row is missing, and each row's score
-    pair falls back to the job's own ``latest_metrics`` / ``result`` values.
+    Text and structured filters read ``payload_overview``, and each row's
+    score pair comes from the job's own ``latest_metrics`` / ``result`` values.
 
     The relevance sort is degraded to recency, since lexical matching has
     no continuous similarity score and emitting a synthetic one would be
@@ -1219,8 +761,6 @@ def _search_lexical(
 
     Args:
         job_store: Job store exposing the SQLAlchemy ``engine`` attribute.
-        je_rel: SQL relation to use for the ``job_embeddings`` join (the real
-            table, or the empty stand-in when it does not exist).
         query: Pre-trimmed query string (empty string allowed).
         models: Optional model whitelist.
         optimizers: Optional optimizer whitelist.
@@ -1249,41 +789,38 @@ def _search_lexical(
         where_parts.append(_SHARED_GRANT_SCOPE_SQL)
         params["shared_with_username"] = shared_with_username
     else:
-        # Private flag may live in the embedding row OR the payload overview
-        # (for jobs that haven't been embedded yet). Treat either as private.
         where_parts.append(
-            "NOT COALESCE(je.is_private, "
-            "(j.payload_overview->>'is_private')::boolean, FALSE)"
+            "NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE)"
         )
 
     if models:
         where_parts.append(
-            f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+            f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}' "
             "= ANY(:models)"
         )
         params["models"] = list(models)
     if optimizers:
         where_parts.append(
-            f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+            f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}' "
             "= ANY(:optimizers)"
         )
         params["optimizers"] = list(optimizers)
     if optimization_types:
         where_parts.append(
-            "COALESCE(je.optimization_type, j.optimization_type) = ANY(:optimization_types)"
+            "j.optimization_type = ANY(:optimization_types)"
         )
         params["optimization_types"] = list(optimization_types)
     # Same COALESCE expressions as the corpus options (``_fetch_corpus_points``)
-    # so a picked chip's value always matches, including for unembedded jobs.
+    # so a picked chip's value always matches.
     if tasks:
         where_parts.append(
-            f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) "
+            f"j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}' "
             "= ANY(:tasks)"
         )
         params["tasks"] = list(tasks)
     if modules:
         where_parts.append(
-            f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+            f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}' "
             "= ANY(:modules)"
         )
         params["modules"] = list(modules)
@@ -1309,16 +846,15 @@ def _search_lexical(
 
     select_cols = (
         "j.optimization_id, "
-        "COALESCE(je.optimization_type, j.optimization_type) AS optimization_type, "
-        f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+        "j.optimization_type AS optimization_type, "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}' "
         "AS winning_model, "
         f"{_CORPUS_BASELINE_METRIC_SQL} AS baseline_metric, "
         f"{_CORPUS_OPTIMIZED_METRIC_SQL} AS optimized_metric, "
-        "je.summary_text, "
-        f"COALESCE(je.task_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}') AS task_name, "
-        f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}' AS task_name, "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}' "
         "AS module_name, "
-        f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}' "
         "AS optimizer_name, "
         "j.created_at, "
         f"j.payload_overview->>'{PAYLOAD_OVERVIEW_DESCRIPTION}' AS task_description"
@@ -1334,7 +870,6 @@ def _search_lexical(
                     "SELECT j.optimization_id, j.payload_overview, "
                     "NULL::float AS relevance "
                     "FROM jobs j "
-                    f"LEFT JOIN {je_rel} je ON je.optimization_id = j.optimization_id "
                     f"WHERE {where_sql} "
                     f"ORDER BY {order_sql} "
                     "LIMIT :ids_cap"
@@ -1356,7 +891,6 @@ def _search_lexical(
                 session.execute(
                     text(
                         f"SELECT {select_cols} FROM jobs j "
-                        f"LEFT JOIN {je_rel} je ON je.optimization_id = j.optimization_id "
                         "WHERE j.optimization_id = ANY(:page_ids)"
                     ),
                     {"page_ids": page_ids},
@@ -1371,10 +905,7 @@ def _search_lexical(
         row = by_id.get(opt_id)
         if row is None:
             continue
-        # Prefer the LLM-authored summary; fall back to the user-supplied
-        # task description so unembedded rows still have something to render
-        # in the result snippet.
-        summary = row["summary_text"] or row.get("task_description")
+        summary = row["task_description"]
         if isinstance(summary, str) and len(summary) > SUMMARY_TEXT_MAX:
             summary = summary[:SUMMARY_TEXT_MAX].rstrip() + "…"
         results.append(
@@ -1403,7 +934,6 @@ def _search_lexical(
 def _search_bm25(
     *,
     job_store: Any,
-    je_rel: str,
     query: str,
     models: list[str] | None,
     optimizers: list[str] | None,
@@ -1428,8 +958,6 @@ def _search_bm25(
 
     Args:
         job_store: Job store exposing the SQLAlchemy ``engine`` attribute.
-        je_rel: SQL relation to use for the ``job_embeddings`` join (the real
-            table, or the empty stand-in when it does not exist).
         query: Pre-trimmed, non-empty query string (the BM25 match text).
         models: Optional model whitelist.
         optimizers: Optional optimizer whitelist.
@@ -1457,36 +985,35 @@ def _search_bm25(
         params["shared_with_username"] = shared_with_username
     else:
         where_parts.append(
-            "NOT COALESCE(je.is_private, "
-            "(j.payload_overview->>'is_private')::boolean, FALSE)"
+            "NOT COALESCE((j.payload_overview->>'is_private')::boolean, FALSE)"
         )
 
     if models:
         where_parts.append(
-            f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+            f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}' "
             "= ANY(:models)"
         )
         params["models"] = list(models)
     if optimizers:
         where_parts.append(
-            f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+            f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}' "
             "= ANY(:optimizers)"
         )
         params["optimizers"] = list(optimizers)
     if optimization_types:
         where_parts.append(
-            "COALESCE(je.optimization_type, j.optimization_type) = ANY(:optimization_types)"
+            "j.optimization_type = ANY(:optimization_types)"
         )
         params["optimization_types"] = list(optimization_types)
     if tasks:
         where_parts.append(
-            f"COALESCE(j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}', je.task_name) "
+            f"j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}' "
             "= ANY(:tasks)"
         )
         params["tasks"] = list(tasks)
     if modules:
         where_parts.append(
-            f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+            f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}' "
             "= ANY(:modules)"
         )
         params["modules"] = list(modules)
@@ -1506,16 +1033,15 @@ def _search_bm25(
 
     select_cols = (
         "j.optimization_id, "
-        "COALESCE(je.optimization_type, j.optimization_type) AS optimization_type, "
-        f"COALESCE(je.winning_model, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}') "
+        "j.optimization_type AS optimization_type, "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODEL_NAME}' "
         "AS winning_model, "
         f"{_CORPUS_BASELINE_METRIC_SQL} AS baseline_metric, "
         f"{_CORPUS_OPTIMIZED_METRIC_SQL} AS optimized_metric, "
-        "je.summary_text, "
-        f"COALESCE(je.task_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}') AS task_name, "
-        f"COALESCE(je.module_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}') "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_NAME}' AS task_name, "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_MODULE_NAME}' "
         "AS module_name, "
-        f"COALESCE(je.optimizer_name, j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}') "
+        f"j.payload_overview->>'{PAYLOAD_OVERVIEW_OPTIMIZER_NAME}' "
         "AS optimizer_name, "
         "j.created_at, "
         f"j.payload_overview->>'{PAYLOAD_OVERVIEW_DESCRIPTION}' AS task_description"
@@ -1529,7 +1055,6 @@ def _search_bm25(
                     "SELECT j.optimization_id, "
                     "paradedb.score(j.optimization_id) AS relevance "
                     "FROM jobs j "
-                    f"LEFT JOIN {je_rel} je ON je.optimization_id = j.optimization_id "
                     f"WHERE {where_sql} "
                     "ORDER BY relevance DESC, j.created_at DESC, j.optimization_id DESC "
                     "LIMIT :ids_cap"
@@ -1554,7 +1079,6 @@ def _search_bm25(
                 session.execute(
                     text(
                         f"SELECT {select_cols} FROM jobs j "
-                        f"LEFT JOIN {je_rel} je ON je.optimization_id = j.optimization_id "
                         "WHERE j.optimization_id = ANY(:page_ids)"
                     ),
                     {"page_ids": page_ids},
@@ -1569,7 +1093,7 @@ def _search_bm25(
         row = by_id.get(opt_id)
         if row is None:
             continue
-        summary = row["summary_text"] or row.get("task_description")
+        summary = row["task_description"]
         if isinstance(summary, str) and len(summary) > SUMMARY_TEXT_MAX:
             summary = summary[:SUMMARY_TEXT_MAX].rstrip() + "…"
         results.append(

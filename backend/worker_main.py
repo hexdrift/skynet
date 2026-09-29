@@ -30,7 +30,6 @@ from core.api.observability import (
 from core.config import settings
 from core.error_reporting import configure_error_reporting
 from core.notifications import configure_notification_preferences
-from core.service_gateway.embedding_pipeline import start_embedding_index_sweeper
 from core.service_gateway.service_builder import build_default_service
 from core.storage import get_job_store
 from core.worker.engine import get_worker
@@ -57,8 +56,6 @@ def run_worker() -> None:
         start_queue_metrics_refresher(job_store),
         start_orphan_recovery_sweeper(job_store),
     ]
-    if settings.embeddings_enabled:
-        sweepers.append(start_embedding_index_sweeper(job_store))
     if pending_ids:
         logger.info("Re-queued %d pending jobs from previous run (local hint)", len(pending_ids))
 

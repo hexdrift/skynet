@@ -19,7 +19,6 @@ import {
   Key,
   ArrowSquareOut,
   Feather,
-  Microphone,
   PencilSimple,
   PencilSimpleLine,
   Plus,
@@ -215,7 +214,6 @@ function MemoryKnobControl({
 function AgentTab() {
   const { prefs, setPref } = useUserPrefs();
   const [memory, setMemory] = React.useState<MemorySettings | null>(null);
-  const transcriptionEnabled = getRuntimeEnv().transcriptionEnabled;
   const saveTimers = React.useRef<Partial<Record<MemoryKnobName, ReturnType<typeof setTimeout>>>>(
     {},
   );
@@ -265,19 +263,6 @@ function AgentTab() {
 
   return (
     <div className="space-y-1">
-      {transcriptionEnabled && (
-        <SettingsRow
-          icon={Microphone}
-          label={msg("settings.agent.dictation.label")}
-          description={msg("settings.agent.dictation.description")}
-        >
-          <Switch
-            checked={prefs.dictationEnabled}
-            onCheckedChange={(v) => setPref("dictationEnabled", v)}
-          />
-        </SettingsRow>
-      )}
-
       <SettingsRow
         icon={Shield}
         label={msg("settings.agent.trust.label")}

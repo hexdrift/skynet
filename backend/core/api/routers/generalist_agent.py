@@ -36,7 +36,6 @@ from ...service_gateway.agents.generalist import (
     get_approval_registry,
     run_generalist_agent,
 )
-from ...service_gateway.embedding_pipeline import queue_conversation_embed
 from ...storage.models import AgentConversationModel, AgentMessageModel
 from ..agent_memory import wake_document
 from ..auth import AuthenticatedUser, get_authenticated_user
@@ -331,10 +330,6 @@ def _persist_assistant_turn(
         if row is not None:
             row.updated_at = cast(Any, now)
         session.commit()
-    # Refresh the haystack embedding so the next search hit reflects the
-    # turn we just persisted. Runs on a daemon thread and is best-effort —
-    # the startup backfill heals any failures on the next deploy.
-    queue_conversation_embed(conversation_id, engine=job_store.engine)
 
 
 async def _wrap_with_persistence(

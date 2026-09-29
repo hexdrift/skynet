@@ -17,7 +17,6 @@ Tunables (env):
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import random
@@ -231,53 +230,6 @@ async def chat_completions(request: Request) -> JSONResponse:
                 "completion_tokens": max(len(canned) // 4, 1),
                 "total_tokens": max(len(prompt_text) // 4 + len(canned) // 4, 2),
             },
-        }
-    )
-
-
-@app.post("/v1/embeddings")
-async def embeddings(request: Request) -> JSONResponse:
-    """Mimic OpenAI's embeddings endpoint with deterministic nonzero vectors.
-
-    Args:
-        request: Incoming HTTP request whose body contains ``input`` (string
-            or list) and ``model``. Everything else is ignored.
-
-    Returns:
-        A JSON response shaped like ``openai.CreateEmbeddingResponse`` with
-        one stable 1536-dimensional vector per input element. Nonzero vectors
-        are required because the production adapter rejects a zero-norm
-        provider response before pgvector storage or query execution.
-    """
-    if _LATENCY_MS > 0:
-        await asyncio.sleep(_LATENCY_MS / 1000.0)
-
-    body = await request.json()
-    inputs = body.get("input", [])
-    if isinstance(inputs, str):
-        inputs = [inputs]
-
-    def _vector(value: object) -> list[float]:
-        """Expand a SHA-256 digest into a stable nonzero vector.
-
-        Args:
-            value: Input value to fingerprint.
-
-        Returns:
-            A deterministic 1536-dimensional vector.
-        """
-        digest = hashlib.sha256(str(value).encode("utf-8")).digest()
-        return [((digest[index % len(digest)] + index) % 255 + 1) / 255.0 for index in range(1536)]
-
-    return JSONResponse(
-        {
-            "object": "list",
-            "data": [
-                {"object": "embedding", "index": index, "embedding": _vector(value)}
-                for index, value in enumerate(inputs)
-            ],
-            "model": body.get("model", "mock-embedding"),
-            "usage": {"prompt_tokens": max(len(inputs), 1), "total_tokens": max(len(inputs), 1)},
         }
     )
 

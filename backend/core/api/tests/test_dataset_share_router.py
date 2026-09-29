@@ -1,7 +1,7 @@
 """Tests for dataset sharing — role-gated access, members, links, transfer.
 
 Mounts the library and sharing routers on one in-memory SQLite store (the
-``RemoteDBJobStore`` subclass that skips the pgvector bootstrap) and switches the
+``RemoteDBJobStore`` subclass that skips the Postgres-only bootstrap) and switches the
 acting user per client, so a single store backs an owner and the people they
 share with. Covers the effective-role gate (viewer reads/clones, editor edits,
 owner manages), restricted named-member links, rejection of anyone-link access,
@@ -39,7 +39,7 @@ _SCHEMA = {
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for dataset-sharing tests (no pgvector)."""
+    """In-memory SQLite job store for dataset-sharing tests (no Postgres)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

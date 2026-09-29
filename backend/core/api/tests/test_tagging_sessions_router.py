@@ -1,7 +1,7 @@
 """Tests for the tagger-session persistence router (CRUD + ownership).
 
 Mounts the router on an in-memory SQLite store (the sibling routers' pattern: a
-``RemoteDBJobStore`` subclass that skips the pgvector bootstrap so
+``RemoteDBJobStore`` subclass that skips the Postgres-only bootstrap so
 ``Base.metadata.create_all`` stands up the tables). Covers the save/restore
 lifecycle — create, list, get, progress-autosave, rename/pin, delete — plus the
 ownership guard that a caller cannot touch another user's session.
@@ -41,7 +41,7 @@ _SESSION_BODY = {
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for tagger-session tests (no pgvector)."""
+    """In-memory SQLite job store for tagger-session tests (no Postgres)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

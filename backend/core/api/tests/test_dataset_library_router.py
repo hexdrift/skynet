@@ -2,7 +2,7 @@
 
 Exercises the owner-scoped save/list/read/rename/delete surface against an
 in-memory SQLite store (the sibling routers' pattern: a ``RemoteDBJobStore``
-subclass that skips the pgvector bootstrap so ``Base.metadata.create_all``
+subclass that skips the Postgres-only bootstrap so ``Base.metadata.create_all``
 stands up the ``datasets`` and ``dataset_blobs`` tables). Covers the three save
 gates — per-file cap (413), content-hash dedupe, and the unified storage budget
 (409) — plus cross-user isolation.
@@ -45,7 +45,7 @@ _SCHEMA = {
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store for dataset-library tests (no pgvector)."""
+    """In-memory SQLite job store for dataset-library tests (no Postgres)."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""

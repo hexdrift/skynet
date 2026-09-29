@@ -22,7 +22,7 @@ helm upgrade --install skynet deploy/helm/skynet \
   --set openshift.routes.frontend.host=skynet.example.internal
 ```
 
-Use existing Secrets in production. The backend Secret needs `BACKEND_AUTH_SECRET`, `BYOK_VAULT_KEY`, database/model credentials, and optional transcription/log-shipping credentials. The frontend Secret needs `AUTH_SECRET`, the same `BACKEND_AUTH_SECRET`, and `AUTH_SSO_CLIENT_SECRET`.
+Use existing Secrets in production. The backend Secret needs `BACKEND_AUTH_SECRET`, `BYOK_VAULT_KEY`, database/model credentials, and optional log-shipping credentials. The frontend Secret needs `AUTH_SECRET`, the same `BACKEND_AUTH_SECRET`, and `AUTH_SSO_CLIENT_SECRET`.
 
 ## Components
 
@@ -44,7 +44,7 @@ Use existing Secrets in production. The backend Secret needs `BACKEND_AUTH_SECRE
 - Set `backend.env.ADMIN_USERNAMES` and frontend `AUTH_ADMINS` for one break-glass identity.
 - Set `backend.env.ALLOWED_ORIGINS` to the frontend HTTPS origin.
 - Keep OpenShift Route TLS enabled with redirect, or provide equivalent TLS ingress.
-- Restrict NetworkPolicy egress to PostgreSQL, IdP, LLM, embedding, transcription, SMTP, and local observability endpoints.
+- Restrict NetworkPolicy egress to PostgreSQL, IdP, LLM, SMTP, and local observability endpoints.
 - Confirm no empty allowlist leaves the chart's documented `0.0.0.0/0` fallback in production.
 - Start at two worker threads per backend pod and tune from memory/CPU metrics.
 - Set `BYOK_VAULT_KEY` before enabling provider-key storage.
@@ -56,12 +56,11 @@ Use existing Secrets in production. The backend Secret needs `BACKEND_AUTH_SECRE
 | `backend.env.WORKER_CONCURRENCY` | Job threads per pod; default 2 for predictable memory use. |
 | `backend.env.JOB_ADMISSION_MAX_MEMORY_FRACTION` | Defers new claims near the cgroup memory limit. |
 | `backend.env.USER_STORAGE_QUOTA_BYTES` | Default per-user unified quota; UI overrides are stored in PostgreSQL. |
-| `backend.env.SEARCH_BACKEND` | `lexical` (plain PostgreSQL), `bm25` (`pg_search`), or `semantic` (`pgvector`). |
+| `backend.env.SEARCH_BACKEND` | `lexical` (plain PostgreSQL) or `bm25` (`pg_search`). |
 | `backend.autoscaling.queueDepth` | Optional `skynet_jobs_pending` external metric. |
 | `pgbouncer.enabled` | PostgreSQL transaction pooling at high replica counts. |
 | `frontend.env.API_URL` | Browser-reachable backend origin. |
 | `frontend.env.BACKEND_INTERNAL_URL` | Server-only backend Service used during authentication. |
-| `frontend.env.TRANSCRIPTION_ENABLED` | Shows dictation only when backend transcription is also configured. |
 
 ## Database lifecycle
 

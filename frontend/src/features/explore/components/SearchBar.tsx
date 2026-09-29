@@ -7,7 +7,7 @@ import { msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { TooltipButton } from "@/shared/ui/tooltip-button";
 import { Segmented } from "@/shared/ui/segmented";
-import type { ExploreCorpus } from "../hooks/use-semantic-search";
+import type { ExploreCorpus } from "../hooks/use-search";
 import { SearchSuggestions } from "./SearchSuggestions";
 
 interface SearchBarProps {
@@ -59,7 +59,7 @@ const TYPING_DEBOUNCE_MS = 250;
  * filters affordance. Keyboard: pressing "/" anywhere focuses the input;
  * Enter fires the search immediately.
  *
- * Typing into the input auto-submits after a short pause so the embedding
+ * Typing into the input auto-submits after a short pause so the search
  * API isn't hammered with one request per keystroke — Enter exists as an
  * escape hatch that skips the wait.
  */

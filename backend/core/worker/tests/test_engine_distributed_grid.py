@@ -185,10 +185,7 @@ def test_finalize_assembles_success_once(worker: BackgroundWorker, store: SQLite
     for child_id in children:
         store.update_job(child_id, status="success")
 
-    with (
-        patch("core.worker.engine.notify_job_completed") as notify,
-        patch.object(worker, "_schedule_embedding_indexing"),
-    ):
+    with patch("core.worker.engine.notify_job_completed") as notify:
         worker._maybe_finalize_grid(PARENT_ID)
         worker._maybe_finalize_grid(PARENT_ID)  # second call must be a no-op
 
@@ -215,10 +212,7 @@ def test_finalize_synthesizes_missing_pair_from_child_row(
     store.update_job(children[0], status="success")
     store.update_job(children[1], status="failed", message="OOM-killed")
 
-    with (
-        patch("core.worker.engine.notify_job_completed"),
-        patch.object(worker, "_schedule_embedding_indexing"),
-    ):
+    with patch("core.worker.engine.notify_job_completed"):
         worker._maybe_finalize_grid(PARENT_ID)
 
     result = store.get_job(PARENT_ID)["result"]
@@ -302,10 +296,7 @@ def test_stuck_grid_backstop_finalizes(worker: BackgroundWorker, store: SQLiteJo
     for child_id in children:
         store.update_job(child_id, status="success")
 
-    with (
-        patch("core.worker.engine.notify_job_completed"),
-        patch.object(worker, "_schedule_embedding_indexing"),
-    ):
+    with patch("core.worker.engine.notify_job_completed"):
         worker._finalize_stuck_grids()
 
     assert store.get_job(PARENT_ID)["status"] == "success"

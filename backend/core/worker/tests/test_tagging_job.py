@@ -29,7 +29,7 @@ _SESSION_ID = "sess-1"
 
 
 class _MemStore(RemoteDBJobStore):
-    """In-memory SQLite job store (no pgvector) with job-method attrs seeded."""
+    """In-memory SQLite job store (no Postgres) with job-method attrs seeded."""
 
     def __init__(self) -> None:
         """Build an in-memory SQLite engine and create the ORM tables."""
