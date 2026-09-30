@@ -14,13 +14,11 @@ import { motion, useReducedMotion } from "framer-motion";
 import {
   BookOpen,
   CircleNotch,
-  Brain,
   Columns,
   Key,
   ArrowSquareOut,
   Feather,
   PencilSimple,
-  PencilSimpleLine,
   Plus,
   ArrowCounterClockwise,
   HardDrives,
@@ -29,7 +27,6 @@ import {
   Sparkle,
   Table as TableIcon,
   Tag,
-  MagnifyingGlass,
   Trash,
   User,
   Info,
@@ -91,16 +88,11 @@ import {
   generateApiToken,
   getApiToken,
   getManagedAccounts,
-  getMemorySettings,
   revokeApiToken,
   setStorageQuotaOverride,
   updateManagedAccountRole,
-  updateMemorySettings,
   type ApiTokenInfo,
   type ManagedAccount,
-  type MemoryKnob,
-  type MemoryKnobName,
-  type MemorySettings,
 } from "@/shared/lib/api";
 
 import { useUserPrefs } from "../hooks/use-user-prefs";
@@ -169,97 +161,8 @@ function TaggingTab() {
   );
 }
 
-// One agent-memory knob: the stepper plus a reset affordance that appears only
-// while the value overrides the tool default (OptMem's "commented line means:
-// follow the tool" semantics, inverted into UI).
-function MemoryKnobControl({
-  knob,
-  step,
-  onCommit,
-}: {
-  knob: MemoryKnob;
-  step: number;
-  onCommit: (value: number | null) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      {knob.override != null && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => onCommit(null)}
-              className="size-[44px] sm:size-8 [@media(hover:none)_and_(pointer:coarse)]:size-[44px]"
-              aria-label={msg("settings.agent.memory.reset")}
-            >
-              <ArrowCounterClockwise className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{msg("settings.agent.memory.reset")}</TooltipContent>
-        </Tooltip>
-      )}
-      <NumberInput
-        value={knob.value}
-        onChange={onCommit}
-        min={knob.min}
-        max={knob.max}
-        step={step}
-        className="w-[132px]"
-      />
-    </div>
-  );
-}
-
 function AgentTab() {
   const { prefs, setPref } = useUserPrefs();
-  const [memory, setMemory] = React.useState<MemorySettings | null>(null);
-  const saveTimers = React.useRef<Partial<Record<MemoryKnobName, ReturnType<typeof setTimeout>>>>(
-    {},
-  );
-
-  React.useEffect(() => {
-    let cancelled = false;
-    getMemorySettings()
-      .then((s) => {
-        if (!cancelled) setMemory(s);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Optimistic local update, then a debounced PUT: NumberInput commits every
-  // keystroke and stepper tap, and each would otherwise be a round-trip.
-  const commitKnob = React.useCallback((name: MemoryKnobName, value: number | null) => {
-    setMemory((prev) =>
-      prev
-        ? {
-            ...prev,
-            [name]: { ...prev[name], value: value ?? prev[name].default, override: value },
-          }
-        : prev,
-    );
-    const timers = saveTimers.current;
-    const pending = timers[name];
-    if (pending) clearTimeout(pending);
-    timers[name] = setTimeout(() => {
-      updateMemorySettings({ [name]: value })
-        .then((s) => {
-          setMemory(s);
-          toast.success(msg("settings.saved"), { autoClose: 1500, toastId: "settings-saved" });
-        })
-        .catch(() => {
-          toast.error(msg("settings.agent.memory.save_failed"), {
-            toastId: "memory-save-failed",
-          });
-          getMemorySettings()
-            .then(setMemory)
-            .catch(() => {});
-        });
-    }, 600);
-  }, []);
 
   return (
     <div className="space-y-1">
@@ -285,46 +188,6 @@ function AgentTab() {
           </SelectContent>
         </Select>
       </SettingsRow>
-
-      {memory && (
-        <>
-          <SettingsRow
-            icon={Brain}
-            label={msg("settings.agent.memory.wake.label")}
-            description={msg("settings.agent.memory.wake.description")}
-          >
-            <MemoryKnobControl
-              knob={memory.wake_lines}
-              step={8}
-              onCommit={(v) => commitKnob("wake_lines", v)}
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            icon={PencilSimpleLine}
-            label={msg("settings.agent.memory.entry.label")}
-            description={msg("settings.agent.memory.entry.description")}
-          >
-            <MemoryKnobControl
-              knob={memory.entry_chars}
-              step={20}
-              onCommit={(v) => commitKnob("entry_chars", v)}
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            icon={MagnifyingGlass}
-            label={msg("settings.agent.memory.recall.label")}
-            description={msg("settings.agent.memory.recall.description")}
-          >
-            <MemoryKnobControl
-              knob={memory.recall_chars}
-              step={500}
-              onCommit={(v) => commitKnob("recall_chars", v)}
-            />
-          </SettingsRow>
-        </>
-      )}
     </div>
   );
 }

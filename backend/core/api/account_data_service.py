@@ -10,9 +10,6 @@ from sqlalchemy.orm import Session
 
 from ..storage.models import (
     AgentConversationModel,
-    AgentMemoryModel,
-    AgentMemorySettingsModel,
-    AgentMemorySummaryModel,
     AgentMessageModel,
     AgentStagedDatasetModel,
     ApiTokenModel,
@@ -213,9 +210,6 @@ def delete_account(session: Session, username: str) -> AccountDeletionSummary:
         ByokProviderKeyModel,
         UserStorageQuotaOverrideModel,
         AgentStagedDatasetModel,
-        AgentMemoryModel,
-        AgentMemorySummaryModel,
-        AgentMemorySettingsModel,
         NotificationPreferenceModel,
         TelemetryEventModel,
     ):

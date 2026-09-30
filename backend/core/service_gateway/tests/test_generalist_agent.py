@@ -1332,7 +1332,6 @@ async def test_turn_replays_history_natively_and_streams_the_submit(monkeypatch:
     reply = await generalist_module._drive_generalist_agent(
         mcp_url="http://unused/mcp/",
         wizard_state=WizardState(),
-        memory_context="",
         chat_history=[
             {"role": "user", "content": "hi"},
             {

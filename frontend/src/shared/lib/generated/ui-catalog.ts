@@ -430,10 +430,6 @@ export type MessageKey =
   | "auto.features.agent.panel.lib.tool.meta.literal.81"
   | "auto.features.agent.panel.lib.tool.meta.literal.82"
   | "auto.features.agent.panel.lib.tool.meta.literal.83"
-  | "auto.features.agent.panel.lib.tool.meta.literal.84"
-  | "auto.features.agent.panel.lib.tool.meta.literal.85"
-  | "auto.features.agent.panel.lib.tool.meta.literal.86"
-  | "auto.features.agent.panel.lib.tool.meta.literal.87"
   | "auto.features.agent.panel.lib.tool.meta.literal.9"
   | "auto.features.agent.panel.lib.tool.meta.template.1"
   | "auto.features.agent.panel.lib.tool.meta.template.10"
@@ -1752,14 +1748,6 @@ export type MessageKey =
   | "settings.admin.storage.used"
   | "settings.admin.storage.username"
   | "settings.admin.storage.view_list"
-  | "settings.agent.memory.entry.description"
-  | "settings.agent.memory.entry.label"
-  | "settings.agent.memory.recall.description"
-  | "settings.agent.memory.recall.label"
-  | "settings.agent.memory.reset"
-  | "settings.agent.memory.save_failed"
-  | "settings.agent.memory.wake.description"
-  | "settings.agent.memory.wake.label"
   | "settings.agent.settings_tool.confirm"
   | "settings.agent.settings_tool.description"
   | "settings.agent.settings_tool.title"
@@ -2716,7 +2704,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "app.shell.search.kw.about": "אודות גרסה version defaults",
   "app.shell.search.kw.account": "חשבון שפה שפות שפת הגדרות העדפות lite language preferences",
   "app.shell.search.kw.admin": "ניהול אחסון storage quota users",
-  "app.shell.search.kw.agent": "סוכן פאנל assistant trust memory",
+  "app.shell.search.kw.agent": "סוכן פאנל assistant trust",
   "app.shell.search.kw.analytics": "אנליטיקה גרפים סטטיסטיקה מגמות ביצועים analytics charts stats",
   "app.shell.search.kw.api": "אסימון טוקן מפתח api token developer integration",
   "app.shell.search.kw.dashboard": "ריצות, משימות, בית",
@@ -3094,10 +3082,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.agent.panel.lib.tool.meta.literal.81": "מציג את סשני התיוג שלך וכמה דוגמאות תויגו בכל אחד.",
   "auto.features.agent.panel.lib.tool.meta.literal.82": "מדפדף בדאטאסטים השמורים בספרייה שלך כדי לעשות שימוש חוזר באחד מהם.",
   "auto.features.agent.panel.lib.tool.meta.literal.83": "פותח בורר בצ׳אט לשימוש חוזר בדאטאסט ששמרת — בלי להעלות מחדש.",
-  "auto.features.agent.panel.lib.tool.meta.literal.84": "שומר זיכרון",
-  "auto.features.agent.panel.lib.tool.meta.literal.85": "מסדר את הזיכרון",
-  "auto.features.agent.panel.lib.tool.meta.literal.86": "מחפש בזיכרון",
-  "auto.features.agent.panel.lib.tool.meta.literal.87": "קורא מהזיכרון",
   "auto.features.agent.panel.lib.tool.meta.literal.9": "השם החדש יוצג בכל מקום במקום השם הנוכחי.",
   "auto.features.agent.panel.lib.tool.meta.template.1": "מחיקת {p1}",
   "auto.features.agent.panel.lib.tool.meta.template.10": "הרץ/הריצי {p1}",
@@ -4416,14 +4400,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "settings.admin.storage.used": "בשימוש",
   "settings.admin.storage.username": "שם משתמש",
   "settings.admin.storage.view_list": "פתח/י את הרשימה",
-  "settings.agent.memory.entry.description": "האורך המרבי של זיכרון בודד, בתווים",
-  "settings.agent.memory.entry.label": "אורך זיכרון מרבי",
-  "settings.agent.memory.recall.description": "כמה טקסט חיפוש בזיכרון מחזיר, בתווים",
-  "settings.agent.memory.recall.label": "תקציב חיפוש בזיכרון",
-  "settings.agent.memory.reset": "איפוס לברירת המחדל",
-  "settings.agent.memory.save_failed": "שמירת הגדרות הזיכרון נכשלה",
-  "settings.agent.memory.wake.description": "כמה שורות זיכרון הסוכן מתעורר איתן בכל תור",
-  "settings.agent.memory.wake.label": "גודל הקשר הזיכרון",
   "settings.agent.settings_tool.confirm": "החלת שינויים",
   "settings.agent.settings_tool.description": "עדכון ההעדפות המקומיות של Skynet",
   "settings.agent.settings_tool.title": "שינוי הגדרות",
