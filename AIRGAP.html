@@ -1561,7 +1561,7 @@ BACKEND_AUTH_SECRET</pre>
   -f deploy\helm\skynet\values-airgap.generated.yaml ^
   --set-json <span class="s">"migration.command=[\"alembic\",\"stamp\",\"0001_onprem\"]"</span></span></pre>
 
-  <p>The migration chain is a single squashed baseline: <code>0001_onprem</code> creates the complete extension-free schema straight from the SQLAlchemy models. It is both the baseline and the current head, so a fresh database needs only <code>alembic upgrade head</code>.</p>
+  <p>The migration chain starts from a single squashed baseline: <code>0001_onprem</code> creates the complete extension-free schema straight from the SQLAlchemy models. <code>0002_drop_agent_memory</code>, the current head, drops the tables of the removed agent memory feature (a no-op on databases that never had them). A fresh database needs only <code>alembic upgrade head</code>; after stamping <code>0001_onprem</code>, run <code>alembic upgrade head</code> as well.</p>
 
   <p>Only run the <code>alembic stamp 0001_onprem</code> path when the live schema genuinely matches the models — i.e. it was created outside Alembic from this same revision. Stamping tells Alembic the DB is current and skips schema creation entirely, so stamping a partial or older schema leaves it broken. When in doubt, diff the live schema against a scratch DB migrated from empty, and verify with <code>alembic heads</code> (and <code>alembic current</code> against the live DB) from <code>backend/</code> before deciding.</p>
 
@@ -1680,7 +1680,7 @@ helm upgrade --install skynet deploy\helm\skynet ^
   <ul>
     <li>The rendered backend <code>NetworkPolicy</code> egress is <strong>not</strong> <code>0.0.0.0/0</code> — every egress slot lists an exact internal CIDR.</li>
     <li>An authenticated admin API call returns <code>200</code> (confirms <code>BACKEND_AUTH_SECRET</code> matches across both Secrets).</li>
-    <li><code>alembic current</code> against the live DB equals the head <code>0001_onprem</code>.</li>
+    <li><code>alembic current</code> against the live DB equals the head <code>0002_drop_agent_memory</code>.</li>
     <li>No pod attempts DNS resolution for any public host.</li>
   </ul>
 </section>
