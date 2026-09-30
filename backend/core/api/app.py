@@ -74,7 +74,6 @@ from .routers.accounts import create_accounts_router
 from .routers.admin import create_admin_router
 from .routers.admin_accounts import create_admin_accounts_router
 from .routers.agent_history import create_agent_history_router
-from .routers.agent_memory import create_agent_memory_router
 from .routers.analytics import create_analytics_router
 from .routers.api_tokens import create_api_tokens_router
 from .routers.byok import create_byok_router
@@ -1215,7 +1214,6 @@ def create_app(
     app.include_router(create_mcp_probe_router(), tags=["Code Validation"])
     app.include_router(create_code_agent_router(job_store=job_store), tags=["Code Validation"])
     app.include_router(create_generalist_agent_router(job_store=job_store), tags=["Optimizations"])
-    app.include_router(create_agent_memory_router(job_store=job_store), tags=["Optimizations"])
     app.include_router(create_agent_history_router(job_store=job_store), tags=["Optimizations"])
     app.include_router(create_api_tokens_router(job_store=job_store), tags=["Settings"])
     app.include_router(create_byok_router(job_store=job_store), tags=["Settings"])
