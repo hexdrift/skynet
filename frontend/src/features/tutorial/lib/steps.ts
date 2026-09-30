@@ -27,13 +27,17 @@ import { WIZARD_STAGE } from "@/features/submit";
 /**
  * The short end-to-end path plus three focused workflow guides.
  *
- * Keeping each guide narrow makes the tutorial useful after onboarding too:
+ * The quick start covers only what a first run cannot skip, in the order the
+ * work happens: tag data, set up and submit the optimization, read the score.
+ * Testers gave up midway when it opened on result screens, so everything
+ * after the score lives in the focused guides. Keeping each guide narrow makes the tutorial useful after onboarding too:
  * users can replay only the part they need instead of stepping through the
  * entire application again.
  */
 export type TutorialTrack = "quick" | "data" | "results" | "workspace";
 
 const QUICK_ONLY: readonly TutorialTrack[] = ["quick"];
+const QUICK_AND_DATA: readonly TutorialTrack[] = ["quick", "data"];
 const QUICK_AND_RESULTS: readonly TutorialTrack[] = ["quick", "results"];
 const DATA_ONLY: readonly TutorialTrack[] = ["data"];
 const RESULTS_ONLY: readonly TutorialTrack[] = ["results"];
@@ -368,7 +372,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await ensureTagger();
       injectDemoTaggerData(0);
     },
-    tracks: DATA_ONLY,
+    tracks: QUICK_AND_DATA,
     readingTimeSec: 10,
   },
   {
@@ -392,7 +396,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       injectDemoTaggerData(1);
       await waitForElement("[data-tutorial='tagger-modes']");
     },
-    tracks: DATA_ONLY,
+    tracks: QUICK_AND_DATA,
     readingTimeSec: 12,
   },
   {
@@ -540,7 +544,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       setDetailTab("playground");
       await waitForElement("[data-tutorial='serve-playground']");
     },
-    tracks: QUICK_AND_RESULTS,
+    tracks: RESULTS_ONLY,
     readingTimeSec: 9,
   },
   {
@@ -568,7 +572,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       setDetailTab("artifact");
       await waitForElement("[data-tutorial='artifact-output']");
     },
-    tracks: QUICK_AND_RESULTS,
+    tracks: RESULTS_ONLY,
     readingTimeSec: 12,
   },
   {

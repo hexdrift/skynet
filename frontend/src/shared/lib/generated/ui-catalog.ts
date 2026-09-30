@@ -2538,6 +2538,20 @@ export type MessageKey =
   | "trajectory.scrubber.generation_value"
   | "trajectory.scrubber.label"
   | "trajectory.scrubber.live"
+  | "tutorial.concepts.tagging.intro"
+  | "tutorial.concepts.tagging.kicker"
+  | "tutorial.concepts.tagging.modes.autopilot"
+  | "tutorial.concepts.tagging.modes.copilot"
+  | "tutorial.concepts.tagging.modes.manual"
+  | "tutorial.concepts.tagging.modes.note"
+  | "tutorial.concepts.tagging.modes.title"
+  | "tutorial.concepts.tagging.next.body"
+  | "tutorial.concepts.tagging.next.title"
+  | "tutorial.concepts.tagging.quality.body"
+  | "tutorial.concepts.tagging.quality.title"
+  | "tutorial.concepts.tagging.start.body"
+  | "tutorial.concepts.tagging.start.title"
+  | "tutorial.concepts.tagging.title"
   | "tutorial.menu.meta"
   | "tutorial.step.artifact.body"
   | "tutorial.step.artifact.title"
@@ -3911,7 +3925,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.86": "למה משוב חשוב",
   "auto.features.tutorial.components.concepts.guide.literal.87": "ציונים מדרגים את המועמדים",
   "auto.features.tutorial.components.concepts.guide.literal.88": "משוב מכוון את השינוי הבא",
-  "auto.features.tutorial.components.concepts.guide.literal.9": "כיצד Skynet מייעל תוכניות DSPy עם GEPA",
+  "auto.features.tutorial.components.concepts.guide.literal.9": "מדריך Skynet: מתיוג הנתונים ועד תוכנית משופרת",
   "auto.features.tutorial.components.concepts.guide.literal.90": "ציון מספרי מראה איזה מועמד הציג ביצועים טובים יותר במערך דוגמאות.",
   "auto.features.tutorial.components.concepts.guide.literal.92": "משוב כתוב אמור לזהות את המצב הכושל, ההוראה החסרה או ההתנהגות השימושית ש-GEPA יכול לפעול לפיו.",
   "auto.features.tutorial.components.concepts.guide.template.1": "חלק {p1}",
@@ -3980,7 +3994,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.steps.literal.9": "לוח שימוש",
   "auto.features.tutorial.lib.steps.template.1": "טבלת {p1}",
   "auto.features.tutorial.lib.steps.template.16": "העלאת {p1}",
-  "auto.features.tutorial.lib.steps.template.17": "אפשר להעלות CSV, ‏JSON או Excel, להדביק JSON או לבחור דאטאסט שמור מהספרייה. כל שורה היא דוגמה שהמערכת יכולה ללמוד ממנה. קבוצה קטנה, נקייה ומייצגת של {p1} בדרך כלל מועילה יותר ל{p2} מקבוצה גדולה ורועשת.",
+  "auto.features.tutorial.lib.steps.template.17": "בוחרים מהספרייה את הדאטאסט שתייגת, או מעלים CSV, ‏JSON או Excel ומדביקים JSON. כל שורה היא דוגמה שהמערכת יכולה ללמוד ממנה. קבוצה קטנה, נקייה ומייצגת של {p1} בדרך כלל מועילה יותר ל{p2} מקבוצה גדולה ורועשת.",
   "auto.features.tutorial.lib.steps.template.18": "סמן/סמני כל עמודה כקלט שנשלח ל{p1}, כפלט שהוא התשובה הרצויה, או כעמודה שלא משתמשים בה. ליד כל עמודה מופיע גם סוג התוכן: טקסט נשלח כמלל רגיל, ותמונה נשלחת כקלט תמונה למודל שתומך בכך. המיפוי הזה יוצר אוטומטית את הפרומפט (Signature).",
   "auto.features.tutorial.lib.steps.template.2": "כאן מופיעות כל הריצות. אפשר למיין לפי כותרות העמודות, לסנן דרך המסננים, לשנות רוחב עמודות ולפתוח את הפרטים של כל {p1}.",
   "auto.features.tutorial.lib.steps.template.22": "הפרומפט (Signature) מגדיר מה ה{p1} מקבל ומה הוא צריך להחזיר. הוא נוצר אוטומטית ממיפוי העמודות, אבל חשוב לערוך אותו ולהוסיף תיאורים מדויקים לכל שדה כדי שיהיה איכותי.",
@@ -5188,6 +5202,20 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "trajectory.scrubber.generation_value": "דור {gen}",
   "trajectory.scrubber.label": "סינון לפי דור",
   "trajectory.scrubber.live": "חי",
+  "tutorial.concepts.tagging.intro": "אופטימיזציה לומדת מדוגמאות. כל שורה מתויגת מציגה קלט ואת התשובה הרצויה עבורו, והמדד משווה אליה את התשובות של התוכנית. לכן מתחילים מהתיוג: בלי דוגמאות מתויגות אין מול מה למדוד שיפור.",
+  "tutorial.concepts.tagging.kicker": "הצעד הראשון: דוגמאות שמראות מהי תשובה נכונה",
+  "tutorial.concepts.tagging.modes.autopilot": "אוטופיילוט: מתייג את השורות שנותרו ומסמן מקרים לא ודאיים לבדיקה ידנית.",
+  "tutorial.concepts.tagging.modes.copilot": "קו-פיילוט: מראיין אתכם, בונה רובריקה ועובד לצדכם עד שהוא מגיע לסף הבדיקה.",
+  "tutorial.concepts.tagging.modes.manual": "ידני: כל החלטה נשארת אצלכם. מתאים לדאטאסט קטן או למשימה רגישה.",
+  "tutorial.concepts.tagging.modes.note": "קו-פיילוט ואוטופיילוט מופיעים רק כשהארגון הגדיר מודל לסיוע בתיוג. מפגשי תיוג בסיוע AI מציגים הערכת עלות מראש ומסתיימים בסבב בדיקה.",
+  "tutorial.concepts.tagging.modes.title": "שלוש דרכים לתייג",
+  "tutorial.concepts.tagging.next.body": "בסיום מעבירים את התיוג לספריית הדאטאסטים. בטופס האופטימיזציה בוחרים אותו מהספרייה, מסמנים את עמודת הטקסט כקלט ואת עמודת התיוג כפלט, וממשיכים להגדרת המשימה שבחלק הבא.",
+  "tutorial.concepts.tagging.next.title": "מהתיוג לאופטימיזציה",
+  "tutorial.concepts.tagging.quality.body": "עדיף מעט דוגמאות נקיות ועקביות על הרבה דוגמאות רועשות. לריצה ראשונה מספיקה קבוצה קטנה שמכסה את המקרים הנפוצים וגם כמה מקרי קצה. תוויות סותרות מלמדות את האופטימיזציה התנהגות סותרת, ולכן כדאי לעבור על סבב הבדיקה לפני השמירה.",
+  "tutorial.concepts.tagging.quality.title": "מה עושה תיוג טוב",
+  "tutorial.concepts.tagging.start.body": "בדף התיוג מעלים קובץ CSV, ‏JSON או Excel, או בוחרים דאטאסט שמור מהספרייה, ומסמנים את עמודות הטקסט לתיוג. אחר כך מגדירים את המשימה: שאלת כן/לא, בחירה מתוך קטגוריות שהגדרתם, או תשובה כתובה.",
+  "tutorial.concepts.tagging.start.title": "מאיפה מתחילים",
+  "tutorial.concepts.tagging.title": "תיוג הנתונים",
   "tutorial.menu.meta": "{p1} שלבים · כ-{p2} דקות",
   "tutorial.step.artifact.body": "לשונית Artifact היא הפלט המשופר. אפשר לבדוק את הפרומפט הסופי, כלי ReAct שכווננו, קוד Flex שנכתב מחדש או צמתי workflow משופרים. מתפריט הייצוא מורידים תוכנית DSPy מוכנה להרצה, pickle כשזמין, JSON של הפרומפט, קוד Python משופר או CSV של הלוגים.",
   "tutorial.step.artifact.title": "בדיקה וייצוא של התוצאה",
@@ -5208,7 +5236,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.tagger_task.title": "הגדרת המשימה",
   "tutorial.track.data.desc": "העלאה, עריכה, תיוג, שיתוף ושימוש חוזר בדאטאסטים.",
   "tutorial.track.data.name": "הכנת נתונים",
-  "tutorial.track.quick.desc": "הכנת נתונים, הרצת אופטימיזציה, בדיקה וייצוא התוצאה.",
+  "tutorial.track.quick.desc": "תיוג נתונים, הגדרה ושליחה של אופטימיזציה, וקריאת הציון.",
   "tutorial.track.quick.name": "התחלה מהירה",
   "tutorial.track.results.desc": "קריאת ציונים, מסלולים, לוגים, קוד, תוצרים וייצוא.",
   "tutorial.track.results.name": "שימוש בתוצאה",
