@@ -67,8 +67,11 @@ test("each guided workflow stays at eight steps or fewer", () => {
   const counts = {
     quick:
       (steps.match(/tracks: QUICK_ONLY/g) ?? []).length +
+      (steps.match(/tracks: QUICK_AND_DATA/g) ?? []).length +
       (steps.match(/tracks: QUICK_AND_RESULTS/g) ?? []).length,
-    data: (steps.match(/tracks: DATA_ONLY/g) ?? []).length,
+    data:
+      (steps.match(/tracks: DATA_ONLY/g) ?? []).length +
+      (steps.match(/tracks: QUICK_AND_DATA/g) ?? []).length,
     results:
       (steps.match(/tracks: RESULTS_ONLY/g) ?? []).length +
       (steps.match(/tracks: QUICK_AND_RESULTS/g) ?? []).length,
@@ -115,4 +118,21 @@ test("tutorial-owned message keys exist in the Hebrew catalog", () => {
   for (const key of keys) {
     assert.ok(key in he, `Missing Hebrew tutorial message: ${key}`);
   }
+});
+
+test("the quick start tags data first, then optimizes, and stops at the score", () => {
+  const steps = readFileSync(STEPS_PATH, "utf8");
+  const quickIds = [...steps.matchAll(/id: "(dd-[^"]+)"[\s\S]*?tracks: (\w+)/g)]
+    .filter((match) => match[2]!.startsWith("QUICK_"))
+    .map((match) => match[1]);
+
+  assert.deepEqual(quickIds, [
+    "dd-tagger-setup",
+    "dd-tagger-modes",
+    "dd-data-upload",
+    "dd-code-setup",
+    "dd-models",
+    "dd-review",
+    "dd-scores",
+  ]);
 });

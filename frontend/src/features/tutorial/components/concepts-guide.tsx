@@ -12,6 +12,7 @@ import {
   Lightbulb,
   Compass,
   SquaresFour,
+  Tag,
 } from "@/shared/ui/icons";
 import { msg, formatMsg } from "@/shared/lib/messages";
 import { perLocale } from "@/shared/lib/per-locale";
@@ -30,61 +31,65 @@ interface ConceptsGuideProps {
 
 interface SectionMeta {
   id: string;
-  num: string;
   title: string;
   Icon: React.ComponentType<{ className?: string }>;
 }
 
+// Must-know sections come first: testers gave up partway through when the
+// guide opened on DSPy and GEPA theory before showing how to tag data and
+// run an optimization. Background and tuning follow for readers who stay.
 const SECTIONS: readonly SectionMeta[] = perLocale(() => [
   {
-    id: "background",
-    num: "1",
-    title: msg("auto.features.tutorial.components.concepts.guide.literal.1"),
-    Icon: BookOpen,
-  },
-  {
-    id: "gepa",
-    num: "2",
-    title: msg("auto.features.tutorial.components.concepts.guide.literal.2"),
-    Icon: Sparkle,
-  },
-  {
-    id: "parameters",
-    num: "3",
-    title: msg("auto.features.tutorial.components.concepts.guide.literal.3"),
-    Icon: Gear,
+    id: "tagging",
+    title: msg("tutorial.concepts.tagging.title"),
+    Icon: Tag,
   },
   {
     id: "task-definition",
-    num: "4",
     title: msg("auto.features.tutorial.components.concepts.guide.literal.4"),
     Icon: Stack,
   },
   {
     id: "workflow",
-    num: "5",
     title: msg("auto.features.tutorial.components.concepts.guide.literal.5"),
     Icon: TreeStructure,
   },
   {
-    id: "app",
-    num: "6",
-    title: msg("auto.features.tutorial.components.concepts.guide.literal.350"),
-    Icon: SquaresFour,
-  },
-  {
     id: "tips",
-    num: "7",
     title: msg("auto.features.tutorial.components.concepts.guide.literal.6"),
     Icon: Lightbulb,
   },
   {
+    id: "parameters",
+    title: msg("auto.features.tutorial.components.concepts.guide.literal.3"),
+    Icon: Gear,
+  },
+  {
+    id: "app",
+    title: msg("auto.features.tutorial.components.concepts.guide.literal.350"),
+    Icon: SquaresFour,
+  },
+  {
+    id: "background",
+    title: msg("auto.features.tutorial.components.concepts.guide.literal.1"),
+    Icon: BookOpen,
+  },
+  {
+    id: "gepa",
+    title: msg("auto.features.tutorial.components.concepts.guide.literal.2"),
+    Icon: Sparkle,
+  },
+  {
     id: "glossary",
-    num: "8",
     title: msg("auto.features.tutorial.components.concepts.guide.literal.7"),
     Icon: Compass,
   },
 ]);
+
+/** The 1-based position of a section, so numbering follows SECTIONS order. */
+function sectionNum(id: string): string {
+  return String(SECTIONS.findIndex((s) => s.id === id) + 1);
+}
 
 export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
@@ -176,13 +181,14 @@ export function ConceptsGuide({ open, onClose }: ConceptsGuideProps) {
         <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] flex-1 min-h-0">
           <GuideSidebar activeId={activeId} onJump={jumpTo} />
           <div ref={scrollRef} className="min-w-0 overflow-y-auto px-5 sm:px-8 py-6 scroll-smooth">
-            <SectionBackground />
-            <SectionGepa />
-            <SectionParameters />
+            <SectionTagging />
             <SectionTaskDefinition />
             <SectionWorkflow />
-            <SectionApp />
             <SectionTips />
+            <SectionParameters />
+            <SectionApp />
+            <SectionBackground />
+            <SectionGepa />
             <SectionGlossary />
           </div>
         </div>
@@ -254,7 +260,7 @@ function GuideSidebar({ activeId, onJump }: { activeId: string; onJump: (id: str
                     isActive ? "bg-[#3D2E22] text-[#FAF8F5]" : "bg-[#E5DDD4] text-[#7C6350]",
                   ].join(" ")}
                 >
-                  {s.num}
+                  {sectionNum(s.id)}
                 </span>
                 <span className="leading-snug">{s.title}</span>
               </button>
@@ -268,13 +274,11 @@ function GuideSidebar({ activeId, onJump }: { activeId: string; onJump: (id: str
 
 function GuideSection({
   id,
-  num,
   title,
   kicker,
   children,
 }: {
   id: string;
-  num: string;
   title: string;
   kicker?: string;
   children: React.ReactNode;
@@ -283,7 +287,9 @@ function GuideSection({
     <section id={`guide-${id}`} className="scroll-mt-4 mb-12 first:mt-0">
       <div className="flex items-baseline gap-2 mb-1">
         <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#7C6350]">
-          {formatMsg("auto.features.tutorial.components.concepts.guide.template.1", { p1: num })}
+          {formatMsg("auto.features.tutorial.components.concepts.guide.template.1", {
+            p1: sectionNum(id),
+          })}
         </span>
         {kicker && <span className="text-[11px] text-[#A69585]">· {kicker}</span>}
       </div>
@@ -384,11 +390,39 @@ function ParamTable({ rows }: { rows: Array<{ name: string; desc: React.ReactNod
   );
 }
 
+function SectionTagging() {
+  return (
+    <GuideSection
+      id="tagging"
+      title={msg("tutorial.concepts.tagging.title")}
+      kicker={msg("tutorial.concepts.tagging.kicker")}
+    >
+      <p>{msg("tutorial.concepts.tagging.intro")}</p>
+
+      <SubHeading>{msg("tutorial.concepts.tagging.start.title")}</SubHeading>
+      <p>{msg("tutorial.concepts.tagging.start.body")}</p>
+
+      <SubHeading>{msg("tutorial.concepts.tagging.modes.title")}</SubHeading>
+      <ul className="list-disc ps-5 space-y-1.5">
+        <li>{msg("tutorial.concepts.tagging.modes.manual")}</li>
+        <li>{msg("tutorial.concepts.tagging.modes.copilot")}</li>
+        <li>{msg("tutorial.concepts.tagging.modes.autopilot")}</li>
+      </ul>
+      <p className="text-[#5C4D40]">{msg("tutorial.concepts.tagging.modes.note")}</p>
+
+      <SubHeading>{msg("tutorial.concepts.tagging.quality.title")}</SubHeading>
+      <p>{msg("tutorial.concepts.tagging.quality.body")}</p>
+
+      <SubHeading>{msg("tutorial.concepts.tagging.next.title")}</SubHeading>
+      <p>{msg("tutorial.concepts.tagging.next.body")}</p>
+    </GuideSection>
+  );
+}
+
 function SectionBackground() {
   return (
     <GuideSection
       id="background"
-      num="1"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.1")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.16")}
     >
@@ -524,7 +558,6 @@ function SectionGepa() {
   return (
     <GuideSection
       id="gepa"
-      num="2"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.2")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.63")}
     >
@@ -572,7 +605,6 @@ function SectionParameters() {
   return (
     <GuideSection
       id="parameters"
-      num="3"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.3")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.100")}
     >
@@ -648,7 +680,6 @@ function SectionTaskDefinition() {
   return (
     <GuideSection
       id="task-definition"
-      num="4"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.4")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.128")}
     >
@@ -856,7 +887,6 @@ function SectionWorkflow() {
   return (
     <GuideSection
       id="workflow"
-      num="5"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.5")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.170")}
     >
@@ -1004,7 +1034,6 @@ function SectionApp() {
   return (
     <GuideSection
       id="app"
-      num="6"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.350")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.351")}
     >
@@ -1066,7 +1095,6 @@ function SectionTips() {
   return (
     <GuideSection
       id="tips"
-      num="7"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.6")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.220")}
     >
@@ -1187,7 +1215,6 @@ function SectionGlossary() {
   return (
     <GuideSection
       id="glossary"
-      num="8"
       title={msg("auto.features.tutorial.components.concepts.guide.literal.7")}
       kicker={msg("auto.features.tutorial.components.concepts.guide.literal.252")}
     >
