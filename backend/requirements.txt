@@ -94,7 +94,7 @@ fastapi==0.141.1
     #   skynet
 fastmcp==3.4.7
     # via skynet
-fastmcp-slim==3.4.7
+fastmcp-slim==4.0.10
     # via fastmcp
 fastuuid==0.14.0
     # via litellm
