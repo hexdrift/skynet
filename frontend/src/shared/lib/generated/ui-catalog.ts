@@ -2551,8 +2551,6 @@ export type MessageKey =
   | "tutorial.step.dataset_add.title"
   | "tutorial.step.result_actions.body"
   | "tutorial.step.result_actions.title"
-  | "tutorial.step.settings_providers.body"
-  | "tutorial.step.settings_providers.title"
   | "tutorial.step.sidebar_nav.body"
   | "tutorial.step.sidebar_nav.title"
   | "tutorial.step.tagger_data.body"
@@ -5203,8 +5201,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.dataset_add.title": "הוספת דאטאסט",
   "tutorial.step.result_actions.body": "אפשר לשתף ריצה בהרשאת צפייה או עריכה עם משתמשים מזוהים, או לפרסם אותה במפורש ל-Explorer של הארגון. שכפול פותח הגשה חדשה עם אותה הגדרה. בתפריט המקביל בסרגל הצד נמצאות גם פעולות שינוי שם, הצמדה ומחיקה.",
   "tutorial.step.result_actions.title": "שיתוף או שימוש חוזר בריצה",
-  "tutorial.step.settings_providers.body": "שומרים ומאמתים מפתח ספק פעם אחת; המפתח הסודי מוצפן, ורק גרסה מוסווית שלו נשלחת בחזרה לדפדפן. לאחר האימות אפשר להעביר כל בורר מודל למצב BYOK ולבחור מודלים הזמינים דרך החיבור הזה.",
-  "tutorial.step.settings_providers.title": "ניהול ספקי BYOK",
   "tutorial.step.sidebar_nav.body": "בסרגל הצד עוברים בין הדפים. לחיצה על ‎⌘K או Ctrl+K מכל מקום פותחת חיפוש שקופץ לכל דף, פעולה או הגדרה.",
   "tutorial.step.sidebar_nav.title": "התמצאות באפליקציה",
   "tutorial.step.tagger_data.body": "בוחרים את השורות לתיוג: מעלים קובץ CSV, ‏JSON או Excel, או בוחרים דאטאסט שמור מהספרייה. אחר כך מסמנים את עמודות הטקסט לתיוג.",
@@ -5216,8 +5212,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.track.quick.name": "התחלה מהירה",
   "tutorial.track.results.desc": "קריאת ציונים, מסלולים, לוגים, קוד, תוצרים וייצוא.",
   "tutorial.track.results.name": "שימוש בתוצאה",
-  "tutorial.track.workspace.desc": "ניווט, חיפוש, מעקב אחרי ריצות, עבודה עם הסוכן והגדרת החשבון.",
-  "tutorial.track.workspace.name": "סביבת עבודה והגדרות",
+  "tutorial.track.workspace.desc": "ניווט, חיפוש, מעקב אחרי ריצות ועבודה עם הסוכן.",
+  "tutorial.track.workspace.name": "סביבת עבודה",
   "usage.range.30d": "30 יום",
   "usage.range.7d": "7 ימים",
   "usage.range.90d": "90 יום",

@@ -1333,7 +1333,7 @@ export function SettingsModal() {
               <TabsContent value="account" data-tutorial="settings-account">
                 <AccountTab />
               </TabsContent>
-              <TabsContent value="providers" data-tutorial="settings-providers">
+              <TabsContent value="providers">
                 <ByokKeysSection />
               </TabsContent>
               <TabsContent value="api">

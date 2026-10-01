@@ -78,7 +78,7 @@ test("each guided workflow stays at eight steps or fewer", () => {
     workspace: (steps.match(/tracks: WORKSPACE_ONLY/g) ?? []).length,
   };
 
-  assert.deepEqual(counts, { quick: 7, data: 4, results: 8, workspace: 6 });
+  assert.deepEqual(counts, { quick: 7, data: 4, results: 8, workspace: 5 });
   for (const [track, count] of Object.entries(counts)) {
     assert.ok(count <= 8, `${track} guide has ${count} steps`);
   }
