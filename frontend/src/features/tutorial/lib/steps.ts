@@ -272,17 +272,6 @@ async function ensureDatasets() {
   await waitForElement("[data-tutorial='datasets-add']");
 }
 
-async function openSettingsTab(tab: string) {
-  await ensureDashboard();
-  await waitForHook("setSettingsTab");
-  callTutorialHook("setSettingsTab", tab);
-  await waitForElement(`[data-tutorial='settings-${tab}']`);
-}
-
-function closeSettings() {
-  callTutorialHook("setSettingsTab", null);
-}
-
 /** Whether the agent panel was already open before the tour showed it. */
 let agentPanelWasOpen = false;
 
@@ -712,17 +701,6 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     },
     tracks: WORKSPACE_ONLY,
     readingTimeSec: 10,
-  },
-  {
-    id: "dd-settings-providers",
-    title: msg("tutorial.step.settings_providers.title"),
-    description: msg("tutorial.step.settings_providers.body"),
-    target: "[data-tutorial='settings-providers']",
-    placement: "left",
-    beforeShow: () => openSettingsTab("providers"),
-    afterHide: closeSettings,
-    tracks: WORKSPACE_ONLY,
-    readingTimeSec: 12,
   },
 ]);
 

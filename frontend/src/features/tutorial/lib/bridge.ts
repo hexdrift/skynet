@@ -92,8 +92,6 @@ export interface TutorialHooks {
   setTaggerStartingNew: (value: boolean) => void;
   /** Open or close the generalist agent panel (left-anchored aside). */
   setGeneralistPanelOpen: (open: boolean) => void;
-  /** Open a settings tab, or close the settings dialog with null. */
-  setSettingsTab: (tab: string | null) => void;
   /**
    * Open or close the navigation sidebar drawer. Below 768px the sidebar is
    * off-canvas, so steps that spotlight it must slide it in first; a no-op on
