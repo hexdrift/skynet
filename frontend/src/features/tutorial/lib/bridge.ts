@@ -34,6 +34,15 @@ export interface TutorialHooks {
   setTab: (tab: string) => void;
   /** Jump the submit wizard to a specific step index. */
   setWizardStep: (step: number) => void;
+  /**
+   * Open the substep of a wizard stage that holds a field. Stages split into
+   * substeps, and only the open one is rendered, so a step that spotlights a
+   * field calls this first.
+   */
+  showWizardSubstep: (
+    stage: "goal" | "evaluation" | "optimization" | "review",
+    field?: string,
+  ) => void;
   /** Switch the optimization-detail page between its tabs. */
   setDetailTab: (tab: string) => void;
   /** Seed the wizard's optimizer selector. */

@@ -55,7 +55,6 @@ import {
 } from "../lib/wizard-steps";
 import { stageIssue, type WizardIssue } from "../lib/stage-issue";
 import { beginValidationToast } from "../lib/validation-toast";
-import { focusField } from "../lib/focus-field";
 import { cloneWorkflowSpec } from "../lib/clone-workflow";
 import { buildSignatureTemplate } from "../lib/build-signature";
 import { buildMetricTemplate } from "../lib/build-metric";
@@ -1457,6 +1456,13 @@ export function useSubmitWizard() {
       setStep((s) => s - 1);
     }
   };
+  // A field the wizard should open and focus. Stages split into substeps and
+  // only the open one is mounted, so the view routes to the field's substep
+  // before focusing it; a fresh object re-fires the same field.
+  const [focusRequest, setFocusRequest] = useState<{
+    stage: WizardStageId;
+    fieldId: string;
+  } | null>(null);
   const goTo = (idx: number) => {
     setDirection(idx > step ? 1 : -1);
     setStep(idx);
@@ -1564,7 +1570,7 @@ export function useSubmitWizard() {
     } else {
       toast.error(text, { toastId: WIZARD_ISSUE_TOAST });
     }
-    if (issue.fieldId) focusField(issue.fieldId);
+    if (issue.fieldId) setFocusRequest({ stage: issue.stage, fieldId: issue.fieldId });
   };
 
   /**
@@ -1756,7 +1762,7 @@ export function useSubmitWizard() {
       if (!(await handleValidateDataset(t.fail))) {
         if (moved()) return;
         if (from !== WIZARD_STAGE.evaluation) goTo(WIZARD_STAGE.evaluation);
-        focusField("data-splits");
+        setFocusRequest({ stage: "evaluation", fieldId: "data-splits" });
         return;
       }
       if (moved()) return;
@@ -1766,6 +1772,7 @@ export function useSubmitWizard() {
         if (moved()) return;
         if (!codeOk) {
           if (from !== WIZARD_STAGE.evaluation) goTo(WIZARD_STAGE.evaluation);
+          setFocusRequest({ stage: "evaluation", fieldId: "signature-editor" });
           return;
         }
       }
@@ -2196,6 +2203,7 @@ export function useSubmitWizard() {
     goNext,
     goPrev,
     goTo,
+    focusRequest,
     maxReachableStep,
     validateStep,
     handleNext,

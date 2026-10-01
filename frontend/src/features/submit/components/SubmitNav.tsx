@@ -10,8 +10,17 @@ import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { LAST_WIZARD_STAGE } from "../lib/wizard-steps";
 import type { SubmitWizardContext } from "../hooks/use-submit-wizard";
 
-export function SubmitNav({ w }: { w: SubmitWizardContext }) {
-  const { step, goPrev, handleNext, handleSubmit, submitting, advancing } = w;
+interface SubmitNavProps {
+  w: SubmitWizardContext;
+  /** Overrides for stages that step through substeps before moving on. */
+  onBack?: () => void;
+  onNext?: () => void | Promise<void>;
+}
+
+export function SubmitNav({ w, onBack, onNext }: SubmitNavProps) {
+  const { step, handleSubmit, submitting, advancing } = w;
+  const goPrev = onBack ?? w.goPrev;
+  const handleNext = onNext ?? w.handleNext;
 
   // Back points toward the start, Next toward the end — the physical direction
   // of each flips with the locale (left/right swap in RTL).
