@@ -298,7 +298,6 @@ export function ServeChat({
               setSingleDraft("");
             }}
             onStop={handleStopServe}
-            placeholder={singleInputField}
             streaming={serveLoading}
             sendAriaLabel={msg("auto.features.optimizations.components.servechat.literal.2")}
             layout="inline"
@@ -357,7 +356,6 @@ export function ServeChat({
                         textareaRefs.current[field] = el;
                       }}
                       dir="auto"
-                      placeholder={field}
                       defaultValue=""
                       onChange={(e) => {
                         autoResizeTextarea(e.target);
