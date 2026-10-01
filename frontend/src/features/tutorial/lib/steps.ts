@@ -221,6 +221,12 @@ function setWizardStep(step: number) {
   callTutorialHook("setWizardStep", step);
 }
 
+/** A wizard stage is a run of substeps; open the one that holds `field`. */
+function showWizardSubstep(stage: keyof typeof WIZARD_STAGE, field?: string) {
+  callTutorialHook("showWizardSubstep", stage, field);
+  setWizardStep(WIZARD_STAGE[stage]);
+}
+
 function setDetailTab(tab: string) {
   callTutorialHook("setDetailTab", tab);
 }
@@ -411,7 +417,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     beforeShow: async () => {
       await ensureSubmit();
       injectSampleDataset();
-      setWizardStep(WIZARD_STAGE.evaluation);
+      showWizardSubstep("evaluation", "dataset-upload");
       await waitForElement("[data-tutorial='dataset-upload']");
     },
     tracks: QUICK_ONLY,
@@ -432,7 +438,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     beforeShow: async () => {
       await ensureSubmit();
       injectSampleDataset();
-      setWizardStep(WIZARD_STAGE.evaluation);
+      showWizardSubstep("evaluation", "code-editors");
       callTutorialHook("setCodeAssistMode", "manual");
       callTutorialHook("chooseModule", "predict");
       callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
@@ -456,7 +462,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     beforeShow: async () => {
       await ensureSubmit();
       callTutorialHook("setDemoModels");
-      setWizardStep(WIZARD_STAGE.optimization);
+      showWizardSubstep("optimization", "model-catalog");
       await waitForElement("[data-tutorial='model-catalog']");
     },
     tracks: QUICK_ONLY,
@@ -476,7 +482,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await ensureSubmit();
       setOptimizerName("gepa");
       callTutorialHook("setDemoModels");
-      setWizardStep(WIZARD_STAGE.review);
+      showWizardSubstep("review", "wizard-stage-review");
     },
     tracks: QUICK_ONLY,
     readingTimeSec: 12,
