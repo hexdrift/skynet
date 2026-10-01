@@ -15,9 +15,11 @@ interface SubmitNavProps {
   /** Overrides for stages that step through substeps before moving on. */
   onBack?: () => void;
   onNext?: () => void | Promise<void>;
+  /** Show the submit button instead of Back and Next; defaults to the last stage. */
+  showSubmit?: boolean;
 }
 
-export function SubmitNav({ w, onBack, onNext }: SubmitNavProps) {
+export function SubmitNav({ w, onBack, onNext, showSubmit }: SubmitNavProps) {
   const { step, handleSubmit, submitting, advancing } = w;
   const goPrev = onBack ?? w.goPrev;
   const handleNext = onNext ?? w.handleNext;
@@ -28,7 +30,7 @@ export function SubmitNav({ w, onBack, onNext }: SubmitNavProps) {
   const BackChevron = rtl ? CaretRight : CaretLeft;
   const NextChevron = rtl ? CaretLeft : CaretRight;
 
-  if (step < LAST_WIZARD_STAGE) {
+  if (!(showSubmit ?? step >= LAST_WIZARD_STAGE)) {
     return (
       <div className="flex items-stretch justify-between gap-3">
         <Button

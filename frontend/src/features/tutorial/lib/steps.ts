@@ -482,7 +482,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await ensureSubmit();
       setOptimizerName("gepa");
       callTutorialHook("setDemoModels");
-      setWizardStep(WIZARD_STAGE.review);
+      showWizardSubstep("review", "wizard-stage-review");
     },
     tracks: QUICK_ONLY,
     readingTimeSec: 12,
