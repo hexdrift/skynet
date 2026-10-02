@@ -4,10 +4,17 @@ import { motion, useReducedMotion } from "framer-motion";
 import * as React from "react";
 import { ArrowLeft, ArrowRight, X, Play, Pause } from "@/shared/ui/icons";
 import { cn } from "@/shared/lib/utils";
-import type { TutorialStep } from "../lib/steps";
+import type { TutorialStage, TutorialStep } from "../lib/steps";
 import { msg } from "@/shared/lib/messages";
 import { getActiveDir } from "@/shared/lib/runtime-locale";
 import { Button } from "@/shared/ui/primitives/button";
+
+// Kept here rather than imported from steps.ts, which is lazy-loaded.
+const STAGES: ReadonlyArray<{ id: TutorialStage; label: () => string }> = [
+  { id: "data", label: () => msg("tutorial.stage.data") },
+  { id: "optimize", label: () => msg("tutorial.stage.optimize") },
+  { id: "results", label: () => msg("tutorial.stage.results") },
+];
 
 interface TutorialPopoverProps {
   step: TutorialStep;
@@ -48,6 +55,7 @@ export function TutorialPopover({
   const horizontalDirection = rtl ? -logicalDirection : logicalDirection;
   const previousProgress = Math.max(0, (stepNumber - 1) / totalSteps);
   const currentProgress = stepNumber / totalSteps;
+  const stageIndex = STAGES.findIndex((stage) => stage.id === step.stage);
 
   return (
     <motion.div
@@ -63,6 +71,38 @@ export function TutorialPopover({
       <div className="relative max-h-[50dvh] w-[min(calc(100vw-24px),360px)] overflow-y-auto overscroll-contain rounded-2xl border border-[#E5DDD4] bg-gradient-to-b from-[#FAF8F5] to-[#F5F1EC] shadow-[0_8px_32px_rgba(28,22,18,0.14)] md:max-h-[calc(100dvh-24px)]">
         <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-3 sm:px-5 sm:pt-4">
           <div className="flex-1 min-w-0">
+            {stageIndex >= 0 && (
+              <ol
+                aria-label={msg("tutorial.stage.aria")}
+                className="mb-1.5 flex flex-wrap items-center gap-1 text-[0.625rem] font-medium"
+              >
+                {STAGES.map((stage, index) => (
+                  <li
+                    key={stage.id}
+                    className="flex items-center gap-1"
+                    aria-current={index === stageIndex ? "step" : undefined}
+                  >
+                    {index > 0 && (
+                      <span aria-hidden="true" className="text-[#8C7A6B]/40">
+                        {rtl ? "←" : "→"}
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 py-0.5",
+                        index === stageIndex
+                          ? "bg-primary/10 font-semibold text-primary"
+                          : index < stageIndex
+                            ? "text-[#8C7A6B]"
+                            : "text-[#8C7A6B]/50",
+                      )}
+                    >
+                      {stage.label()}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
             <h3 className="text-sm font-bold text-[#3D2E22] leading-tight">{step.title}</h3>
             <div className="flex items-center gap-1.5 mt-0.5">
               <p className="text-[0.625rem] font-medium text-[#8C7A6B]/70 tabular-nums">

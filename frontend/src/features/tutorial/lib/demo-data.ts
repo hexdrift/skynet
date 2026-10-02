@@ -31,6 +31,19 @@ import { TUTORIAL_DEMO_RUN_MS } from "./tutorial-timing";
 export const DEMO_OPTIMIZATION_ID = "a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b";
 export const DEMO_GRID_OPTIMIZATION_ID = "c3f9d215-8a47-4e6b-a1d3-7b2f9c58e4a1";
 
+/**
+ * The emails the quick start tags and then optimizes. The tagger shows their
+ * text and the wizard loads them with labels, so both screens show the same rows.
+ */
+export const DEMO_EMAIL_ROWS: ReadonlyArray<{ email_text: string; category: string }> = [
+  { email_text: "Click here to win $1000 now!", category: "spam" },
+  { email_text: "Meeting moved to 3pm tomorrow", category: "important" },
+  { email_text: "50% off all items this weekend only", category: "promotional" },
+  { email_text: "Your quarterly report is ready for review", category: "important" },
+  { email_text: "Free gift card waiting for you", category: "spam" },
+  { email_text: "Team standup notes from Monday", category: "important" },
+];
+
 export const DEMO_SIGNATURE_CODE = `class EmailClassifier(dspy.Signature):
     """Classify an email into a category: spam, important, or promotional."""
 
@@ -780,7 +793,7 @@ export function getDemoDatasets(): DatasetSummary[] {
   return [
     {
       id: DEMO_DATASET_ID,
-      name: "customer_reviews",
+      name: "emails",
       source: "upload",
       row_count: 1200,
       column_count: 3,

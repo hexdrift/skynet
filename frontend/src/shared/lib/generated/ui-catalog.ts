@@ -1303,40 +1303,23 @@ export type MessageKey =
   | "auto.features.tutorial.lib.demo.data.template.1"
   | "auto.features.tutorial.lib.demo.data.template.2"
   | "auto.features.tutorial.lib.demo.data.template.3"
-  | "auto.features.tutorial.lib.steps.literal.1"
-  | "auto.features.tutorial.lib.steps.literal.2"
   | "auto.features.tutorial.lib.steps.literal.20"
   | "auto.features.tutorial.lib.steps.literal.24"
   | "auto.features.tutorial.lib.steps.literal.25"
   | "auto.features.tutorial.lib.steps.literal.26"
-  | "auto.features.tutorial.lib.steps.literal.29"
-  | "auto.features.tutorial.lib.steps.literal.3"
-  | "auto.features.tutorial.lib.steps.literal.30"
   | "auto.features.tutorial.lib.steps.literal.31"
-  | "auto.features.tutorial.lib.steps.literal.32"
   | "auto.features.tutorial.lib.steps.literal.38"
-  | "auto.features.tutorial.lib.steps.literal.4"
   | "auto.features.tutorial.lib.steps.literal.41"
   | "auto.features.tutorial.lib.steps.literal.44"
   | "auto.features.tutorial.lib.steps.literal.46"
   | "auto.features.tutorial.lib.steps.literal.48"
   | "auto.features.tutorial.lib.steps.literal.49"
-  | "auto.features.tutorial.lib.steps.literal.5"
   | "auto.features.tutorial.lib.steps.literal.50"
   | "auto.features.tutorial.lib.steps.literal.9"
   | "auto.features.tutorial.lib.steps.template.1"
-  | "auto.features.tutorial.lib.steps.template.16"
-  | "auto.features.tutorial.lib.steps.template.17"
-  | "auto.features.tutorial.lib.steps.template.18"
   | "auto.features.tutorial.lib.steps.template.2"
-  | "auto.features.tutorial.lib.steps.template.22"
-  | "auto.features.tutorial.lib.steps.template.23"
   | "auto.features.tutorial.lib.steps.template.24"
-  | "auto.features.tutorial.lib.steps.template.25"
-  | "auto.features.tutorial.lib.steps.template.26"
   | "auto.features.tutorial.lib.steps.template.27"
-  | "auto.features.tutorial.lib.steps.template.31"
-  | "auto.features.tutorial.lib.steps.template.32"
   | "auto.features.tutorial.lib.steps.template.35"
   | "auto.features.tutorial.lib.steps.template.36"
   | "auto.features.tutorial.lib.steps.template.37"
@@ -2541,19 +2524,33 @@ export type MessageKey =
   | "tutorial.concepts.tagging.start.title"
   | "tutorial.concepts.tagging.title"
   | "tutorial.menu.meta"
+  | "tutorial.stage.aria"
+  | "tutorial.stage.data"
+  | "tutorial.stage.optimize"
+  | "tutorial.stage.results"
   | "tutorial.step.artifact.body"
   | "tutorial.step.artifact.title"
   | "tutorial.step.code.body"
   | "tutorial.step.code.title"
+  | "tutorial.step.code_setup.body"
+  | "tutorial.step.data_upload.body"
+  | "tutorial.step.data_upload.title"
   | "tutorial.step.dataset_actions.body"
   | "tutorial.step.dataset_actions.title"
   | "tutorial.step.dataset_add.body"
   | "tutorial.step.dataset_add.title"
+  | "tutorial.step.models.body"
   | "tutorial.step.result_actions.body"
   | "tutorial.step.result_actions.title"
+  | "tutorial.step.review.body"
+  | "tutorial.step.scores.body"
+  | "tutorial.step.scores.title"
   | "tutorial.step.sidebar_nav.body"
   | "tutorial.step.sidebar_nav.title"
-  | "tutorial.step.tagger_data.body"
+  | "tutorial.step.tagger_modes.body"
+  | "tutorial.step.tagger_setup.body"
+  | "tutorial.step.tagger_setup.body_manual"
+  | "tutorial.step.tagger_setup.title"
   | "tutorial.step.tagger_task.body"
   | "tutorial.step.tagger_task.title"
   | "tutorial.track.data.desc"
@@ -3953,40 +3950,23 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.demo.data.template.1": "{p1} לסיווג אימיילים לקטגוריות: spam, important, promotional",
   "auto.features.tutorial.lib.demo.data.template.2": "סריקת {p1}: ארבעה {p2} {p3}/{p4} על אותה {p5}",
   "auto.features.tutorial.lib.demo.data.template.3": "סריקת {p1}: ארבעה {p2} {p3}/{p4} על אותה {p5}",
-  "auto.features.tutorial.lib.steps.literal.1": "השירות היה מעולה, ממליץ בחום!",
-  "auto.features.tutorial.lib.steps.literal.2": "המוצר הגיע שבור, מאוד מאכזב",
   "auto.features.tutorial.lib.steps.literal.20": "פרומפט (Signature)",
   "auto.features.tutorial.lib.steps.literal.24": "לשונית נתונים",
   "auto.features.tutorial.lib.steps.literal.25": "שימוש",
   "auto.features.tutorial.lib.steps.literal.26": "לוגים",
-  "auto.features.tutorial.lib.steps.literal.29": "טופס הגדרת תיוג",
-  "auto.features.tutorial.lib.steps.literal.3": "משלוח מהיר, אריזה טובה",
-  "auto.features.tutorial.lib.steps.literal.30": "אפשר להתחיל מקובץ CSV, ‏JSON או Excel, להשתמש בדאטאסט שמור, או לבחור «יצירת דאטאסט סינתטי» כדי לבנות שורות מתוך ראיון קצר. בוחרים עמודת טקסט אחת או יותר, מצב תיוג ידני, קו-פיילוט או אוטופיילוט, ומתארים את המשימה כשצריך. מפגשי התיוג נשמרים, ניתנים לשיתוף לצפייה או לעריכה, ואת התיוג המוגמר אפשר להעביר ישירות לספריית הדאטאסטים.",
   "auto.features.tutorial.lib.steps.literal.31": "דרכים לתייג",
-  "auto.features.tutorial.lib.steps.literal.32": "במצב ידני כל החלטה נשארת אצלך. קו-פיילוט מראיין אותך, בונה רובריקה ועובד לצדך עד שהוא מגיע לסף הבדיקה. אוטופיילוט מתייג את השורות שנותרו ומסמן מקרים לא ודאיים לבדיקה. מפגשי תיוג בסיוע AI מציגים הערכת עלות מראש, שומרים מקור ורמת ביטחון, ומסתיימים בסבב בדיקה לפני ייצוא או שמירה בספרייה.",
   "auto.features.tutorial.lib.steps.literal.38": "חיפוש",
-  "auto.features.tutorial.lib.steps.literal.4": "לא שווה את המחיר, איכות נמוכה",
   "auto.features.tutorial.lib.steps.literal.41": "אותה תוכנית משופרת זמינה גם דרך REST API. אפשר להעתיק את נקודת הקצה או להשתמש בקטעי Python, ‏JavaScript ו-cURL המוכנים כשרוצים לשלב אותה במוצר.",
   "auto.features.tutorial.lib.steps.literal.44": "צ'אט עם הסוכן",
   "auto.features.tutorial.lib.steps.literal.46": "עץ המועמדים",
   "auto.features.tutorial.lib.steps.literal.48": "GEPA יוצר מועמדים חדשים לפרומפט, ומכל מועמד יכולים להיווצר מועמדים בדור הבא. בעץ רואים את הציון של כל מועמד ואת הקשר בין הורה לילד, וגם הצעות שנדחו מופיעות כצמתים מקווקווים. הסליידר שמעל הגרף מדפדף בין הדורות, ולחיצה על צומת פותחת מגירה עם הפרומפט המלא, ציונים לכל דוגמה והמשוב שהוביל לשיפור או לדחייה.",
   "auto.features.tutorial.lib.steps.literal.49": "חיפוש חופשי בכל הריצות במערכת — שלך או של משתמשים אחרים. הקלד/הקלידי תיאור באנגלית או בעברית, ו-Skynet ימצא ריצות תואמות. כשהשדה ריק מוצעות חיפושים אחרונים שלך וחיפושים נפוצים, ואפשר למקד את השדה מכל מקום במקלדת. אפשר לסנן לפי מודלים, אופטימייזרים, סטטוס וטווח תאריכים, ולעיין ברשימת תוצאות מדורגת.",
-  "auto.features.tutorial.lib.steps.literal.5": "חוויית קנייה נעימה, אחזור שוב",
   "auto.features.tutorial.lib.steps.literal.50": "אפשר לבקש מהסוכן הכללי להסביר את המוצר, למצוא מידע או לעבוד עם טופס ההגשה הנוכחי. שיחות יכולות לרוץ במקביל ונשמרות בהיסטוריה. אפשר לבחור מודל, לבדוק פעילות כלים ולהגדיר במצב האמון אילו פעולות דורשות אישור. הזיכרון וברירות המחדל של הסוכן נמצאים בהגדרות.",
   "auto.features.tutorial.lib.steps.literal.9": "לוח שימוש",
   "auto.features.tutorial.lib.steps.template.1": "טבלת {p1}",
-  "auto.features.tutorial.lib.steps.template.16": "העלאת {p1}",
-  "auto.features.tutorial.lib.steps.template.17": "בוחרים מהספרייה את הדאטאסט שתייגת, או מעלים CSV, ‏JSON או Excel ומדביקים JSON. כל שורה היא דוגמה שהמערכת יכולה ללמוד ממנה. קבוצה קטנה, נקייה ומייצגת של {p1} בדרך כלל מועילה יותר ל{p2} מקבוצה גדולה ורועשת.",
-  "auto.features.tutorial.lib.steps.template.18": "סמן/סמני כל עמודה כקלט שנשלח ל{p1}, כפלט שהוא התשובה הרצויה, או כעמודה שלא משתמשים בה. ליד כל עמודה מופיע גם סוג התוכן: טקסט נשלח כמלל רגיל, ותמונה נשלחת כקלט תמונה למודל שתומך בכך. המיפוי הזה יוצר אוטומטית את הפרומפט (Signature).",
   "auto.features.tutorial.lib.steps.template.2": "כאן מופיעות כל הריצות. אפשר למיין לפי כותרות העמודות, לסנן דרך המסננים, לשנות רוחב עמודות ולפתוח את הפרטים של כל {p1}.",
-  "auto.features.tutorial.lib.steps.template.22": "הפרומפט (Signature) מגדיר מה ה{p1} מקבל ומה הוא צריך להחזיר. הוא נוצר אוטומטית ממיפוי העמודות, אבל חשוב לערוך אותו ולהוסיף תיאורים מדויקים לכל שדה כדי שיהיה איכותי.",
-  "auto.features.tutorial.lib.steps.template.23": "פונקציה שמחזירה {p1} בין 0 ל-1 לכל תשובה. היא מגדירה מה נחשב ״תשובה טובה״, וה{p2} מנסה לשפר את ה{p3} הזה לאורך הריצה.",
   "auto.features.tutorial.lib.steps.template.24": "בחירת מודלים",
-  "auto.features.tutorial.lib.steps.template.25": "{p1} מייצר תשובות ו{p2} מנתח שגיאות ומציע שיפורים. כל תפקיד מוגדר בנפרד, כולל מודל, מאמץ חשיבה, temperature ומספר טוקני פלט מרבי.",
-  "auto.features.tutorial.lib.steps.template.26": "הסיכום מרכז את המשימה, ה{p1} ומיפוי העמודות, חלוקת הנתונים, ה{p2} לפי תפקיד, הגדרות ה{p3} והקוד. כדאי לבדוק את הכרטיסים לפני השליחה; עריכה מחזירה ישירות לכל חלק.",
   "auto.features.tutorial.lib.steps.template.27": "שליחת אופטימיזציה",
-  "auto.features.tutorial.lib.steps.template.31": "כרטיסי {p1}",
-  "auto.features.tutorial.lib.steps.template.32": "שלושה כרטיסים: {p1} (לפני {p2}), {p3} (אחרי), ואחוז השיפור ביניהם.",
   "auto.features.tutorial.lib.steps.template.35": "כל דוגמה מה{p1} מוצגת עם {p2} בצבע (ירוק = גבוה, אדום = נמוך), תחזית ה{p3}, והחלוקה ל{p4}, {p5} ו{p6}. אפשר למיין לפי {p7} כדי לזהות דפוסים.",
   "auto.features.tutorial.lib.steps.template.36": "אחרי שהריצה מסתיימת, בודקים את התוכנית המשופרת בממשק צ׳אט אינטראקטיבי. בוחרים מודל, מקלידים או מכתיבים קלט ומקבלים תשובה בזמן אמת. בריצות ReAct גם החשיבה וקריאות הכלים מוצגות כפעילות מובנית ולא כטקסט שטוח.",
   "auto.features.tutorial.lib.steps.template.37": "לוגים בזמן אמת מה{p1}. הם מתעדכנים אוטומטית בזמן שהריצה פעילה. אפשר לסנן לפי רמה (info, warning, error ועוד), לפי מקור הלוג או לפי זוג בסריקה, לחפש בטקסט חופשי ולמיין לפי זמן.",
@@ -5191,24 +5171,38 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.concepts.tagging.start.title": "מאיפה מתחילים",
   "tutorial.concepts.tagging.title": "תיוג הנתונים",
   "tutorial.menu.meta": "{p1} שלבים · כ-{p2} דקות",
+  "tutorial.stage.aria": "השלב בתהליך",
+  "tutorial.stage.data": "נתונים",
+  "tutorial.stage.optimize": "אופטימיזציה",
+  "tutorial.stage.results": "תוצאה",
   "tutorial.step.artifact.body": "לשונית Artifact היא הפלט המשופר. אפשר לבדוק את הפרומפט הסופי, כלי ReAct שכווננו, קוד Flex שנכתב מחדש או צמתי workflow משופרים. מתפריט הייצוא מורידים תוכנית DSPy מוכנה להרצה, pickle כשזמין, JSON של הפרומפט, קוד Python משופר או CSV של הלוגים.",
   "tutorial.step.artifact.title": "בדיקה וייצוא של התוצאה",
   "tutorial.step.code.body": "לשונית Code שומרת את מה שנכנס לריצה. בריצת מודול יחיד מופיעים ה-Signature והמדד; בריצת workflow מופיעים תוכנית ה-DSPy המהודרת, המדד והגרף לקריאה בלבד. הפלט המשופר נמצא בנפרד ב-Artifact.",
   "tutorial.step.code.title": "קוד מקור ו-workflow",
+  "tutorial.step.code_setup.body": "כאן מגדירים מה המודל צריך לעשות ואיך יודעים שהצליח. הפרומפט (Signature) נוצר מהמיפוי ומתאר את הקלט והפלט; כדאי לחדד בו את התיאור של כל שדה. המדד משווה כל תשובה של המודל לתווית שתייגת ומחזיר ציון בין 0 ל-1, וזה הציון שהאופטימיזציה תנסה להעלות.",
+  "tutorial.step.data_upload.body": "עכשיו האימיילים שתייגת הופכים לחומר לימוד. בטופס האופטימיזציה בוחרים מהספרייה את הדאטאסט ששמרת, או מעלים קובץ. כל שורה היא דוגמה: האימייל הוא הקלט, והתווית שנתת היא התשובה הנכונה. מסמנים כל עמודה כקלט, כפלט או כלא בשימוש, ומהמיפוי נוצר הפרומפט (Signature).",
+  "tutorial.step.data_upload.title": "מהתיוג לאופטימיזציה",
   "tutorial.step.dataset_actions.body": "מסמנים את התיבה של דאטאסט כדי לפעול עליו. סמל התגית שולח אותו לתיוג, סמל הטבלה עורך את השורות שלו, סמל האנשים קובע מי יכול לראות אותו, והעיפרון משנה את שמו. אפשר לסמן כמה דאטאסטים יחד ולמחוק אותם בבת אחת.",
   "tutorial.step.dataset_actions.title": "עבודה עם דאטאסט",
-  "tutorial.step.dataset_add.body": "מוסיפים נתונים פעם אחת ומשתמשים בהם בכל ריצה: לוחצים על «העלאת דאטאסט» כדי להעלות קובץ CSV, ‏JSON או Excel, או גוררים את הקובץ לרשימה. שדה החיפוש מסנן את הספרייה לפי שם.",
+  "tutorial.step.dataset_add.body": "כל אופטימיזציה מתחילה מדאטאסט, ולכן מוסיפים אותו פעם אחת ומשתמשים בו בכל ריצה: לוחצים על «העלאת דאטאסט» כדי להעלות קובץ CSV, ‏JSON או Excel, או גוררים את הקובץ לרשימה. דאטאסט שיש בו כבר תשובה נכונה לכל שורה מוכן לאופטימיזציה; אם אין, מתייגים אותו קודם.",
   "tutorial.step.dataset_add.title": "הוספת דאטאסט",
+  "tutorial.step.models.body": "{p1} עונה על הדוגמאות, ו{p2} קורא את הטעויות שהמדד מצא ומציע פרומפט טוב יותר. כך כל סבב לומד מהסבב הקודם. לכל תפקיד בוחרים מודל והגדרות משלו.",
   "tutorial.step.result_actions.body": "אפשר לשתף ריצה בהרשאת צפייה או עריכה עם משתמשים מזוהים, או לפרסם אותה במפורש ל-Explorer של הארגון. שכפול פותח הגשה חדשה עם אותה הגדרה. בתפריט המקביל בסרגל הצד נמצאות גם פעולות שינוי שם, הצמדה ומחיקה.",
   "tutorial.step.result_actions.title": "שיתוף או שימוש חוזר בריצה",
+  "tutorial.step.review.body": "הסיכום מציג את כל השרשרת במקום אחד: הדאטאסט המתויג, הפרומפט, המדד והמודלים, ולחיצה על כרטיס מחזירה לעריכה. אחרי השליחה האופטימיזציה מריצה את הפרומפט על הדוגמאות, מודדת אותו ומשכתבת אותו שוב ושוב.",
+  "tutorial.step.scores.body": "משווים לפני ואחרי על אותן דוגמאות מתויגות: ציון הבסיס הוא הפרומפט המקורי, הציון המשופר הוא הפרומפט שהאופטימיזציה מצאה, וביניהם אחוז השיפור. מכאן אפשר לנסות את הפרומפט החדש, לבדוק איך הוא נבנה ולייצא אותו.",
+  "tutorial.step.scores.title": "האם זה עבד?",
   "tutorial.step.sidebar_nav.body": "בסרגל הצד עוברים בין הדפים. לחיצה על ‎⌘K או Ctrl+K מכל מקום פותחת חיפוש שקופץ לכל דף, פעולה או הגדרה.",
   "tutorial.step.sidebar_nav.title": "התמצאות באפליקציה",
-  "tutorial.step.tagger_data.body": "בוחרים את השורות לתיוג: מעלים קובץ CSV, ‏JSON או Excel, או בוחרים דאטאסט שמור מהספרייה. אחר כך מסמנים את עמודות הטקסט לתיוג.",
-  "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך, או תשובה כתובה.",
+  "tutorial.step.tagger_modes.body": "במצב ידני כל החלטה נשארת אצלך. קו-פיילוט מראיין אותך, בונה רובריקה ומתייג לצדך; אוטופיילוט מתייג את השורות שנותרו ומסמן מקרים לא ודאיים לבדיקה. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
+  "tutorial.step.tagger_setup.body": "אופטימיזציה לומדת מדוגמאות שיש להן תשובה נכונה. כשיש רק טקסטים בלי תשובות, מתייגים אותם כאן. בדוגמה ניקח אימיילים ונתייג כל אחד לפי סוג. מעלים קובץ CSV, ‏JSON או Excel, בוחרים דאטאסט שמור או יוצרים דאטאסט סינתטי מתוך ראיון קצר, ומסמנים את עמודת הטקסט לתיוג.",
+  "tutorial.step.tagger_setup.body_manual": "אופטימיזציה לומדת מדוגמאות שיש להן תשובה נכונה. כשיש רק טקסטים בלי תשובות, מתייגים אותם כאן. בדוגמה ניקח אימיילים ונתייג כל אחד לפי סוג. מעלים קובץ CSV, ‏JSON או Excel או בוחרים דאטאסט שמור, ומסמנים את עמודת הטקסט לתיוג.",
+  "tutorial.step.tagger_setup.title": "מתחילים מהנתונים",
+  "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך (בדוגמה: spam, ‏important או promotional) או תשובה כתובה. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
   "tutorial.step.tagger_task.title": "הגדרת המשימה",
   "tutorial.track.data.desc": "העלאה, עריכה, תיוג, שיתוף ושימוש חוזר בדאטאסטים.",
   "tutorial.track.data.name": "הכנת נתונים",
-  "tutorial.track.quick.desc": "תיוג נתונים, הגדרה ושליחה של אופטימיזציה, וקריאת הציון.",
+  "tutorial.track.quick.desc": "מסלול אחד מקצה לקצה: מתייגים אימיילים, מריצים עליהם אופטימיזציה ובודקים כמה היא שיפרה.",
   "tutorial.track.quick.name": "התחלה מהירה",
   "tutorial.track.results.desc": "קריאת ציונים, מסלולים, לוגים, קוד, תוצרים וייצוא.",
   "tutorial.track.results.name": "שימוש בתוצאה",
