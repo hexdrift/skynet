@@ -490,13 +490,18 @@ export function TutorialOverlay() {
     const track = state.activeTrack ? (getLoadedTrack(state.activeTrack) ?? null) : null;
     const isLast = !track || state.currentStepIndex >= track.steps.length - 1;
 
+    // The spotlight mask covers the whole page, cutout included, so the click
+    // lands on the mask rather than the control: match on position instead.
     const onClick = (e: MouseEvent) => {
-      if (!(e.target instanceof Element) || !e.target.closest(selector)) return;
+      const r = document.querySelector(selector)?.getBoundingClientRect();
+      if (!r) return;
+      const inside =
+        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!inside) return;
       if (isLast) finishTrack();
       else nextStep();
     };
 
-    // Capture phase, so a handler that stops propagation can't swallow it.
     window.addEventListener("click", onClick, true);
     return () => window.removeEventListener("click", onClick, true);
   }, [
