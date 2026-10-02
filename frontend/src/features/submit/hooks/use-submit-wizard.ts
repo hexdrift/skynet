@@ -446,6 +446,12 @@ export function useSubmitWizard() {
           setSecondModelConfig({ ...emptyModelConfig(), name });
         });
       }),
+      registerTutorialHook("setDemoSplitPlan", (plan) => {
+        setSplitPlan(plan);
+        setSplit(plan.fractions);
+        setShuffle(plan.shuffle);
+        setSeed(plan.seed);
+      }),
       registerTutorialHook("setSignatureCode", (code) => {
         setSignatureCode(code);
         setSignatureManuallyEdited(true);

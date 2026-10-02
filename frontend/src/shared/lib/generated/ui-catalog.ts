@@ -2551,6 +2551,8 @@ export type MessageKey =
   | "tutorial.step.score_chart.title"
   | "tutorial.step.scores.body"
   | "tutorial.step.scores.title"
+  | "tutorial.step.search_depth.body"
+  | "tutorial.step.search_depth.title"
   | "tutorial.step.sidebar_nav.body"
   | "tutorial.step.sidebar_nav.title"
   | "tutorial.step.tagger_modes.body"
@@ -2559,6 +2561,10 @@ export type MessageKey =
   | "tutorial.step.tagger_setup.title"
   | "tutorial.step.tagger_task.body"
   | "tutorial.step.tagger_task.title"
+  | "tutorial.step.tagging_live.body"
+  | "tutorial.step.tagging_live.title"
+  | "tutorial.track.advanced.desc"
+  | "tutorial.track.advanced.name"
   | "tutorial.track.data.desc"
   | "tutorial.track.data.name"
   | "tutorial.track.quick.desc"
@@ -5186,7 +5192,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.code.body": "לשונית Code שומרת את מה שנכנס לריצה. בריצת מודול יחיד מופיעים ה-Signature והמדד; בריצת workflow מופיעים תוכנית ה-DSPy המהודרת, המדד והגרף לקריאה בלבד. הפלט המשופר נמצא בנפרד ב-Artifact.",
   "tutorial.step.code.title": "קוד מקור ו-workflow",
   "tutorial.step.code_setup.body": "הסוכן כותב את הקוד בשבילכם: הוא קורא את האימיילים המתויגים, שואל כמה שאלות קצרות על המשימה, ואז כותב את הפרומפט (Signature) ואת המדד. הפרומפט מתאר את הקלט והפלט של המשימה; המדד משווה כל תשובה של המודל לתווית שתייגתם ומחזיר ציון בין 0 ל-1, וזה הציון שהאופטימיזציה תנסה להעלות. אפשר לבקש מהסוכן שינויים בצ'אט, לערוך כל שורה ישירות או לעבור למצב ידני.",
-  "tutorial.step.data_splits.body": "לפני הריצה הדאטאסט מתחלק לשלוש קבוצות: אימון, שממנה האופטימיזציה לומדת; ולידציה, שבעזרתה היא בוחרת בין פרומפטים; ובדיקה, שנשמרת בצד ומשמשת רק לציון הסופי. כך הציון משקף דוגמאות שהמודל לא ראה. המערכת ממליצה על חלוקה לפי גודל הדאטאסט, ואפשר לשנות אותה ידנית.",
+  "tutorial.step.data_splits.body": "לפני הריצה הדאטאסט מתחלק לשלוש קבוצות: אימון, שממנה האופטימיזציה לומדת; ולידציה, שבעזרתה היא בוחרת בין פרומפטים; ובדיקה, שנשמרת בצד ומשמשת רק לציון הסופי. כך הציון משקף דוגמאות שהמודל לא ראה. בדאטאסט של 200 אימיילים המערכת ממליצה על 60/20/20, ולחיצה על הסימן שליד הכותרת מסבירה למה. אפשר גם לשנות את החלוקה ידנית.",
   "tutorial.step.data_splits.title": "חלוקת הדאטאסט",
   "tutorial.step.data_upload.body": "עכשיו האימיילים שתייגת הופכים לחומר לימוד. בטופס האופטימיזציה בוחרים מהספרייה את הדאטאסט ששמרת, או מעלים קובץ. כל שורה היא דוגמה: האימייל הוא הקלט, והתווית שנתת היא התשובה הנכונה. מסמנים כל עמודה כקלט, כפלט או כלא בשימוש, ומהמיפוי נוצר הפרומפט (Signature).",
   "tutorial.step.data_upload.title": "מהתיוג לאופטימיזציה",
@@ -5204,6 +5210,8 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.score_chart.title": "איך הציון השתפר",
   "tutorial.step.scores.body": "משווים לפני ואחרי על אותן דוגמאות מתויגות: ציון הבסיס הוא הפרומפט המקורי, הציון המשופר הוא הפרומפט שהאופטימיזציה מצאה, וביניהם אחוז השיפור. מכאן אפשר לנסות את הפרומפט החדש, לבדוק איך הוא נבנה ולייצא אותו.",
   "tutorial.step.scores.title": "האם זה עבד?",
+  "tutorial.step.search_depth.body": "רמת החיפוש קובעת כמה פרומפטים GEPA ינסה לפני שיעצור. קל מתאים לבדיקה ראשונה, בינוני הוא ברירת מחדל טובה, ומעמיק מנסה יותר מועמדים ועולה יותר קריאות למודל. במצב מותאם אישית קובעים בעצמכם מספר סבבים או קריאות, ואפשר גם לעצור מוקדם כשהציון באימות מגיע ליעד.",
+  "tutorial.step.search_depth.title": "כמה לעומק לחפש",
   "tutorial.step.sidebar_nav.body": "בסרגל הצד עוברים בין הדפים. לחיצה על ‎⌘K או Ctrl+K מכל מקום פותחת חיפוש שקופץ לכל דף, פעולה או הגדרה.",
   "tutorial.step.sidebar_nav.title": "התמצאות באפליקציה",
   "tutorial.step.tagger_modes.body": "כברירת מחדל ה-AI עובד על אוטופיילוט: אחרי ראיון קצר הוא מתייג את כל השורות לבד ומסמן לבדיקה את המקרים שבהם התלבט. בקו-פיילוט הוא מתייג סבב ראשון ואתם מאשרים כל תווית, ובמצב ידני כל החלטה נשארת אצלכם. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
@@ -5212,7 +5220,11 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.tagger_setup.title": "מתחילים מהנתונים",
   "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך (בדוגמה: spam, ‏important או promotional) או תשובה כתובה. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
   "tutorial.step.tagger_task.title": "הגדרת המשימה",
-  "tutorial.track.data.desc": "הוספה וניהול של דאטאסטים, תיוג בעזרת AI וחלוקה לאימון, ולידציה ובדיקה.",
+  "tutorial.step.tagging_live.body": "כל אימייל מוצג בנפרד, ולוחצים על הקטגוריה שמתאימה לו: spam, ‏important או promotional. מקשי 1 עד 3 בוחרים קטגוריה, והחצים עוברים בין אימיילים. פס ההתקדמות מראה כמה כבר תויגו, ו-U קופץ לאימייל הבא שעוד מחכה לתווית. בדוגמה שלושה אימיילים כבר תויגו, ואנחנו ברביעי.",
+  "tutorial.step.tagging_live.title": "ככה נראה תיוג",
+  "tutorial.track.advanced.desc": "ההתחלה המהירה בגרסה המלאה: תיוג בפועל, חלוקת הדאטאסט, עומק החיפוש, ובסוף גרף הציון ועץ המועמדים.",
+  "tutorial.track.advanced.name": "מדריך מתקדם",
+  "tutorial.track.data.desc": "הוספה וניהול של דאטאסטים, ואיך מתייגים אותם בעזרת AI או ידנית.",
   "tutorial.track.data.name": "הכנת נתונים",
   "tutorial.track.quick.desc": "מסלול אחד מקצה לקצה: מתייגים אימיילים, שולחים עליהם אופטימיזציה, עוקבים אחריה בזמן אמת ובודקים כמה היא שיפרה.",
   "tutorial.track.quick.name": "התחלה מהירה",

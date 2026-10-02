@@ -20,7 +20,7 @@
  * full type checking at both ends.
  */
 import type { ParsedDataset } from "@/shared/lib/parse-dataset";
-import type { PaginatedJobsResponse } from "@/shared/types/api";
+import type { PaginatedJobsResponse, SplitPlan } from "@/shared/types/api";
 import type { DashboardAnalytics, DatasetSummary, PublicDashboardPoint } from "@/shared/lib/api";
 import type { TutorialTrack } from "./steps";
 
@@ -92,6 +92,19 @@ export interface TutorialHooks {
   }) => void;
   /** Force the tagger view to show the setup wizard (new session). */
   setTaggerStartingNew: (value: boolean) => void;
+  /**
+   * Open the annotator on demo rows, some already labeled, without saving a
+   * session. Category labels are keyed by row id.
+   */
+  showTaggerDemoSession: (demo: {
+    rows: Array<{ id: number; [column: string]: unknown }>;
+    textCol: string;
+    categories: Array<{ id: string; label: string }>;
+    labels: Record<string, string[]>;
+    index: number;
+  }) => void;
+  /** Drop the demo annotator and return the tagger to its setup wizard. */
+  clearTaggerDemoSession: () => void;
   /** Open or close the generalist agent panel (left-anchored aside). */
   setGeneralistPanelOpen: (open: boolean) => void;
   /**
@@ -117,6 +130,8 @@ export interface TutorialHooks {
   finishDemoSimulation: () => void;
   /** Pick the demo generation and reflection models in the submit wizard. */
   setDemoModels: () => void;
+  /** Show a recommended split for a full-size dataset instead of the tiny demo one. */
+  setDemoSplitPlan: (plan: SplitPlan) => void;
   /** Overlay demo cards on the dataset library, or clear them with null. */
   setDemoDatasets: (datasets: DatasetSummary[] | null) => void;
   /** Replace the dataset library's selection. */

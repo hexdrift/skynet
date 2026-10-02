@@ -35,11 +35,16 @@ import { WIZARD_STAGE } from "@/features/submit";
  * users can replay only the part they need instead of stepping through the
  * entire application again.
  */
-export type TutorialTrack = "quick" | "data" | "results" | "workspace";
+export type TutorialTrack = "quick" | "data" | "results" | "workspace" | "advanced";
 
-const QUICK_ONLY: readonly TutorialTrack[] = ["quick"];
-const QUICK_AND_DATA: readonly TutorialTrack[] = ["quick", "data"];
+// The advanced guide is the quick start at full length, so every quick step
+// also runs there; it adds the splits, search depth and a deeper results tour.
+const QUICK_AND_ADVANCED: readonly TutorialTrack[] = ["quick", "advanced"];
+const QUICK_DATA_AND_ADVANCED: readonly TutorialTrack[] = ["quick", "data", "advanced"];
+const DATA_AND_ADVANCED: readonly TutorialTrack[] = ["data", "advanced"];
 const DATA_ONLY: readonly TutorialTrack[] = ["data"];
+const ADVANCED_ONLY: readonly TutorialTrack[] = ["advanced"];
+const RESULTS_AND_ADVANCED: readonly TutorialTrack[] = ["results", "advanced"];
 const RESULTS_ONLY: readonly TutorialTrack[] = ["results"];
 const WORKSPACE_ONLY: readonly TutorialTrack[] = ["workspace"];
 
@@ -178,9 +183,10 @@ function showSubmitSplash(): Promise<void> {
 // route changes land on an already-loaded page instead of waiting on one.
 const TRACK_ROUTES: Record<TutorialTrack, readonly string[]> = {
   quick: ["/tagger", "/submit", `/optimizations/${DEMO_OPTIMIZATION_ID}`],
-  data: ["/datasets", "/tagger", "/submit"],
+  data: ["/datasets", "/tagger"],
   results: [`/optimizations/${DEMO_OPTIMIZATION_ID}`],
   workspace: ["/", "/explore"],
+  advanced: ["/tagger", "/submit", `/optimizations/${DEMO_OPTIMIZATION_ID}`],
 };
 
 export function warmTrackRoutes(track: TutorialTrack): void {
@@ -315,6 +321,39 @@ function injectDemoTaggerData(targetStep: number) {
   callTutorialHook("setTaggerStep", targetStep);
 }
 
+// Half the demo emails already carry a label, so the annotator shows real
+// progress and the next email still waiting for one.
+const DEMO_TAGGED_ROWS = 3;
+
+/** Open the tagger's labeling screen on the demo emails, part-way through. */
+async function showDemoTaggingSession() {
+  await ensureTagger();
+  const categories = [...new Set(DEMO_EMAIL_ROWS.map((row) => row.category))];
+  callTutorialHook("showTaggerDemoSession", {
+    rows: DEMO_EMAIL_ROWS.map((row, index) => ({ id: index + 1, email_text: row.email_text })),
+    textCol: "email_text",
+    categories: categories.map((category) => ({ id: category, label: category })),
+    labels: Object.fromEntries(
+      DEMO_EMAIL_ROWS.slice(0, DEMO_TAGGED_ROWS).map((row, index) => [
+        String(index + 1),
+        [row.category],
+      ]),
+    ),
+    index: DEMO_TAGGED_ROWS,
+  });
+  await waitForElement("[data-tutorial='tagger-annotation']");
+}
+
+// Mirrors the backend planner's medium tier for the 200-email run the demo
+// result shows; the six demo rows alone would only earn the "too small" plan.
+const DEMO_SPLIT_PLAN = {
+  fractions: { train: 0.6, val: 0.2, test: 0.2 },
+  shuffle: true,
+  seed: 42,
+  counts: { train: 120, val: 40, test: 40 },
+  rationale: [],
+};
+
 // One shared object per tour, so re-injecting on every wizard step is a no-op
 // state update rather than a "new upload" that re-stages and re-profiles it.
 const DEMO_PARSED_DATASET = {
@@ -381,7 +420,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await ensureTagger();
       injectDemoTaggerData(0);
     },
-    tracks: QUICK_AND_DATA,
+    tracks: QUICK_DATA_AND_ADVANCED,
     readingTimeSec: 13,
   },
   {
@@ -406,24 +445,23 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       injectDemoTaggerData(1);
       await waitForElement("[data-tutorial='tagger-modes']");
     },
-    tracks: QUICK_AND_DATA,
+    tracks: QUICK_DATA_AND_ADVANCED,
     readingTimeSec: 13,
   },
   {
-    id: "dd-data-splits",
+    id: "dd-tagging-live",
     stage: "data",
-    title: msg("tutorial.step.data_splits.title"),
-    description: msg("tutorial.step.data_splits.body"),
-    target: "[data-tutorial='data-splits']",
+    title: msg("tutorial.step.tagging_live.title"),
+    description: msg("tutorial.step.tagging_live.body"),
+    target: "[data-tutorial='tagger-annotation']",
     placement: "auto",
-    beforeShow: async () => {
-      await ensureSubmit();
-      injectSampleDataset();
-      showWizardSubstep("evaluation", "data-splits");
-      await waitForElement("[data-tutorial='data-splits']");
+    beforeShow: showDemoTaggingSession,
+    // Setup is unmounted while labeling, and the setup steps wait for it.
+    afterHide: () => {
+      callTutorialHook("clearTaggerDemoSession");
     },
-    tracks: DATA_ONLY,
-    readingTimeSec: 13,
+    tracks: DATA_AND_ADVANCED,
+    readingTimeSec: 15,
   },
   {
     id: "dd-data-upload",
@@ -438,8 +476,25 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       showWizardSubstep("evaluation", "dataset-upload");
       await waitForElement("[data-tutorial='dataset-upload']");
     },
-    tracks: QUICK_ONLY,
+    tracks: QUICK_AND_ADVANCED,
     readingTimeSec: 16,
+  },
+  {
+    id: "dd-data-splits",
+    stage: "optimize",
+    title: msg("tutorial.step.data_splits.title"),
+    description: msg("tutorial.step.data_splits.body"),
+    target: "[data-tutorial='data-splits']",
+    placement: "auto",
+    beforeShow: async () => {
+      await ensureSubmit();
+      injectSampleDataset();
+      showWizardSubstep("evaluation", "data-splits");
+      await waitForElement("[data-tutorial='data-splits']");
+      callTutorialHook("setDemoSplitPlan", DEMO_SPLIT_PLAN);
+    },
+    tracks: ADVANCED_ONLY,
+    readingTimeSec: 15,
   },
   {
     id: "dd-code-setup",
@@ -458,8 +513,24 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
       await waitForElement("[data-tutorial='code-editors']");
     },
-    tracks: QUICK_ONLY,
+    tracks: QUICK_AND_ADVANCED,
     readingTimeSec: 18,
+  },
+  {
+    id: "dd-search-depth",
+    stage: "optimize",
+    title: msg("tutorial.step.search_depth.title"),
+    description: msg("tutorial.step.search_depth.body"),
+    target: "[data-tutorial='auto-level']",
+    placement: "auto",
+    beforeShow: async () => {
+      await ensureSubmit();
+      setOptimizerName("gepa");
+      showWizardSubstep("optimization", "auto-level");
+      await waitForElement("[data-tutorial='auto-level']");
+    },
+    tracks: ADVANCED_ONLY,
+    readingTimeSec: 14,
   },
   {
     id: "dd-models",
@@ -477,7 +548,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       showWizardSubstep("optimization", "model-catalog");
       await waitForElement("[data-tutorial='model-catalog']");
     },
-    tracks: QUICK_ONLY,
+    tracks: QUICK_AND_ADVANCED,
     readingTimeSec: 10,
   },
   {
@@ -493,7 +564,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       callTutorialHook("setDemoModels");
       showWizardSubstep("review", "wizard-stage-review");
     },
-    tracks: QUICK_ONLY,
+    tracks: QUICK_AND_ADVANCED,
     readingTimeSec: 13,
   },
   {
@@ -517,7 +588,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       setDetailTab("overview");
       await waitForElement("[data-tutorial='pipeline-stages']");
     },
-    tracks: QUICK_ONLY,
+    tracks: QUICK_AND_ADVANCED,
     readingTimeSec: 10,
   },
   {
@@ -534,7 +605,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       setDetailTab("overview");
       await waitForElement("[data-tutorial='score-cards']");
     },
-    tracks: QUICK_ONLY,
+    tracks: QUICK_AND_ADVANCED,
     readingTimeSec: 11,
   },
   {
@@ -552,7 +623,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       setDetailTab("overview");
       await waitForElement("[data-tutorial='score-chart']");
     },
-    tracks: RESULTS_ONLY,
+    tracks: RESULTS_AND_ADVANCED,
     readingTimeSec: 13,
   },
   {
@@ -574,7 +645,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     afterHide: () => {
       callTutorialHook("finishDemoSimulation");
     },
-    tracks: RESULTS_ONLY,
+    tracks: RESULTS_AND_ADVANCED,
     readingTimeSec: 12,
   },
   {
@@ -805,6 +876,10 @@ export function getTrack(trackId: TutorialTrack): TutorialTrackDefinition | unde
     workspace: {
       name: msg("tutorial.track.workspace.name"),
       description: msg("tutorial.track.workspace.desc"),
+    },
+    advanced: {
+      name: msg("tutorial.track.advanced.name"),
+      description: msg("tutorial.track.advanced.desc"),
     },
   };
   return {

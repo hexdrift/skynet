@@ -16,6 +16,28 @@ const SUBMIT_WIZARD_PATH = join(HERE, "../../submit/hooks/use-submit-wizard.ts")
 const SRC_PATH = fileURLToPath(new URL("../../../", import.meta.url));
 const HE_PATH = fileURLToPath(new URL("../../../../../i18n/locales/ui/he.json", import.meta.url));
 
+/** Each step's id and guides, resolved through the track constants in steps.ts. */
+function readStepTracks(): Array<{ id: string; tracks: string[] }> {
+  const steps = readFileSync(STEPS_PATH, "utf8");
+  const constants = new Map(
+    [...steps.matchAll(/const (\w+): readonly TutorialTrack\[\] = \[([^\]]*)\]/g)].map((match) => [
+      match[1]!,
+      [...match[2]!.matchAll(/"(\w+)"/g)].map((track) => track[1]!),
+    ]),
+  );
+  return [...steps.matchAll(/id: "(dd-[^"]+)"[\s\S]*?tracks: (\w+)/g)].map((match) => {
+    const tracks = constants.get(match[2]!);
+    assert.ok(tracks, `Unknown track constant: ${match[2]}`);
+    return { id: match[1]!, tracks };
+  });
+}
+
+function idsIn(track: string): string[] {
+  return readStepTracks()
+    .filter((step) => step.tracks.includes(track))
+    .map((step) => step.id);
+}
+
 function readSourceTree(directory: string): string {
   return readdirSync(directory, { withFileTypes: true })
     .flatMap((entry) => {
@@ -46,7 +68,7 @@ test("every tutorial spotlight target is still declared by the application", () 
 test("tutorial workflow tracks stay synchronized with the chooser", () => {
   const steps = readFileSync(STEPS_PATH, "utf8");
   const menu = readFileSync(MENU_PATH, "utf8");
-  const tracks = ["quick", "data", "results", "workspace"];
+  const tracks = ["quick", "data", "results", "workspace", "advanced"];
 
   for (const track of tracks) {
     assert.match(steps, new RegExp(`\\b${track}: \\{`));
@@ -58,22 +80,17 @@ test("tutorial workflow tracks stay synchronized with the chooser", () => {
   assert.doesNotMatch(menu, /deep-dive/);
 });
 
-test("each guided workflow stays at eight steps or fewer", () => {
-  const steps = readFileSync(STEPS_PATH, "utf8");
-  const counts = {
-    quick:
-      (steps.match(/tracks: QUICK_ONLY/g) ?? []).length +
-      (steps.match(/tracks: QUICK_AND_DATA/g) ?? []).length,
-    data:
-      (steps.match(/tracks: DATA_ONLY/g) ?? []).length +
-      (steps.match(/tracks: QUICK_AND_DATA/g) ?? []).length,
-    results: (steps.match(/tracks: RESULTS_ONLY/g) ?? []).length,
-    workspace: (steps.match(/tracks: WORKSPACE_ONLY/g) ?? []).length,
-  };
+test("each short guide stays at eight steps or fewer", () => {
+  const counts = Object.fromEntries(
+    ["quick", "data", "results", "workspace", "advanced"].map((track) => [
+      track,
+      idsIn(track).length,
+    ]),
+  );
 
-  assert.deepEqual(counts, { quick: 8, data: 5, results: 8, workspace: 5 });
-  for (const [track, count] of Object.entries(counts)) {
-    assert.ok(count <= 8, `${track} guide has ${count} steps`);
+  assert.deepEqual(counts, { quick: 8, data: 5, results: 8, workspace: 5, advanced: 13 });
+  for (const track of ["quick", "data", "results", "workspace"]) {
+    assert.ok(counts[track]! <= 8, `${track} guide has ${counts[track]} steps`);
   }
 });
 
@@ -114,12 +131,7 @@ test("tutorial-owned message keys exist in the Hebrew catalog", () => {
 });
 
 test("the quick start tags data, optimizes, watches the run live, and stops at the score", () => {
-  const steps = readFileSync(STEPS_PATH, "utf8");
-  const quickIds = [...steps.matchAll(/id: "(dd-[^"]+)"[\s\S]*?tracks: (\w+)/g)]
-    .filter((match) => match[2]!.startsWith("QUICK_"))
-    .map((match) => match[1]);
-
-  assert.deepEqual(quickIds, [
+  assert.deepEqual(idsIn("quick"), [
     "dd-tagger-setup",
     "dd-tagger-modes",
     "dd-data-upload",
@@ -131,11 +143,39 @@ test("the quick start tags data, optimizes, watches the run live, and stops at t
   ]);
 });
 
-test("no step is shared between guides except the tagger steps quick and data both need", () => {
-  const steps = readFileSync(STEPS_PATH, "utf8");
-  const shared = [...steps.matchAll(/id: "(dd-[^"]+)"[\s\S]*?tracks: (\w+)/g)]
-    .filter((match) => match[2]!.includes("_AND_"))
-    .map((match) => match[1]);
+test("the data guide ends on the labeling screen, not on wizard settings", () => {
+  assert.deepEqual(idsIn("data"), [
+    "dd-dataset-add",
+    "dd-dataset-actions",
+    "dd-tagger-setup",
+    "dd-tagger-modes",
+    "dd-tagging-live",
+  ]);
+});
+
+test("the advanced guide is the quick start at full length", () => {
+  const advanced = idsIn("advanced");
+  const quick = idsIn("quick");
+
+  assert.deepEqual(
+    advanced.filter((id) => quick.includes(id)),
+    quick,
+  );
+  for (const id of [
+    "dd-tagging-live",
+    "dd-data-splits",
+    "dd-search-depth",
+    "dd-score-chart",
+    "dd-trajectory",
+  ]) {
+    assert.ok(advanced.includes(id), `advanced guide skips ${id}`);
+  }
+});
+
+test("outside the advanced guide, only the tagger steps are shared", () => {
+  const shared = readStepTracks()
+    .filter((step) => step.tracks.filter((track) => track !== "advanced").length > 1)
+    .map((step) => step.id);
 
   assert.deepEqual(shared, ["dd-tagger-setup", "dd-tagger-modes"]);
 });
