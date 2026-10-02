@@ -5,6 +5,7 @@ import {
   DEFAULT_WIDTH,
   MAX_WIDTH,
   MIN_WIDTH,
+  NARROW_VIEWPORT_QUERY,
   STORAGE_KEY_OPEN,
   STORAGE_KEY_WIDTH,
 } from "../constants";
@@ -41,7 +42,12 @@ export function GeneralistPanelProvider({ children }: { children: React.ReactNod
 
   React.useEffect(() => {
     try {
-      setOpenState(window.localStorage.getItem(STORAGE_KEY_OPEN) === "true");
+      // The agent is on by default: open unless the user closed it — except
+      // on narrow screens, where open means a full-screen sheet over the page.
+      const stored = window.localStorage.getItem(STORAGE_KEY_OPEN);
+      setOpenState(
+        stored === null ? !window.matchMedia(NARROW_VIEWPORT_QUERY).matches : stored === "true",
+      );
       const raw = window.localStorage.getItem(STORAGE_KEY_WIDTH);
       const n = raw ? Number(raw) : NaN;
       if (Number.isFinite(n)) setWidthState(clampWidth(n));

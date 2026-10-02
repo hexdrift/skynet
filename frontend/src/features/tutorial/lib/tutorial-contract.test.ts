@@ -78,7 +78,7 @@ test("each guided workflow stays at eight steps or fewer", () => {
     workspace: (steps.match(/tracks: WORKSPACE_ONLY/g) ?? []).length,
   };
 
-  assert.deepEqual(counts, { quick: 7, data: 4, results: 8, workspace: 5 });
+  assert.deepEqual(counts, { quick: 8, data: 4, results: 8, workspace: 5 });
   for (const [track, count] of Object.entries(counts)) {
     assert.ok(count <= 8, `${track} guide has ${count} steps`);
   }
@@ -97,7 +97,7 @@ test("the quick-start guide keeps demo code deterministic and cost-free", () => 
   const steps = readFileSync(STEPS_PATH, "utf8");
   const wizard = readFileSync(SUBMIT_WIZARD_PATH, "utf8");
 
-  assert.match(steps, /callTutorialHook\("setCodeAssistMode", "manual"\)/);
+  assert.match(steps, /callTutorialHook\("setCodeAssistMode", "auto"\)/);
   assert.match(wizard, /setSignatureManuallyEdited\(true\)/);
   assert.match(wizard, /setMetricManuallyEdited\(true\)/);
 });
@@ -130,6 +130,7 @@ test("the quick start tags data first, then optimizes, and stops at the score", 
     "dd-tagger-setup",
     "dd-tagger-modes",
     "dd-data-upload",
+    "dd-code-agent",
     "dd-code-setup",
     "dd-models",
     "dd-review",
