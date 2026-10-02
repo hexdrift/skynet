@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useReducedMotion } from "framer-motion";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { Compass, Database, GraduationCap, Lightning, TrendUp } from "@/shared/ui/icons";
+import { Compass, Database, Lightning, TrendUp } from "@/shared/ui/icons";
 import { useTutorialContext } from "./tutorial-provider";
 import type { TutorialTrack } from "../lib/steps";
 import { msg } from "@/shared/lib/messages";
@@ -36,12 +36,6 @@ const TRACKS = [
     icon: Compass,
     nameKey: "tutorial.track.workspace.name",
     descKey: "tutorial.track.workspace.desc",
-  },
-  {
-    id: "advanced",
-    icon: GraduationCap,
-    nameKey: "tutorial.track.advanced.name",
-    descKey: "tutorial.track.advanced.desc",
   },
 ] as const satisfies ReadonlyArray<{
   id: TutorialTrack;

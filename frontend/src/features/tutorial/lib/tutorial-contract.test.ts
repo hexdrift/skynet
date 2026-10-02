@@ -68,7 +68,7 @@ test("every tutorial spotlight target is still declared by the application", () 
 test("tutorial workflow tracks stay synchronized with the chooser", () => {
   const steps = readFileSync(STEPS_PATH, "utf8");
   const menu = readFileSync(MENU_PATH, "utf8");
-  const tracks = ["quick", "data", "results", "workspace", "advanced"];
+  const tracks = ["quick", "data", "results", "workspace"];
 
   for (const track of tracks) {
     assert.match(steps, new RegExp(`\\b${track}: \\{`));
@@ -82,16 +82,10 @@ test("tutorial workflow tracks stay synchronized with the chooser", () => {
 
 test("each short guide stays at eight steps or fewer", () => {
   const counts = Object.fromEntries(
-    ["quick", "data", "results", "workspace", "advanced"].map((track) => [
-      track,
-      idsIn(track).length,
-    ]),
+    ["quick", "data", "results", "workspace"].map((track) => [track, idsIn(track).length]),
   );
 
-  assert.deepEqual(counts, { quick: 8, data: 5, results: 8, workspace: 5, advanced: 13 });
-  for (const track of ["quick", "data", "results", "workspace"]) {
-    assert.ok(counts[track]! <= 8, `${track} guide has ${counts[track]} steps`);
-  }
+  assert.deepEqual(counts, { quick: 8, data: 5, results: 8, workspace: 5 });
 });
 
 test("the demo result includes the source code highlighted by the guide", () => {
@@ -153,28 +147,9 @@ test("the data guide ends on the labeling screen, not on wizard settings", () =>
   ]);
 });
 
-test("the advanced guide is the quick start at full length", () => {
-  const advanced = idsIn("advanced");
-  const quick = idsIn("quick");
-
-  assert.deepEqual(
-    advanced.filter((id) => quick.includes(id)),
-    quick,
-  );
-  for (const id of [
-    "dd-tagging-live",
-    "dd-data-splits",
-    "dd-search-depth",
-    "dd-score-chart",
-    "dd-trajectory",
-  ]) {
-    assert.ok(advanced.includes(id), `advanced guide skips ${id}`);
-  }
-});
-
-test("outside the advanced guide, only the tagger steps are shared", () => {
+test("only the tagger steps are shared between guides", () => {
   const shared = readStepTracks()
-    .filter((step) => step.tracks.filter((track) => track !== "advanced").length > 1)
+    .filter((step) => step.tracks.length > 1)
     .map((step) => step.id);
 
   assert.deepEqual(shared, ["dd-tagger-setup", "dd-tagger-modes"]);
