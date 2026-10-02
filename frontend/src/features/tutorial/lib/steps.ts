@@ -85,9 +85,6 @@ export interface TutorialTrackDefinition {
   name: string;
   description: string;
   icon: string;
-  stepCount: number;
-  /** Rounded wall-clock estimate, for setting expectations before starting. */
-  estimatedMinutes: number;
   steps: TutorialStep[];
 }
 
@@ -851,15 +848,9 @@ function getVisibleSteps(): TutorialStep[] {
   });
 }
 
-// Reading time alone undersells a step: the tour also navigates, waits for
-// the target to paint, and gives the user a moment to look at it. Padding
-// each step keeps the menu's estimate from reading as optimistic.
-const STEP_OVERHEAD_SEC = 6;
-
 export function getTrack(trackId: TutorialTrack): TutorialTrackDefinition | undefined {
   const steps = getVisibleSteps().filter((s) => s.tracks.includes(trackId));
   if (steps.length === 0) return undefined;
-  const seconds = steps.reduce((sum, s) => sum + s.readingTimeSec + STEP_OVERHEAD_SEC, 0);
   const metadata: Record<TutorialTrack, { name: string; description: string }> = {
     quick: {
       name: msg("tutorial.track.quick.name"),
@@ -887,8 +878,6 @@ export function getTrack(trackId: TutorialTrack): TutorialTrackDefinition | unde
     name: metadata[trackId].name,
     description: metadata[trackId].description,
     icon: trackId,
-    stepCount: steps.length,
-    estimatedMinutes: Math.max(1, Math.round(seconds / 60)),
     steps,
   };
 }

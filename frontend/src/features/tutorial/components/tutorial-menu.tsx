@@ -6,17 +6,11 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 import { Compass, Database, GraduationCap, Lightning, TrendUp } from "@/shared/ui/icons";
 import { useTutorialContext } from "./tutorial-provider";
 import type { TutorialTrack } from "../lib/steps";
-import { getLoadedTrack, loadStepsModule } from "../lib/steps-loader";
-import { formatMsg, msg } from "@/shared/lib/messages";
-
-/** How long each track is — filled in once the lazy steps module resolves. */
-type TrackSize = { steps: number; minutes: number };
+import { msg } from "@/shared/lib/messages";
 
 const ITEM_CLS =
   "flex min-h-14 w-full items-start gap-2.5 px-4 py-2.5 text-xs text-foreground hover:bg-muted/40 cursor-pointer transition-colors";
 const ICON_CLS = "mt-0.5 size-4 shrink-0 text-muted-foreground/60";
-const META_CLS =
-  "ms-auto shrink-0 whitespace-nowrap font-mono text-[0.625rem] text-muted-foreground/60";
 
 const TRACKS = [
   {
@@ -63,7 +57,6 @@ const TRACKS = [
 export function TutorialMenu() {
   const { startTrack } = useTutorialContext();
   const prefersReducedMotion = useReducedMotion();
-  const [sizes, setSizes] = React.useState<Partial<Record<TutorialTrack, TrackSize>>>({});
   const trackChosenRef = React.useRef(false);
 
   const startAfterMenuCloses = React.useCallback(
@@ -77,30 +70,6 @@ export function TutorialMenu() {
     },
     [prefersReducedMotion, startTrack],
   );
-
-  // Content mounts only while the popover is open, so this runs on open. The
-  // step definitions are lazily imported; until they land the items render
-  // without their duration rather than blocking on it.
-  React.useEffect(() => {
-    let cancelled = false;
-    void loadStepsModule().then(() => {
-      if (cancelled) return;
-      const next: Partial<Record<TutorialTrack, TrackSize>> = {};
-      for (const track of TRACKS) {
-        const definition = getLoadedTrack(track.id);
-        if (definition) {
-          next[track.id] = {
-            steps: definition.stepCount,
-            minutes: definition.estimatedMinutes,
-          };
-        }
-      }
-      setSizes(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   return (
     <PopoverPrimitive.Portal>
@@ -127,7 +96,6 @@ export function TutorialMenu() {
             Icon={Icon}
             label={msg(nameKey)}
             description={msg(descKey)}
-            size={sizes[id]}
             onStart={startAfterMenuCloses}
           />
         ))}
@@ -136,20 +104,18 @@ export function TutorialMenu() {
   );
 }
 
-/** One track in the chooser: what it is called and how long it runs. */
+/** One track in the chooser: what it is called and what it covers. */
 function TrackItem({
   track,
   Icon,
   label,
   description,
-  size,
   onStart,
 }: {
   track: TutorialTrack;
   Icon: typeof Lightning;
   label: string;
   description: string;
-  size?: TrackSize;
   onStart: (track: TutorialTrack) => void;
 }) {
   return (
@@ -157,14 +123,7 @@ function TrackItem({
       <button type="button" onClick={() => onStart(track)} className={ITEM_CLS}>
         <Icon className={ICON_CLS} />
         <span className="min-w-0 flex-1 text-start">
-          <span className="flex items-center gap-2">
-            <span className="font-medium">{label}</span>
-            {size && (
-              <span className={META_CLS}>
-                {formatMsg("tutorial.menu.meta", { p1: size.steps, p2: size.minutes })}
-              </span>
-            )}
-          </span>
+          <span className="block font-medium">{label}</span>
           <span className="mt-0.5 block text-[0.6875rem] leading-snug text-muted-foreground">
             {description}
           </span>

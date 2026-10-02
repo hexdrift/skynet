@@ -2474,7 +2474,6 @@
   "trajectory.scrubber.generation_value": "דור {gen}",
   "trajectory.scrubber.label": "סינון לפי דור",
   "trajectory.scrubber.live": "חי",
-  "tutorial.menu.meta": "{p1} שלבים · כ-{p2} דקות",
   "tutorial.step.artifact.body": "לשונית Artifact היא הפלט המשופר. אפשר לבדוק את הפרומפט הסופי, כלי ReAct שכווננו, קוד Flex שנכתב מחדש או צמתי workflow משופרים. מתפריט הייצוא מורידים תוכנית DSPy מוכנה להרצה, pickle כשזמין, JSON של הפרומפט, קוד Python משופר או CSV של הלוגים.",
   "tutorial.step.artifact.title": "בדיקה וייצוא של התוצאה",
   "tutorial.step.code.body": "לשונית Code שומרת את מה שנכנס לריצה. בריצת מודול יחיד מופיעים ה-Signature והמדד; בריצת workflow מופיעים תוכנית ה-DSPy המהודרת, המדד והגרף לקריאה בלבד. הפלט המשופר נמצא בנפרד ב-Artifact.",

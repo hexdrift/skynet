@@ -2523,7 +2523,6 @@ export type MessageKey =
   | "tutorial.concepts.tagging.start.body"
   | "tutorial.concepts.tagging.start.title"
   | "tutorial.concepts.tagging.title"
-  | "tutorial.menu.meta"
   | "tutorial.stage.aria"
   | "tutorial.stage.data"
   | "tutorial.stage.optimize"
@@ -5182,7 +5181,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.concepts.tagging.start.body": "בדף התיוג מעלים קובץ CSV, ‏JSON או Excel, או בוחרים דאטאסט שמור מהספרייה, ומסמנים את עמודות הטקסט לתיוג. אחר כך מגדירים את המשימה: שאלת כן/לא, בחירה מתוך קטגוריות שהגדרתם, או תשובה כתובה.",
   "tutorial.concepts.tagging.start.title": "מאיפה מתחילים",
   "tutorial.concepts.tagging.title": "תיוג הנתונים",
-  "tutorial.menu.meta": "{p1} שלבים · כ-{p2} דקות",
   "tutorial.stage.aria": "השלב בתהליך",
   "tutorial.stage.data": "נתונים",
   "tutorial.stage.optimize": "אופטימיזציה",
