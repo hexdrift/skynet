@@ -39,7 +39,6 @@ export type TutorialTrack = "quick" | "data" | "results" | "workspace";
 
 const QUICK_ONLY: readonly TutorialTrack[] = ["quick"];
 const QUICK_AND_DATA: readonly TutorialTrack[] = ["quick", "data"];
-const QUICK_AND_RESULTS: readonly TutorialTrack[] = ["quick", "results"];
 const DATA_ONLY: readonly TutorialTrack[] = ["data"];
 const RESULTS_ONLY: readonly TutorialTrack[] = ["results"];
 const WORKSPACE_ONLY: readonly TutorialTrack[] = ["workspace"];
@@ -179,7 +178,7 @@ function showSubmitSplash(): Promise<void> {
 // route changes land on an already-loaded page instead of waiting on one.
 const TRACK_ROUTES: Record<TutorialTrack, readonly string[]> = {
   quick: ["/tagger", "/submit", `/optimizations/${DEMO_OPTIMIZATION_ID}`],
-  data: ["/datasets", "/tagger"],
+  data: ["/datasets", "/tagger", "/submit"],
   results: [`/optimizations/${DEMO_OPTIMIZATION_ID}`],
   workspace: ["/", "/explore"],
 };
@@ -411,6 +410,22 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     readingTimeSec: 13,
   },
   {
+    id: "dd-data-splits",
+    stage: "data",
+    title: msg("tutorial.step.data_splits.title"),
+    description: msg("tutorial.step.data_splits.body"),
+    target: "[data-tutorial='data-splits']",
+    placement: "auto",
+    beforeShow: async () => {
+      await ensureSubmit();
+      injectSampleDataset();
+      showWizardSubstep("evaluation", "data-splits");
+      await waitForElement("[data-tutorial='data-splits']");
+    },
+    tracks: DATA_ONLY,
+    readingTimeSec: 13,
+  },
+  {
     id: "dd-data-upload",
     stage: "optimize",
     title: msg("tutorial.step.data_upload.title"),
@@ -425,26 +440,6 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     },
     tracks: QUICK_ONLY,
     readingTimeSec: 16,
-  },
-  {
-    id: "dd-code-agent",
-    stage: "optimize",
-    title: msg("tutorial.step.code_agent.title"),
-    description: msg("tutorial.step.code_agent.body"),
-    target: "[data-tutorial='code-agent']",
-    placement: "auto",
-    beforeShow: async () => {
-      await ensureSubmit();
-      injectSampleDataset();
-      showWizardSubstep("evaluation", "code-editors");
-      callTutorialHook("setCodeAssistMode", "auto");
-      callTutorialHook("chooseModule", "predict");
-      callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
-      callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
-      await waitForElement("[data-tutorial='code-agent']");
-    },
-    tracks: QUICK_ONLY,
-    readingTimeSec: 14,
   },
   {
     id: "dd-code-setup",
@@ -464,9 +459,8 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await waitForElement("[data-tutorial='code-editors']");
     },
     tracks: QUICK_ONLY,
-    readingTimeSec: 15,
+    readingTimeSec: 18,
   },
-
   {
     id: "dd-models",
     stage: "optimize",
@@ -503,6 +497,30 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     readingTimeSec: 13,
   },
   {
+    id: "dd-live-run",
+    stage: "results",
+    title: msg("tutorial.step.live_run.title"),
+    description: msg("tutorial.step.live_run.body"),
+    target: "[data-tutorial='pipeline-stages']",
+    placement: "bottom",
+    beforeShow: async () => {
+      const path = `/optimizations/${DEMO_OPTIMIZATION_ID}`;
+      if (window.location.pathname === path) {
+        // Stepping back from the scores: stream the run again so the bar moves.
+        await ensureDemoDetail();
+        callTutorialHook("replayDemoSimulation");
+      } else {
+        resetDemoSimulation();
+        await showSubmitSplash();
+        await ensureDemoDetail();
+      }
+      setDetailTab("overview");
+      await waitForElement("[data-tutorial='pipeline-stages']");
+    },
+    tracks: QUICK_ONLY,
+    readingTimeSec: 10,
+  },
+  {
     id: "dd-scores",
     stage: "results",
     title: msg("tutorial.step.scores.title"),
@@ -510,24 +528,32 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     target: "[data-tutorial='score-cards']",
     placement: "bottom",
     beforeShow: async () => {
-      // Only the quick start just "submitted" the demo run; the results guide
-      // opens on the finished run instead of replaying a submission.
-      const onDetail = window.location.pathname === `/optimizations/${DEMO_OPTIMIZATION_ID}`;
-      if (!onDetail && queryTutorialHook("activeTutorialTrack") === "quick") {
-        resetDemoSimulation();
-        await showSubmitSplash();
-      }
       await ensureDemoDetail();
-      // Other guides describe a finished run; without this the page replays
-      // the run live and the optimized card shows a dash.
-      if (queryTutorialHook("activeTutorialTrack") !== "quick") {
-        callTutorialHook("finishDemoSimulation");
-      }
+      // Moving on before the live run ends jumps straight to its final scores.
+      callTutorialHook("finishDemoSimulation");
       setDetailTab("overview");
       await waitForElement("[data-tutorial='score-cards']");
     },
-    tracks: QUICK_AND_RESULTS,
+    tracks: QUICK_ONLY,
     readingTimeSec: 11,
+  },
+  {
+    id: "dd-score-chart",
+    stage: "results",
+    title: msg("tutorial.step.score_chart.title"),
+    description: msg("tutorial.step.score_chart.body"),
+    target: "[data-tutorial='score-chart']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureDemoDetail();
+      // This guide describes a finished run; without this the page replays
+      // the run live and the chart has no trials yet.
+      callTutorialHook("finishDemoSimulation");
+      setDetailTab("overview");
+      await waitForElement("[data-tutorial='score-chart']");
+    },
+    tracks: RESULTS_ONLY,
+    readingTimeSec: 13,
   },
   {
     id: "dd-trajectory",

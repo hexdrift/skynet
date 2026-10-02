@@ -663,18 +663,18 @@ export interface DemoCallbacks {
  * Returns a cleanup function that cancels all pending timers.
  *
  * Timeline:
- *   0.1s  — validating
- *   0.3s  — splitting
- *   0.55s — baseline evaluation
- *   0.72s — optimizing (trials appear every 70ms)
- *   1.5s  — done (success)
+ *   0.4s — validating
+ *   1.2s — splitting
+ *   2.5s — baseline evaluation
+ *   4s   — optimizing (a trial lands every 0.55s)
+ *   10s  — done (success)
  */
 const DEMO_SIMULATION_DURATION_MS = TUTORIAL_DEMO_RUN_MS;
-const DEMO_VALIDATING_AT_MS = 100;
-const DEMO_SPLITTING_AT_MS = 300;
-const DEMO_BASELINE_AT_MS = 550;
-const DEMO_OPTIMIZING_AT_MS = 720;
-const DEMO_TRIAL_STAGGER_MS = 70;
+const DEMO_VALIDATING_AT_MS = Math.round(DEMO_SIMULATION_DURATION_MS * 0.04);
+const DEMO_SPLITTING_AT_MS = Math.round(DEMO_SIMULATION_DURATION_MS * 0.12);
+const DEMO_BASELINE_AT_MS = Math.round(DEMO_SIMULATION_DURATION_MS * 0.25);
+const DEMO_OPTIMIZING_AT_MS = Math.round(DEMO_SIMULATION_DURATION_MS * 0.4);
+const DEMO_TRIAL_STAGGER_MS = Math.round((DEMO_SIMULATION_DURATION_MS * 0.55) / NUM_TRIALS);
 
 /** Once the simulation finishes, revisits skip straight to done. */
 let _simulationCompleted = false;
