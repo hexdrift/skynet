@@ -482,38 +482,6 @@ export function TutorialOverlay() {
     finishTrack,
   ]);
 
-  // Some spotlit controls are the step's natural "next": clicking them should
-  // move the tour on instead of leaving the user on the same card.
-  React.useEffect(() => {
-    const selector = currentStep?.advanceOnClick;
-    if (!state.isVisible || !stepReady || !selector) return;
-    const track = state.activeTrack ? (getLoadedTrack(state.activeTrack) ?? null) : null;
-    const isLast = !track || state.currentStepIndex >= track.steps.length - 1;
-
-    // Matched on position, not target, so a click is caught even if the
-    // control re-renders or the mask ends up on top of it.
-    const onClick = (e: MouseEvent) => {
-      const r = document.querySelector(selector)?.getBoundingClientRect();
-      if (!r) return;
-      const inside =
-        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-      if (!inside) return;
-      if (isLast) finishTrack();
-      else nextStep();
-    };
-
-    window.addEventListener("click", onClick, true);
-    return () => window.removeEventListener("click", onClick, true);
-  }, [
-    state.isVisible,
-    stepReady,
-    state.activeTrack,
-    state.currentStepIndex,
-    currentStep,
-    nextStep,
-    finishTrack,
-  ]);
-
   React.useEffect(() => {
     if (!state.isVisible || !stepReady) return;
 
@@ -617,11 +585,6 @@ export function TutorialOverlay() {
     else nextStep();
   };
 
-  const clickThroughRect =
-    stepReady && currentStep?.advanceOnClick
-      ? (document.querySelector(currentStep.advanceOnClick)?.getBoundingClientRect() ?? null)
-      : null;
-
   return (
     <>
       {splashPortal}
@@ -632,7 +595,6 @@ export function TutorialOverlay() {
             padding={highlightPadding}
             borderRadius={highlightRadius}
             isTransitioning={isTransitioning}
-            clickThroughRect={clickThroughRect}
           />
 
           <AnimatePresence mode="wait">

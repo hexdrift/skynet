@@ -7,8 +7,6 @@ interface SpotlightMaskProps {
   padding?: number;
   borderRadius?: number;
   isTransitioning?: boolean;
-  /** A control the step lets the user press: clicks inside it reach the page. */
-  clickThroughRect?: DOMRect | null;
 }
 
 export function SpotlightMask({
@@ -16,7 +14,6 @@ export function SpotlightMask({
   padding = 8,
   borderRadius = 12,
   isTransitioning = false,
-  clickThroughRect = null,
 }: SpotlightMaskProps) {
   const prefersReducedMotion = useReducedMotion();
 
@@ -46,23 +43,10 @@ export function SpotlightMask({
     ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
   };
 
-  // A mask only hides paint, so the dimmed rect still catches clicks over the
-  // cutout. With a click-through control, an even-odd path with a hole over it
-  // takes the clicks instead, and the svg itself lets them pass.
-  const hole = clickThroughRect;
-  const blocker = hole ? (
-    <path
-      d={`M0 0H${window.innerWidth}V${window.innerHeight}H0Z M${hole.left} ${hole.top}V${hole.bottom}H${hole.right}V${hole.top}Z`}
-      fillRule="evenodd"
-      fill="transparent"
-      pointerEvents="all"
-    />
-  ) : null;
-
   return (
     <motion.svg
       aria-hidden="true"
-      className={`${hole ? "pointer-events-none" : "pointer-events-auto"} absolute inset-0 h-full w-full`}
+      className="pointer-events-auto absolute inset-0 h-full w-full"
       data-tutorial-spotlight="true"
       initial={prefersReducedMotion ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -129,7 +113,6 @@ export function SpotlightMask({
           ease: [0.22, 1, 0.36, 1],
         }}
       />
-      {blocker}
     </motion.svg>
   );
 }
