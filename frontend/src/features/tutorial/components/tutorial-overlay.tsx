@@ -490,8 +490,8 @@ export function TutorialOverlay() {
     const track = state.activeTrack ? (getLoadedTrack(state.activeTrack) ?? null) : null;
     const isLast = !track || state.currentStepIndex >= track.steps.length - 1;
 
-    // The spotlight mask covers the whole page, cutout included, so the click
-    // lands on the mask rather than the control: match on position instead.
+    // Matched on position, not target, so a click is caught even if the
+    // control re-renders or the mask ends up on top of it.
     const onClick = (e: MouseEvent) => {
       const r = document.querySelector(selector)?.getBoundingClientRect();
       if (!r) return;
@@ -617,6 +617,11 @@ export function TutorialOverlay() {
     else nextStep();
   };
 
+  const clickThroughRect =
+    stepReady && currentStep?.advanceOnClick
+      ? (document.querySelector(currentStep.advanceOnClick)?.getBoundingClientRect() ?? null)
+      : null;
+
   return (
     <>
       {splashPortal}
@@ -627,6 +632,7 @@ export function TutorialOverlay() {
             padding={highlightPadding}
             borderRadius={highlightRadius}
             isTransitioning={isTransitioning}
+            clickThroughRect={clickThroughRect}
           />
 
           <AnimatePresence mode="wait">
