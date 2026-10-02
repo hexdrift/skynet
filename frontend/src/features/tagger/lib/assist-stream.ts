@@ -2,8 +2,7 @@ import { getRuntimeEnv } from "@/shared/lib/runtime-env";
 import { readServerSentEvents } from "@/shared/lib/sse";
 import { fetchWithAuthRetry, parseInterviewOptions, type InterviewOption } from "@/shared/lib/api";
 import { msg } from "@/shared/lib/messages";
-import { DEFAULT_SYNTHETIC_ROWS } from "./assist";
-import type { AssistPrediction, DatasetSpec, TaggerConfig } from "./types";
+import type { AssistPrediction, TaggerConfig } from "./types";
 
 // Resolve lazily — a module-load const races the injected window.__SKYNET_ENV__
 // and freezes the build-time localhost fallback. See shared/lib/api.ts.
@@ -15,25 +14,8 @@ export interface InterviewTurnResult {
   rubric: string[];
   done: boolean;
   taskOverride: Partial<Pick<TaggerConfig, "mode" | "question" | "categories" | "prompt">>;
-  /** The dataset a synthetic session should generate; null off such sessions. */
-  datasetSpec: DatasetSpec | null;
   /** Short session name the interview proposes on its final turn. */
   title: string;
-}
-
-function parseDatasetSpec(raw: unknown): DatasetSpec | null {
-  if (!raw || typeof raw !== "object") return null;
-  const spec = raw as Record<string, unknown>;
-  const brief = typeof spec.brief === "string" ? spec.brief.trim() : "";
-  if (!brief) return null;
-  return {
-    brief,
-    columns: Array.isArray(spec.columns) ? spec.columns.map(String) : [],
-    rows:
-      typeof spec.rows === "number" && spec.rows > 0
-        ? Math.round(spec.rows)
-        : DEFAULT_SYNTHETIC_ROWS,
-  };
 }
 
 export interface InterviewStreamHandlers {
@@ -117,7 +99,6 @@ export async function streamInterviewTurn(
                     Pick<TaggerConfig, "mode" | "question" | "categories" | "prompt">
                   >)
                 : {},
-            datasetSpec: parseDatasetSpec(payload.dataset_spec),
             title: typeof payload.title === "string" ? payload.title.trim() : "",
           });
           break;

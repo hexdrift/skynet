@@ -2,9 +2,8 @@
 
 Covers label normalization across the three annotation modes, defensive JSON
 parsing of model output, few-shot example selection (corrections-first,
-exclusions, provenance filtering), instruction compilation, token
-estimation, and the synthetic-dataset generator's row normalization and
-slicing.
+exclusions, provenance filtering), instruction compilation, and token
+estimation.
 """
 
 from __future__ import annotations
@@ -18,20 +17,16 @@ from ..tagging import (
     MAX_EXAMPLES,
     InterviewTurnSig,
     _MessageLeakGuard,
-    _normalize_synthetic_rows,
     _parse_interview_prediction,
     _parse_json,
     _StreamedArrayItems,
     assist_model_name,
-    build_data_rows,
     compile_instructions,
     effective_task_config,
     estimate_tokens_for_rows,
-    normalize_dataset_spec,
     normalize_label,
     select_examples,
     summarize_dataset,
-    synthesize_rows,
     task_description,
 )
 
@@ -169,70 +164,6 @@ def test_provisional_override_carries_inferred_mode() -> None:
     assert _parse_interview_prediction(pred, 1, provisional)["task_override"] == {}
     pred.task_config_json = '{"mode": "freetext"}'
     assert _parse_interview_prediction(pred, 1, provisional)["task_override"] == {"mode": "freetext"}
-
-
-def test_synthetic_session_interviews_for_the_data_first() -> None:
-    """A data-less synthetic session gets the data-first briefing and an empty summary."""
-    config = {"mode": "freetext", "modeProvisional": True, "synthetic": True, "_synthetic_pending": True}
-    description = task_description(config)
-    assert "No dataset exists yet" in description
-    assert "dataset_json" in description
-    assert "how many rows" in description
-    summary = json.loads(summarize_dataset(config, [], []))
-    assert summary["row_count"] == 0
-    assert "dataset_json" in summary["note"]
-    # Once rows exist the flag is off and the regular provisional briefing applies.
-    assert "No dataset exists yet" not in task_description(
-        {"mode": "freetext", "modeProvisional": True, "synthetic": True}
-    )
-    assert len(InterviewTurnSig.output_fields) == 7
-    assert list(InterviewTurnSig.output_fields)[-2:] == ["dataset_json", "session_title"]
-
-
-def test_dataset_spec_rides_the_final_turn_of_synthetic_sessions_only() -> None:
-    """The dataset spec is normalized, gated on ``done`` and dropped off synthetic sessions."""
-    pending = {"mode": "freetext", "modeProvisional": True, "synthetic": True, "_synthetic_pending": True}
-    pred = SimpleNamespace(
-        done="true",
-        message="Ready",
-        options_json="[]",
-        rubric_json='["Rule."]',
-        task_config_json='{"mode": "binary", "question": "Is it a complaint?"}',
-        dataset_json='{"brief": " Bank support chats ", "columns": ["text", "", "text", "channel"], "rows": "500"}',
-        session_title="Bank complaints",
-    )
-    turn = _parse_interview_prediction(pred, 3, pending)
-    assert turn["dataset_spec"] == {"brief": "Bank support chats", "columns": ["text", "channel"], "rows": 200}
-    assert turn["task_override"] == {"mode": "binary", "question": "Is it a complaint?"}
-    pred.done = "false"
-    assert _parse_interview_prediction(pred, 3, pending)["dataset_spec"] == {}
-    pred.done = "true"
-    assert _parse_interview_prediction(pred, 3, _FREE)["dataset_spec"] == {}
-    assert normalize_dataset_spec({"brief": "x", "rows": None}) == {"brief": "x", "columns": [], "rows": 30}
-    assert normalize_dataset_spec({"columns": ["text"]}) == {}
-    assert normalize_dataset_spec("nope") == {}
-
-
-def test_synthetic_sessions_get_a_longer_interview() -> None:
-    """The forced finish waits for the synthetic cap, since the data comes first."""
-    pending = {"mode": "freetext", "modeProvisional": True, "synthetic": True, "_synthetic_pending": True}
-    pred = SimpleNamespace(done="false", message="Next?", options_json="[]", rubric_json="[]", task_config_json="{}")
-    assert _parse_interview_prediction(pred, 5, pending)["done"] is False
-    assert _parse_interview_prediction(pred, 8, pending)["done"] is True
-    assert _parse_interview_prediction(pred, 5, _FREE)["done"] is True
-
-
-def test_build_data_rows_mirrors_the_setup_wizard_mapping() -> None:
-    """Rows get ids, structured fields and the flat text the export and search read."""
-    single = build_data_rows(["text"], [{"text": "Card declined"}])
-    assert single == [{"text": "Card declined", "id": 1, "fields": [{"column": "text", "value": "Card declined"}]}]
-    multi = build_data_rows(["text", "channel"], [{"text": "Hi", "channel": "chat"}, {"text": "Bye"}])
-    assert multi[0]["text"] == "text: Hi\nchannel: chat"
-    assert multi[1] == {
-        "text": "text: Bye\nchannel: ",
-        "id": 2,
-        "fields": [{"column": "text", "value": "Bye"}, {"column": "channel", "value": ""}],
-    }
 
 
 def test_interview_title_rides_the_final_turn_only() -> None:
@@ -416,64 +347,3 @@ def test_build_assist_lm_merges_lm_extra_body(monkeypatch) -> None:
     assert captured == [
         {"extra_body": {"plugins": [{"id": "auto-router", "cost_quality_tradeoff": 5}]}}
     ]
-
-
-def test_normalize_synthetic_rows_projects_onto_given_columns() -> None:
-    """Given columns win: extras are dropped, gaps become empty strings, blanks vanish."""
-    parsed = [
-        {"text": "Card declined twice", "channel": "chat", "junk": 1},
-        {"text": "  ", "channel": ""},
-        {"channel": "email", "extra": {"a": 1}},
-        "not an object",
-    ]
-    columns, rows = _normalize_synthetic_rows(parsed, ["text", "channel"])
-    assert columns == ["text", "channel"]
-    assert rows == [
-        {"text": "Card declined twice", "channel": "chat"},
-        {"text": "", "channel": "email"},
-    ]
-
-
-def test_normalize_synthetic_rows_lets_first_object_settle_columns() -> None:
-    """Without columns the first usable object decides them; nested cells are JSON."""
-    parsed = [{"review": "Great", "tags": ["a", "b"]}, {"review": "Bad", "other": "x"}]
-    columns, rows = _normalize_synthetic_rows(parsed, [])
-    assert columns == ["review", "tags"]
-    assert rows == [{"review": "Great", "tags": '["a", "b"]'}, {"review": "Bad", "tags": ""}]
-    assert _normalize_synthetic_rows("nope", []) == ([], [])
-
-
-def test_synthesize_rows_slices_dedupes_and_caps(monkeypatch) -> None:
-    """The first slice settles columns, later slices reuse them, repeats and overflow are dropped."""
-    calls: list[tuple[list[str], int, int, int]] = []
-
-    def fake_batch(lm, brief, columns, count, part, parts):
-        """Record the slice request and return predictable rows on the settled columns."""
-        calls.append((list(columns), count, part, parts))
-        cols = columns or ["text"]
-        rows = [{c: f"{c}-{part}-{i}" for c in cols} for i in range(count)]
-        rows.append(dict(rows[0]))
-        return cols, rows
-
-    monkeypatch.setattr(tagging, "_synthesize_batch", fake_batch)
-    monkeypatch.setattr(tagging, "_build_assist_lm", lambda *a, **k: SimpleNamespace())
-    sink: list = []
-    columns, rows = synthesize_rows("support tickets", [], 55, usage_sink=sink)
-    assert columns == ["text"]
-    assert len(rows) == 55
-    assert len({r["text"] for r in rows}) == 55
-    assert len(sink) == 1
-    assert calls[0] == ([], 25, 1, 3)
-    assert sorted(calls[1:]) == [(["text"], 5, 3, 3), (["text"], 25, 2, 3)]
-
-
-def test_synthesize_rows_raises_when_nothing_usable(monkeypatch) -> None:
-    """A model that writes no rows surfaces as an error instead of an empty dataset."""
-    monkeypatch.setattr(tagging, "_synthesize_batch", lambda *a, **k: ([], []))
-    monkeypatch.setattr(tagging, "_build_assist_lm", lambda *a, **k: SimpleNamespace())
-    try:
-        synthesize_rows("anything", [], 10)
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError")
