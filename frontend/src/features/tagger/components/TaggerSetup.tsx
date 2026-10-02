@@ -89,12 +89,12 @@ const ASSIST_OPTIONS: Array<{
     mode: "copilot",
     label: msg("tagger.assist.setup.copilot_label"),
     desc: msg("tagger.assist.setup.copilot_desc"),
-    recommended: true,
   },
   {
     mode: "autopilot",
     label: msg("tagger.assist.setup.autopilot_label"),
     desc: msg("tagger.assist.setup.autopilot_desc"),
+    recommended: true,
   },
 ]);
 
@@ -157,7 +157,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
   const [inputCols, setInputCols] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<AnnotationMode | null>(null);
-  const [assistMode, setAssistMode] = useState<TaggerAssistMode>("copilot");
+  const [assistMode, setAssistMode] = useState<TaggerAssistMode>("autopilot");
   const [libraryName, setLibraryName] = useState<string | null>(null);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);

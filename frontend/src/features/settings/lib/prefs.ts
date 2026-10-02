@@ -82,7 +82,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   liteMode: false,
   wizardCodeAssist: "auto",
   wizardSplitMode: "auto",
-  agentTrustMode: "ask",
+  agentTrustMode: "auto_safe",
   taggerAssist: true,
 };
 

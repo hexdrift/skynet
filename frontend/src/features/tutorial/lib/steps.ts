@@ -407,6 +407,26 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     readingTimeSec: 16,
   },
   {
+    id: "dd-code-agent",
+    stage: "optimize",
+    title: msg("tutorial.step.code_agent.title"),
+    description: msg("tutorial.step.code_agent.body"),
+    target: "[data-tutorial='code-agent']",
+    placement: "auto",
+    beforeShow: async () => {
+      await ensureSubmit();
+      injectSampleDataset();
+      showWizardSubstep("evaluation", "code-editors");
+      callTutorialHook("setCodeAssistMode", "auto");
+      callTutorialHook("chooseModule", "predict");
+      callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
+      callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
+      await waitForElement("[data-tutorial='code-agent']");
+    },
+    tracks: QUICK_ONLY,
+    readingTimeSec: 14,
+  },
+  {
     id: "dd-code-setup",
     stage: "optimize",
     title: `${msg("auto.features.tutorial.lib.steps.literal.20")} + ${TERMS.metric}`,
@@ -417,7 +437,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await ensureSubmit();
       injectSampleDataset();
       showWizardSubstep("evaluation", "code-editors");
-      callTutorialHook("setCodeAssistMode", "manual");
+      callTutorialHook("setCodeAssistMode", "auto");
       callTutorialHook("chooseModule", "predict");
       callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
       callTutorialHook("setMetricCode", DEMO_METRIC_CODE);

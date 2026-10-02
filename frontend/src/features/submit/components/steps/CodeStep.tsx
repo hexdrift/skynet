@@ -328,7 +328,10 @@ export function CodeStep({ w, part }: { w: SubmitWizardContext; part: "module" |
           )}
         >
           {codeAssistMode === "auto" && (
-            <div className="relative h-[70svh] min-h-[30rem] max-h-[700px] self-stretch overflow-hidden border-b border-border/40 lg:h-auto lg:min-h-[700px] lg:max-h-none lg:border-b-0 lg:border-e">
+            <div
+              className="relative h-[70svh] min-h-[30rem] max-h-[700px] self-stretch overflow-hidden border-b border-border/40 lg:h-auto lg:min-h-[700px] lg:max-h-none lg:border-b-0 lg:border-e"
+              data-tutorial="code-agent"
+            >
               {interviewActive ? (
                 <CodeInterviewPanel interview={interview} className="absolute inset-0" />
               ) : (
