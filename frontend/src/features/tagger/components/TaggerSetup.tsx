@@ -525,6 +525,7 @@ export function TaggerSetup({ onStart }: TaggerSetupProps) {
               type="button"
               variant="outline"
               aria-pressed={synthetic}
+              data-tutorial="tagger-synthetic-pick"
               onClick={() => {
                 if (synthetic) {
                   setSynthetic(false);

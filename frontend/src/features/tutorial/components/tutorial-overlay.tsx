@@ -482,6 +482,32 @@ export function TutorialOverlay() {
     finishTrack,
   ]);
 
+  // Some spotlit controls are the step's natural "next": clicking them should
+  // move the tour on instead of leaving the user on the same card.
+  React.useEffect(() => {
+    const selector = currentStep?.advanceOnClick;
+    if (!state.isVisible || !stepReady || !selector) return;
+    const track = state.activeTrack ? (getLoadedTrack(state.activeTrack) ?? null) : null;
+    const isLast = !track || state.currentStepIndex >= track.steps.length - 1;
+
+    const onClick = (e: MouseEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest(selector)) return;
+      if (isLast) finishTrack();
+      else nextStep();
+    };
+
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, [
+    state.isVisible,
+    stepReady,
+    state.activeTrack,
+    state.currentStepIndex,
+    currentStep,
+    nextStep,
+    finishTrack,
+  ]);
+
   React.useEffect(() => {
     if (!state.isVisible || !stepReady) return;
 

@@ -70,6 +70,8 @@ export interface TutorialStep {
    * the return value is not awaited.
    */
   afterHide?: () => void | Promise<void>;
+  /** Selector of an element inside the spotlight whose click moves the tour on. */
+  advanceOnClick?: string;
   /** Focused guides that include this step. */
   tracks: readonly TutorialTrack[];
   readingTimeSec: number;
@@ -401,6 +403,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       await ensureTagger();
       injectDemoTaggerData(0);
     },
+    advanceOnClick: "[data-tutorial='tagger-synthetic-pick']",
     tracks: QUICK_AND_DATA,
     readingTimeSec: 13,
   },
