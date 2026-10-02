@@ -14,6 +14,7 @@ import type { TutorialTrack, TutorialTrackDefinition } from "./steps";
 interface StepsModule {
   getTrack: (trackId: TutorialTrack) => TutorialTrackDefinition | undefined;
   resetTutorialOneShotState: () => void;
+  warmTrackRoutes: (track: TutorialTrack) => void;
 }
 
 let stepsModule: StepsModule | null = null;

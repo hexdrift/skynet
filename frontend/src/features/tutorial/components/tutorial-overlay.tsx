@@ -50,9 +50,13 @@ export function TutorialOverlay() {
       }, TUTORIAL_SUBMIT_SPLASH_MS);
     });
     const unregisterPush = registerTutorialHook("routerPush", (path: string) => router.push(path));
+    const unregisterPrefetch = registerTutorialHook("routerPrefetch", (path: string) =>
+      router.prefetch(path),
+    );
     return () => {
       unregisterSplash();
       unregisterPush();
+      unregisterPrefetch();
       if (splashTimerRef.current) {
         clearTimeout(splashTimerRef.current);
         splashTimerRef.current = null;
