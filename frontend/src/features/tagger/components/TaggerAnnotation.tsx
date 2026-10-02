@@ -309,7 +309,10 @@ export function TaggerAnnotation({
   if (!item) return null;
 
   return (
-    <div className="flex h-[calc(100dvh-var(--header-height,53px)-3rem)] flex-col overflow-hidden md:h-[calc(100dvh-var(--header-height,53px)-4rem)]">
+    <div
+      className="flex h-[calc(100dvh-var(--header-height,53px)-3rem)] flex-col overflow-hidden md:h-[calc(100dvh-var(--header-height,53px)-4rem)]"
+      data-tutorial="tagger-annotation"
+    >
       <div className="flex items-center gap-2 px-3 pb-1.5 pt-3 sm:px-5">
         <ProgressBar value={pct} tone="ai" size="sm" className="w-auto flex-1" />
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">

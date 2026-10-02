@@ -281,6 +281,38 @@ export function useTagger(initialSession?: TaggerSessionDetail | null) {
     router.replace("/tagger");
   }, [router]);
 
+  // The guide shows the annotator on demo rows. No session is created, so the
+  // autosave loop (keyed on sessionId) never writes them anywhere.
+  const showDemoSession = useCallback(
+    (
+      cfg: TaggerConfig,
+      rows: DataRow[],
+      cols: string[],
+      labels: Record<string, Annotation>,
+      index: number,
+    ) => {
+      setConfig(cfg);
+      setData(rows);
+      setColumns(cols);
+      setAnnotations(labels);
+      setAssist(null);
+      setAssistError(null);
+      setCurrentIndex(index);
+      setPhase("annotating");
+      setSessionId(null);
+    },
+    [],
+  );
+
+  const clearDemoSession = useCallback(() => {
+    setConfig(null);
+    setData([]);
+    setColumns([]);
+    setAnnotations({});
+    setCurrentIndex(0);
+    setPhase("setup");
+  }, []);
+
   // Buffer each edit as pending rather than writing on every keystroke; the
   // autosave loop and the leave-the-page handler drain it. Only the mutable
   // fields are tracked (annotations / assist / cursor / phase) — never the
@@ -1069,6 +1101,8 @@ export function useTagger(initialSession?: TaggerSessionDetail | null) {
     // Base flow.
     startAnnotating,
     backToSetup,
+    showDemoSession,
+    clearDemoSession,
     navigate,
     goTo,
     jumpToUntagged,

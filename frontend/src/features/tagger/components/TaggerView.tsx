@@ -65,15 +65,57 @@ export function TaggerView({ initialSession }: { initialSession?: TaggerSessionD
       }),
     [],
   );
+  const { showDemoSession, clearDemoSession } = tagger;
+  const tourDemoSessionRef = useRef(false);
+  useEffect(
+    () =>
+      registerTutorialHook("showTaggerDemoSession", (demo) => {
+        tourDemoSessionRef.current = true;
+        const rows = demo.rows.map((row) => {
+          const value = row[demo.textCol];
+          return {
+            ...row,
+            text: String(value ?? ""),
+            fields: [{ column: demo.textCol, value }],
+          };
+        });
+        showDemoSession(
+          {
+            mode: "multiclass",
+            inputColumns: [demo.textCol],
+            categories: demo.categories,
+            assistMode: "manual",
+          },
+          rows,
+          Object.keys(demo.rows[0] ?? {}).filter((col) => col !== "id"),
+          demo.labels,
+          demo.index,
+        );
+      }),
+    [showDemoSession],
+  );
+  useEffect(
+    () =>
+      registerTutorialHook("clearTaggerDemoSession", () => {
+        if (!tourDemoSessionRef.current) return;
+        tourDemoSessionRef.current = false;
+        clearDemoSession();
+      }),
+    [clearDemoSession],
+  );
   useEffect(() => {
     const onExit = () => {
+      if (tourDemoSessionRef.current) {
+        tourDemoSessionRef.current = false;
+        clearDemoSession();
+      }
       if (!tourOpenedSetupRef.current) return;
       tourOpenedSetupRef.current = false;
       setStartingNew(false);
     };
     window.addEventListener("tutorial-exited", onExit);
     return () => window.removeEventListener("tutorial-exited", onExit);
-  }, []);
+  }, [clearDemoSession]);
 
   if (!initialSession && !startingNew) {
     // The shell leaves /tagger unwrapped for the annotation surfaces; the

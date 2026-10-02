@@ -92,6 +92,19 @@ export interface TutorialHooks {
   }) => void;
   /** Force the tagger view to show the setup wizard (new session). */
   setTaggerStartingNew: (value: boolean) => void;
+  /**
+   * Open the annotator on demo rows, some already labeled, without saving a
+   * session. Category labels are keyed by row id.
+   */
+  showTaggerDemoSession: (demo: {
+    rows: Array<{ id: number; [column: string]: unknown }>;
+    textCol: string;
+    categories: Array<{ id: string; label: string }>;
+    labels: Record<string, string[]>;
+    index: number;
+  }) => void;
+  /** Drop the demo annotator and return the tagger to its setup wizard. */
+  clearTaggerDemoSession: () => void;
   /** Open or close the generalist agent panel (left-anchored aside). */
   setGeneralistPanelOpen: (open: boolean) => void;
   /**

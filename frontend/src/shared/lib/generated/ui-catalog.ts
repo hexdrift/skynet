@@ -2514,7 +2514,28 @@ export type MessageKey =
   | "tutorial.concepts.tagging.start.body"
   | "tutorial.concepts.tagging.start.title"
   | "tutorial.concepts.tagging.title"
-  | "tutorial.menu.meta"
+  | "tutorial.demo.category.important"
+  | "tutorial.demo.category.promotional"
+  | "tutorial.demo.category.spam"
+  | "tutorial.demo.dataset_name"
+  | "tutorial.demo.email.1"
+  | "tutorial.demo.email.10"
+  | "tutorial.demo.email.11"
+  | "tutorial.demo.email.12"
+  | "tutorial.demo.email.13"
+  | "tutorial.demo.email.14"
+  | "tutorial.demo.email.2"
+  | "tutorial.demo.email.3"
+  | "tutorial.demo.email.4"
+  | "tutorial.demo.email.5"
+  | "tutorial.demo.email.6"
+  | "tutorial.demo.email.7"
+  | "tutorial.demo.email.8"
+  | "tutorial.demo.email.9"
+  | "tutorial.demo.instructions"
+  | "tutorial.demo.signature.doc"
+  | "tutorial.demo.signature.input_desc"
+  | "tutorial.demo.signature.output_desc"
   | "tutorial.stage.aria"
   | "tutorial.stage.data"
   | "tutorial.stage.optimize"
@@ -2523,8 +2544,6 @@ export type MessageKey =
   | "tutorial.step.artifact.title"
   | "tutorial.step.code.body"
   | "tutorial.step.code.title"
-  | "tutorial.step.code_agent.body"
-  | "tutorial.step.code_agent.title"
   | "tutorial.step.code_setup.body"
   | "tutorial.step.data_upload.body"
   | "tutorial.step.data_upload.title"
@@ -2532,10 +2551,14 @@ export type MessageKey =
   | "tutorial.step.dataset_actions.title"
   | "tutorial.step.dataset_add.body"
   | "tutorial.step.dataset_add.title"
+  | "tutorial.step.live_run.body"
+  | "tutorial.step.live_run.title"
   | "tutorial.step.models.body"
   | "tutorial.step.result_actions.body"
   | "tutorial.step.result_actions.title"
   | "tutorial.step.review.body"
+  | "tutorial.step.score_chart.body"
+  | "tutorial.step.score_chart.title"
   | "tutorial.step.scores.body"
   | "tutorial.step.scores.title"
   | "tutorial.step.sidebar_nav.body"
@@ -2545,6 +2568,8 @@ export type MessageKey =
   | "tutorial.step.tagger_setup.title"
   | "tutorial.step.tagger_task.body"
   | "tutorial.step.tagger_task.title"
+  | "tutorial.step.tagging_live.body"
+  | "tutorial.step.tagging_live.title"
   | "tutorial.track.data.desc"
   | "tutorial.track.data.name"
   | "tutorial.track.quick.desc"
@@ -3937,9 +3962,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.demo.data.literal.5": "מתחילים אופטימיזציה: סיווג אימיילים",
   "auto.features.tutorial.lib.demo.data.literal.6": "מתחילים אופטימיזציה: סיווג אימיילים",
   "auto.features.tutorial.lib.demo.data.literal.7": "סיווג אימיילים",
-  "auto.features.tutorial.lib.demo.data.literal.8": "סיווג אימיילים לקטגוריות: spam, important, promotional",
+  "auto.features.tutorial.lib.demo.data.literal.8": "סיווג אימיילים לקטגוריות: ספאם, חשוב, פרסומת",
   "auto.features.tutorial.lib.demo.data.literal.9": "ניתוח סנטימנט",
-  "auto.features.tutorial.lib.demo.data.template.1": "{p1} לסיווג אימיילים לקטגוריות: spam, important, promotional",
+  "auto.features.tutorial.lib.demo.data.template.1": "{p1} לסיווג אימיילים לקטגוריות: ספאם, חשוב, פרסומת",
   "auto.features.tutorial.lib.demo.data.template.2": "סריקת {p1}: ארבעה {p2} {p3}/{p4} על אותה {p5}",
   "auto.features.tutorial.lib.demo.data.template.3": "סריקת {p1}: ארבעה {p2} {p3}/{p4} על אותה {p5}",
   "auto.features.tutorial.lib.steps.literal.20": "פרומפט (Signature)",
@@ -5153,7 +5178,28 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.concepts.tagging.start.body": "בדף התיוג מעלים קובץ CSV, ‏JSON או Excel, או בוחרים דאטאסט שמור מהספרייה, ומסמנים את עמודות הטקסט לתיוג. אחר כך מגדירים את המשימה: שאלת כן/לא, בחירה מתוך קטגוריות שהגדרתם, או תשובה כתובה.",
   "tutorial.concepts.tagging.start.title": "מאיפה מתחילים",
   "tutorial.concepts.tagging.title": "תיוג הנתונים",
-  "tutorial.menu.meta": "{p1} שלבים · כ-{p2} דקות",
+  "tutorial.demo.category.important": "חשוב",
+  "tutorial.demo.category.promotional": "פרסומת",
+  "tutorial.demo.category.spam": "ספאם",
+  "tutorial.demo.dataset_name": "אימיילים",
+  "tutorial.demo.email.1": "לחצו כאן וזכו ב-1,000 ₪ עכשיו!",
+  "tutorial.demo.email.10": "תזכורת: תור לרופא השיניים ביום חמישי",
+  "tutorial.demo.email.11": "זכיתם באייפון חינם! לחצו כאן לקבלה",
+  "tutorial.demo.email.12": "עדכון מדיניות החברה, בתוקף מיום שני",
+  "tutorial.demo.email.13": "לזמן מוגבל: קנו אחד וקבלו את השני חינם",
+  "tutorial.demo.email.14": "מזל טוב! נבחרתם לזכות בפרס",
+  "tutorial.demo.email.2": "הפגישה נדחתה למחר ב-15:00",
+  "tutorial.demo.email.3": "50% הנחה על כל המוצרים, רק בסוף השבוע",
+  "tutorial.demo.email.4": "הדוח הרבעוני מוכן לבדיקה",
+  "tutorial.demo.email.5": "כרטיס מתנה חינם מחכה לכם",
+  "tutorial.demo.email.6": "סיכום ישיבת הצוות מיום שני",
+  "tutorial.demo.email.7": "החשבון שלכם נפרץ! פעלו עכשיו!",
+  "tutorial.demo.email.8": "סקירת התקציב לרבעון השלישי מצורפת לאישורכם",
+  "tutorial.demo.email.9": "מבצע בזק: 70% הנחה על מוצרי חשמל, היום בלבד",
+  "tutorial.demo.instructions": "סווגו כל אימייל כ{p1}, {p2} או {p3}. התבססו על הכוונה של ההודעה, על הדחיפות שלה ועל הפעולה שהיא מבקשת, ולא על מילות מפתח בודדות.",
+  "tutorial.demo.signature.doc": "סיווג אימייל לאחת הקטגוריות: {p1}, {p2} או {p3}.",
+  "tutorial.demo.signature.input_desc": "תוכן האימייל לסיווג",
+  "tutorial.demo.signature.output_desc": "אחת מהקטגוריות: {p1}, {p2}, {p3}",
   "tutorial.stage.aria": "השלב בתהליך",
   "tutorial.stage.data": "נתונים",
   "tutorial.stage.optimize": "אופטימיזציה",
@@ -5162,19 +5208,21 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.artifact.title": "בדיקה וייצוא של התוצאה",
   "tutorial.step.code.body": "לשונית Code שומרת את מה שנכנס לריצה. בריצת מודול יחיד מופיעים ה-Signature והמדד; בריצת workflow מופיעים תוכנית ה-DSPy המהודרת, המדד והגרף לקריאה בלבד. הפלט המשופר נמצא בנפרד ב-Artifact.",
   "tutorial.step.code.title": "קוד מקור ו-workflow",
-  "tutorial.step.code_agent.body": "כברירת מחדל הסוכן עובד בשבילכם: הוא קורא את האימיילים המתויגים, שואל כמה שאלות קצרות על המשימה, ואז כותב בעצמו את הפרומפט ואת המדד ומתקן אותם אם הבדיקה נכשלת. אפשר לבקש ממנו שינויים בצ'אט, או לעבור למצב ידני ולכתוב לבד.",
-  "tutorial.step.code_agent.title": "הסוכן כותב את הקוד",
-  "tutorial.step.code_setup.body": "כך נראה הקוד שהסוכן כותב. הפרומפט (Signature) מתאר את הקלט והפלט של המשימה; המדד משווה כל תשובה של המודל לתווית שתייגתם ומחזיר ציון בין 0 ל-1, וזה הציון שהאופטימיזציה תנסה להעלות. אפשר לערוך כל שורה ישירות.",
+  "tutorial.step.code_setup.body": "הסוכן כותב את הקוד בשבילכם: הוא קורא את האימיילים המתויגים, שואל כמה שאלות קצרות על המשימה, ואז כותב את הפרומפט (Signature) ואת המדד. הפרומפט מתאר את הקלט והפלט של המשימה; המדד משווה כל תשובה של המודל לתווית שתייגתם ומחזיר ציון בין 0 ל-1, וזה הציון שהאופטימיזציה תנסה להעלות. אפשר לבקש מהסוכן שינויים בצ'אט, לערוך כל שורה ישירות או לעבור למצב ידני.",
   "tutorial.step.data_upload.body": "עכשיו האימיילים שתייגת הופכים לחומר לימוד. בטופס האופטימיזציה בוחרים מהספרייה את הדאטאסט ששמרת, או מעלים קובץ. כל שורה היא דוגמה: האימייל הוא הקלט, והתווית שנתת היא התשובה הנכונה. מסמנים כל עמודה כקלט, כפלט או כלא בשימוש, ומהמיפוי נוצר הפרומפט (Signature).",
   "tutorial.step.data_upload.title": "מהתיוג לאופטימיזציה",
   "tutorial.step.dataset_actions.body": "מסמנים את התיבה של דאטאסט כדי לפעול עליו. סמל התגית שולח אותו לתיוג, סמל הטבלה עורך את השורות שלו, סמל האנשים קובע מי יכול לראות אותו, והעיפרון משנה את שמו. אפשר לסמן כמה דאטאסטים יחד ולמחוק אותם בבת אחת.",
   "tutorial.step.dataset_actions.title": "עבודה עם דאטאסט",
   "tutorial.step.dataset_add.body": "כל אופטימיזציה מתחילה מדאטאסט, ולכן מוסיפים אותו פעם אחת ומשתמשים בו בכל ריצה: לוחצים על «העלאת דאטאסט» כדי להעלות קובץ CSV, ‏JSON או Excel, או גוררים את הקובץ לרשימה. דאטאסט שיש בו כבר תשובה נכונה לכל שורה מוכן לאופטימיזציה; אם אין, מתייגים אותו קודם.",
   "tutorial.step.dataset_add.title": "הוספת דאטאסט",
+  "tutorial.step.live_run.body": "האופטימיזציה נשלחה ורצה עכשיו, ואפשר לעקוב אחריה בזמן אמת. הפס מתקדם בין השלבים: אימות הנתונים, חלוקת הדאטאסט, מדידת ציון הבסיס של הפרומפט המקורי, ואז סבבי שיפור שבכל אחד מהם נכתב פרומפט חדש ונמדד. ריצה אמיתית נמשכת דקות, ואפשר לסגור את העמוד ולחזור אליו. בסיום מופיעים כאן כרטיסי הציון.",
+  "tutorial.step.live_run.title": "האופטימיזציה רצה",
   "tutorial.step.models.body": "{p1} עונה על הדוגמאות, ו{p2} קורא את הטעויות שהמדד מצא ומציע פרומפט טוב יותר. כך כל סבב לומד מהסבב הקודם. לכל תפקיד בוחרים מודל והגדרות משלו.",
   "tutorial.step.result_actions.body": "אפשר לשתף ריצה בהרשאת צפייה או עריכה עם משתמשים מזוהים, או לפרסם אותה במפורש ל-Explorer של הארגון. שכפול פותח הגשה חדשה עם אותה הגדרה. בתפריט המקביל בסרגל הצד נמצאות גם פעולות שינוי שם, הצמדה ומחיקה.",
   "tutorial.step.result_actions.title": "שיתוף או שימוש חוזר בריצה",
   "tutorial.step.review.body": "הסיכום מציג את כל השרשרת במקום אחד: הדאטאסט המתויג, הפרומפט, המדד והמודלים, ולחיצה על כרטיס מחזירה לעריכה. אחרי השליחה האופטימיזציה מריצה את הפרומפט על הדוגמאות, מודדת אותו ומשכתבת אותו שוב ושוב.",
+  "tutorial.step.score_chart.body": "כרטיסי הציון למעלה משווים את הפרומפט המקורי לפרומפט המשופר על דוגמאות הבדיקה, שהאופטימיזציה לא ראתה. הגרף מראה את הדרך: כל נקודה היא פרומפט שנוסה, ואפשר לראות באיזה סבב הציון קפץ. קו שהתיישר מוקדם מרמז שהריצה מיצתה את עצמה; קו שעדיין עולה מרמז שכדאי לנסות ריצה ארוכה יותר.",
+  "tutorial.step.score_chart.title": "איך הציון השתפר",
   "tutorial.step.scores.body": "משווים לפני ואחרי על אותן דוגמאות מתויגות: ציון הבסיס הוא הפרומפט המקורי, הציון המשופר הוא הפרומפט שהאופטימיזציה מצאה, וביניהם אחוז השיפור. מכאן אפשר לנסות את הפרומפט החדש, לבדוק איך הוא נבנה ולייצא אותו.",
   "tutorial.step.scores.title": "האם זה עבד?",
   "tutorial.step.sidebar_nav.body": "בסרגל הצד עוברים בין הדפים. לחיצה על ‎⌘K או Ctrl+K מכל מקום פותחת חיפוש שקופץ לכל דף, פעולה או הגדרה.",
@@ -5182,13 +5230,15 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.tagger_modes.body": "כברירת מחדל ה-AI עובד על אוטופיילוט: אחרי ראיון קצר הוא מתייג את כל השורות לבד ומסמן לבדיקה את המקרים שבהם התלבט. בקו-פיילוט הוא מתייג סבב ראשון ואתם מאשרים כל תווית, ובמצב ידני כל החלטה נשארת אצלכם. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
   "tutorial.step.tagger_setup.body": "אופטימיזציה לומדת מדוגמאות שיש להן תשובה נכונה. כשיש רק טקסטים בלי תשובות, מתייגים אותם כאן. בדוגמה ניקח אימיילים ונתייג כל אחד לפי סוג. מעלים קובץ CSV, ‏JSON או Excel או בוחרים דאטאסט שמור, ומסמנים את עמודת הטקסט לתיוג.",
   "tutorial.step.tagger_setup.title": "מתחילים מהנתונים",
-  "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך (בדוגמה: spam, ‏important או promotional) או תשובה כתובה. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
+  "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך (בדוגמה: ספאם, חשוב או פרסומת) או תשובה כתובה. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
   "tutorial.step.tagger_task.title": "הגדרת המשימה",
-  "tutorial.track.data.desc": "העלאה, עריכה, תיוג, שיתוף ושימוש חוזר בדאטאסטים.",
+  "tutorial.step.tagging_live.body": "כל אימייל מוצג בנפרד, ולוחצים על הקטגוריה שמתאימה לו: ספאם, חשוב או פרסומת. מקשי 1 עד 3 בוחרים קטגוריה, והחצים עוברים בין אימיילים. פס ההתקדמות מראה כמה כבר תויגו, ו-U קופץ לאימייל הבא שעוד מחכה לתווית. בדוגמה שלושה אימיילים כבר תויגו, ואנחנו ברביעי.",
+  "tutorial.step.tagging_live.title": "ככה נראה תיוג",
+  "tutorial.track.data.desc": "הוספה וניהול של דאטאסטים, ואיך מתייגים אותם בעזרת AI או ידנית.",
   "tutorial.track.data.name": "הכנת נתונים",
-  "tutorial.track.quick.desc": "מסלול אחד מקצה לקצה: מתייגים אימיילים, מריצים עליהם אופטימיזציה ובודקים כמה היא שיפרה.",
+  "tutorial.track.quick.desc": "מסלול אחד מקצה לקצה: מתייגים אימיילים, שולחים עליהם אופטימיזציה, עוקבים אחריה בזמן אמת ובודקים כמה היא שיפרה.",
   "tutorial.track.quick.name": "התחלה מהירה",
-  "tutorial.track.results.desc": "קריאת ציונים, מסלולים, לוגים, קוד, תוצרים וייצוא.",
+  "tutorial.track.results.desc": "מה עושים עם ריצה שהסתיימה: מגמת הציון, עץ הניסיונות, ניסוי הפרומפט, קוד, תוצרים, לוגים וייצוא.",
   "tutorial.track.results.name": "שימוש בתוצאה",
   "tutorial.track.workspace.desc": "ניווט, חיפוש, מעקב אחרי ריצות ועבודה עם הסוכן.",
   "tutorial.track.workspace.name": "סביבת עבודה",

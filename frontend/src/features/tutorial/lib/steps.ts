@@ -12,11 +12,11 @@ import {
   DEMO_EMAIL_ROWS,
   DEMO_METRIC_CODE,
   DEMO_OPTIMIZATION_ID,
-  DEMO_SIGNATURE_CODE,
   getCachedDemoDashboardAnalytics,
   getCachedDemoDashboardJobs,
   getCachedDemoExplorePoints,
   getDemoDatasets,
+  getDemoSignatureCode,
 } from "./demo-data";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
@@ -39,7 +39,6 @@ export type TutorialTrack = "quick" | "data" | "results" | "workspace";
 
 const QUICK_ONLY: readonly TutorialTrack[] = ["quick"];
 const QUICK_AND_DATA: readonly TutorialTrack[] = ["quick", "data"];
-const QUICK_AND_RESULTS: readonly TutorialTrack[] = ["quick", "results"];
 const DATA_ONLY: readonly TutorialTrack[] = ["data"];
 const RESULTS_ONLY: readonly TutorialTrack[] = ["results"];
 const WORKSPACE_ONLY: readonly TutorialTrack[] = ["workspace"];
@@ -81,9 +80,6 @@ export interface TutorialTrackDefinition {
   name: string;
   description: string;
   icon: string;
-  stepCount: number;
-  /** Rounded wall-clock estimate, for setting expectations before starting. */
-  estimatedMinutes: number;
   steps: TutorialStep[];
 }
 
@@ -316,6 +312,29 @@ function injectDemoTaggerData(targetStep: number) {
   callTutorialHook("setTaggerStep", targetStep);
 }
 
+// Half the demo emails already carry a label, so the annotator shows real
+// progress and the next email still waiting for one.
+const DEMO_TAGGED_ROWS = 3;
+
+/** Open the tagger's labeling screen on the demo emails, part-way through. */
+async function showDemoTaggingSession() {
+  await ensureTagger();
+  const categories = [...new Set(DEMO_EMAIL_ROWS.map((row) => row.category))];
+  callTutorialHook("showTaggerDemoSession", {
+    rows: DEMO_EMAIL_ROWS.map((row, index) => ({ id: index + 1, email_text: row.email_text })),
+    textCol: "email_text",
+    categories: categories.map((category) => ({ id: category, label: category })),
+    labels: Object.fromEntries(
+      DEMO_EMAIL_ROWS.slice(0, DEMO_TAGGED_ROWS).map((row, index) => [
+        String(index + 1),
+        [row.category],
+      ]),
+    ),
+    index: DEMO_TAGGED_ROWS,
+  });
+  await waitForElement("[data-tutorial='tagger-annotation']");
+}
+
 // One shared object per tour, so re-injecting on every wizard step is a no-op
 // state update rather than a "new upload" that re-stages and re-profiles it.
 const DEMO_PARSED_DATASET = {
@@ -330,7 +349,7 @@ function injectSampleDataset() {
   callTutorialHook("setParsedDataset", DEMO_PARSED_DATASET);
   callTutorialHook("setColumnRoles", DEMO_COLUMN_ROLES);
   callTutorialHook("setDatasetFileName", "emails_sample.csv");
-  callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
+  callTutorialHook("setSignatureCode", getDemoSignatureCode());
   callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
 }
 
@@ -406,6 +425,21 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     readingTimeSec: 13,
   },
   {
+    id: "dd-tagging-live",
+    stage: "data",
+    title: msg("tutorial.step.tagging_live.title"),
+    description: msg("tutorial.step.tagging_live.body"),
+    target: "[data-tutorial='tagger-annotation']",
+    placement: "auto",
+    beforeShow: showDemoTaggingSession,
+    // Setup is unmounted while labeling, and the setup steps wait for it.
+    afterHide: () => {
+      callTutorialHook("clearTaggerDemoSession");
+    },
+    tracks: DATA_ONLY,
+    readingTimeSec: 15,
+  },
+  {
     id: "dd-data-upload",
     stage: "optimize",
     title: msg("tutorial.step.data_upload.title"),
@@ -421,26 +455,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     tracks: QUICK_ONLY,
     readingTimeSec: 16,
   },
-  {
-    id: "dd-code-agent",
-    stage: "optimize",
-    title: msg("tutorial.step.code_agent.title"),
-    description: msg("tutorial.step.code_agent.body"),
-    target: "[data-tutorial='code-agent']",
-    placement: "auto",
-    beforeShow: async () => {
-      await ensureSubmit();
-      injectSampleDataset();
-      showWizardSubstep("evaluation", "code-editors");
-      callTutorialHook("setCodeAssistMode", "auto");
-      callTutorialHook("chooseModule", "predict");
-      callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
-      callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
-      await waitForElement("[data-tutorial='code-agent']");
-    },
-    tracks: QUICK_ONLY,
-    readingTimeSec: 14,
-  },
+
   {
     id: "dd-code-setup",
     stage: "optimize",
@@ -454,12 +469,12 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       showWizardSubstep("evaluation", "code-editors");
       callTutorialHook("setCodeAssistMode", "auto");
       callTutorialHook("chooseModule", "predict");
-      callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
+      callTutorialHook("setSignatureCode", getDemoSignatureCode());
       callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
       await waitForElement("[data-tutorial='code-editors']");
     },
     tracks: QUICK_ONLY,
-    readingTimeSec: 15,
+    readingTimeSec: 18,
   },
 
   {
@@ -498,6 +513,30 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     readingTimeSec: 13,
   },
   {
+    id: "dd-live-run",
+    stage: "results",
+    title: msg("tutorial.step.live_run.title"),
+    description: msg("tutorial.step.live_run.body"),
+    target: "[data-tutorial='pipeline-stages']",
+    placement: "bottom",
+    beforeShow: async () => {
+      const path = `/optimizations/${DEMO_OPTIMIZATION_ID}`;
+      if (window.location.pathname === path) {
+        // Stepping back from the scores: stream the run again so the bar moves.
+        await ensureDemoDetail();
+        callTutorialHook("replayDemoSimulation");
+      } else {
+        resetDemoSimulation();
+        await showSubmitSplash();
+        await ensureDemoDetail();
+      }
+      setDetailTab("overview");
+      await waitForElement("[data-tutorial='pipeline-stages']");
+    },
+    tracks: QUICK_ONLY,
+    readingTimeSec: 10,
+  },
+  {
     id: "dd-scores",
     stage: "results",
     title: msg("tutorial.step.scores.title"),
@@ -505,24 +544,32 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     target: "[data-tutorial='score-cards']",
     placement: "bottom",
     beforeShow: async () => {
-      // Only the quick start just "submitted" the demo run; the results guide
-      // opens on the finished run instead of replaying a submission.
-      const onDetail = window.location.pathname === `/optimizations/${DEMO_OPTIMIZATION_ID}`;
-      if (!onDetail && queryTutorialHook("activeTutorialTrack") === "quick") {
-        resetDemoSimulation();
-        await showSubmitSplash();
-      }
       await ensureDemoDetail();
-      // Other guides describe a finished run; without this the page replays
-      // the run live and the optimized card shows a dash.
-      if (queryTutorialHook("activeTutorialTrack") !== "quick") {
-        callTutorialHook("finishDemoSimulation");
-      }
+      // Moving on before the live run ends jumps straight to its final scores.
+      callTutorialHook("finishDemoSimulation");
       setDetailTab("overview");
       await waitForElement("[data-tutorial='score-cards']");
     },
-    tracks: QUICK_AND_RESULTS,
+    tracks: QUICK_ONLY,
     readingTimeSec: 11,
+  },
+  {
+    id: "dd-score-chart",
+    stage: "results",
+    title: msg("tutorial.step.score_chart.title"),
+    description: msg("tutorial.step.score_chart.body"),
+    target: "[data-tutorial='score-chart']",
+    placement: "top",
+    beforeShow: async () => {
+      await ensureDemoDetail();
+      // This guide describes a finished run; without this the page replays
+      // the run live and the chart has no trials yet.
+      callTutorialHook("finishDemoSimulation");
+      setDetailTab("overview");
+      await waitForElement("[data-tutorial='score-chart']");
+    },
+    tracks: RESULTS_ONLY,
+    readingTimeSec: 13,
   },
   {
     id: "dd-trajectory",
@@ -749,15 +796,9 @@ function getVisibleSteps(): TutorialStep[] {
   });
 }
 
-// Reading time alone undersells a step: the tour also navigates, waits for
-// the target to paint, and gives the user a moment to look at it. Padding
-// each step keeps the menu's estimate from reading as optimistic.
-const STEP_OVERHEAD_SEC = 6;
-
 export function getTrack(trackId: TutorialTrack): TutorialTrackDefinition | undefined {
   const steps = getVisibleSteps().filter((s) => s.tracks.includes(trackId));
   if (steps.length === 0) return undefined;
-  const seconds = steps.reduce((sum, s) => sum + s.readingTimeSec + STEP_OVERHEAD_SEC, 0);
   const metadata: Record<TutorialTrack, { name: string; description: string }> = {
     quick: {
       name: msg("tutorial.track.quick.name"),
@@ -781,8 +822,6 @@ export function getTrack(trackId: TutorialTrack): TutorialTrackDefinition | unde
     name: metadata[trackId].name,
     description: metadata[trackId].description,
     icon: trackId,
-    stepCount: steps.length,
-    estimatedMinutes: Math.max(1, Math.round(seconds / 60)),
     steps,
   };
 }

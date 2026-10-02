@@ -32,7 +32,11 @@ import type {
 // Leaf import on purpose — the tutorial barrel deliberately does not re-export
 // the demo fixtures (see features/tutorial/index.ts).
 // eslint-disable-next-line no-restricted-imports -- deliberate leaf import; see above
-import { DEMO_OPTIMIZATION_ID } from "@/features/tutorial/lib/demo-data";
+import {
+  DEMO_OPTIMIZATION_ID,
+  getDemoDataTabDataset,
+  getDemoDataTabResults,
+} from "@/features/tutorial/lib/demo-data";
 
 type Split = "all" | "train" | "val" | "test";
 type ProgramType = "optimized" | "baseline";
@@ -103,92 +107,8 @@ export function DataTab({
 
   useEffect(() => {
     if (isDemoMode) {
-      setDataset({
-        total_rows: 12,
-        splits: {
-          train: [
-            { index: 0, row: { email_text: "Click here to win $1000 now!", category: "spam" } },
-            {
-              index: 1,
-              row: { email_text: "Meeting moved to 3pm tomorrow", category: "important" },
-            },
-            {
-              index: 2,
-              row: { email_text: "50% off all items this weekend only", category: "promotional" },
-            },
-            {
-              index: 3,
-              row: { email_text: "Your account has been compromised! Act now!", category: "spam" },
-            },
-            {
-              index: 4,
-              row: {
-                email_text: "Q3 budget review attached for your approval",
-                category: "important",
-              },
-            },
-            {
-              index: 5,
-              row: { email_text: "Flash sale: 70% off electronics today", category: "promotional" },
-            },
-            {
-              index: 6,
-              row: {
-                email_text: "Reminder: dentist appointment on Thursday",
-                category: "important",
-              },
-            },
-          ],
-          val: [
-            {
-              index: 7,
-              row: { email_text: "You've won a free iPhone! Claim here", category: "spam" },
-            },
-            {
-              index: 8,
-              row: {
-                email_text: "New company policy update effective Monday",
-                category: "important",
-              },
-            },
-          ],
-          test: [
-            {
-              index: 9,
-              row: { email_text: "Limited time offer: buy 1 get 1 free", category: "promotional" },
-            },
-            {
-              index: 10,
-              row: { email_text: "Team standup notes from Monday", category: "important" },
-            },
-            {
-              index: 11,
-              row: {
-                email_text: "Congratulations! You've been selected for a prize",
-                category: "spam",
-              },
-            },
-          ],
-        },
-        column_mapping: { inputs: { email_text: "email_text" }, outputs: { category: "category" } },
-        split_counts: { train: 7, val: 2, test: 3 },
-      });
-      setTestResults({
-        optimized: {
-          7: { index: 7, outputs: { category: "spam" }, score: 0.0, pass: false },
-          8: { index: 8, outputs: { category: "important" }, score: 1.0, pass: true },
-          9: { index: 9, outputs: { category: "promotional" }, score: 1.0, pass: true },
-          10: { index: 10, outputs: { category: "important" }, score: 0.0, pass: false },
-          11: { index: 11, outputs: { category: "spam" }, score: 1.0, pass: true },
-        },
-        baseline: {
-          7: { index: 7, outputs: { category: "promotional" }, score: 0.0, pass: false },
-          8: { index: 8, outputs: { category: "important" }, score: 1.0, pass: true },
-          9: { index: 9, outputs: { category: "spam" }, score: 0.0, pass: false },
-          10: { index: 10, outputs: { category: "important" }, score: 1.0, pass: true },
-          11: { index: 11, outputs: { category: "promotional" }, score: 0.0, pass: false },
-        },
-      });
+      setDataset(getDemoDataTabDataset());
+      setTestResults(getDemoDataTabResults());
       setLoading(false);
       return;
     }
