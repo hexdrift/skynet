@@ -2237,10 +2237,6 @@ export type MessageKey =
   | "tagger.assist.retry"
   | "tagger.assist.review.predicting"
   | "tagger.assist.rubric.answer_style"
-  | "tagger.assist.rubric.dataset_hint"
-  | "tagger.assist.rubric.dataset_rows"
-  | "tagger.assist.rubric.dataset_title"
-  | "tagger.assist.rubric.generating"
   | "tagger.assist.rubric.guide_hint"
   | "tagger.assist.rubric.guide_title"
   | "tagger.assist.rubric.rule_add"
@@ -2261,7 +2257,6 @@ export type MessageKey =
   | "tagger.assist.setup.recommended"
   | "tagger.assist.setup.step_label"
   | "tagger.assist.setup.title"
-  | "tagger.assist.synthesize_error"
   | "tagger.library.name_cancel"
   | "tagger.library.name_label"
   | "tagger.library.name_save"
@@ -2319,10 +2314,6 @@ export type MessageKey =
   | "tagger.setup.library_loading"
   | "tagger.setup.library_or"
   | "tagger.setup.library_pick"
-  | "tagger.setup.synthetic_hint"
-  | "tagger.setup.synthetic_manual_hint"
-  | "tagger.setup.synthetic_pick"
-  | "tagger.setup.synthetic_source_name"
   | "tagger.upload.parse_failed"
   | "tooltip.analytics.dataset_buckets"
   | "tooltip.analytics.improvement_histogram"
@@ -2551,7 +2542,6 @@ export type MessageKey =
   | "tutorial.step.sidebar_nav.title"
   | "tutorial.step.tagger_modes.body"
   | "tutorial.step.tagger_setup.body"
-  | "tutorial.step.tagger_setup.body_manual"
   | "tutorial.step.tagger_setup.title"
   | "tutorial.step.tagger_task.body"
   | "tutorial.step.tagger_task.title"
@@ -3863,7 +3853,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.components.concepts.guide.literal.355": "האשף",
   "auto.features.tutorial.components.concepts.guide.literal.356": "הגדרת ריצה עוברת ארבעה שלבים: מטרה, הערכה, אופטימיזציה וסקירה. ההתקדמות נשמרת אוטומטית כטיוטה, וכשחוזרים לאשף אפשר להמשיך מאותו שלב או להתחיל מחדש.",
   "auto.features.tutorial.components.concepts.guide.literal.357": "נתונים ותיוג",
-  "auto.features.tutorial.components.concepts.guide.literal.358": "ספריית הדאטאסטים שומרת קובצי CSV, ‏JSON ו-Excel לשימוש חוזר, עם עריכה בגיליון ושיתוף הרשאות. בדף התיוג מתייגים שורות ידנית, עם קו-פיילוט או באוטופיילוט. כשסיוע ה-AI פעיל אפשר גם ליצור דאטאסט סינתטי מתוך ראיון קצר על המשימה.",
+  "auto.features.tutorial.components.concepts.guide.literal.358": "ספריית הדאטאסטים שומרת קובצי CSV, ‏JSON ו-Excel לשימוש חוזר, עם עריכה בגיליון ושיתוף הרשאות. בדף התיוג מתייגים שורות ידנית, עם קו-פיילוט או באוטופיילוט.",
   "auto.features.tutorial.components.concepts.guide.literal.359": "מעקב אחרי ריצות",
   "auto.features.tutorial.components.concepts.guide.literal.360": "בדף הריצה הלשוניות מפרידות בין הציונים והמסלול (סקירה), הרצה על קלט חדש (שימוש), הנתונים, הקוד, התוצר, הלוגים ופעילות המודלים. אפשר להשהות ריצה פעילה: היא נשמרת בנקודת ביקורת ועוברת לסטטוס",
   "auto.features.tutorial.components.concepts.guide.literal.361": ". כשממשיכים אותה היא חוזרת לעבוד מאותה נקודה, ואפשר גם להריץ אותה מחדש מההתחלה.",
@@ -4886,10 +4876,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.retry": "נסו שוב",
   "tagger.assist.review.predicting": "ה-AI מתייג את השורה הזו…",
   "tagger.assist.rubric.answer_style": "סגנון מענה",
-  "tagger.assist.rubric.dataset_hint": "כך העוזר הבין את הנתונים שאתם צריכים. השורות נכתבות כשמתחילים.",
-  "tagger.assist.rubric.dataset_rows": "{count} שורות",
-  "tagger.assist.rubric.dataset_title": "הדאטאסט שייווצר",
-  "tagger.assist.rubric.generating": "יוצר את הדאטאסט…",
   "tagger.assist.rubric.guide_hint": "זוקק מהתשובות שלכם — אפשר לערוך הכול; הוא מנחה כל תיוג של ה-AI.",
   "tagger.assist.rubric.guide_title": "מדריך התיוג",
   "tagger.assist.rubric.rule_add": "הוספת כלל",
@@ -4910,7 +4896,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.assist.setup.recommended": "מומלץ",
   "tagger.assist.setup.step_label": "גישה",
   "tagger.assist.setup.title": "איך תרצו לתייג?",
-  "tagger.assist.synthesize_error": "לא הצלחנו ליצור את הדאטאסט. נסו שוב.",
   "tagger.library.name_cancel": "ביטול",
   "tagger.library.name_label": "שם הדאטאסט",
   "tagger.library.name_save": "שמירה",
@@ -4968,10 +4953,6 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tagger.setup.library_loading": "טוען את הדאטאסט מהספרייה…",
   "tagger.setup.library_or": "או",
   "tagger.setup.library_pick": "בחירה מהספרייה שלכם",
-  "tagger.setup.synthetic_hint": "עדיין אין דאטאסט? בחרו כאן והעוזר ישאל אילו נתונים אתם צריכים, ואז יכתוב אותם לפני שהתיוג מתחיל.",
-  "tagger.setup.synthetic_manual_hint": "דאטאסט סינתטי נבנה בראיון, אז הוא דורש את העוזר.",
-  "tagger.setup.synthetic_pick": "יצירת דאטאסט סינתטי",
-  "tagger.setup.synthetic_source_name": "דאטאסט סינתטי",
   "tagger.upload.parse_failed": "טעינת הקובץ נכשלה",
   "tooltip.analytics.dataset_buckets": "עמודות לכל טווח גודל {term.dataset}, והקו מציג את ה{term.scoreImprovement} הממוצע באותו טווח",
   "tooltip.analytics.improvement_histogram": "כמה {term.optimizationPlural} הגיעו לכל טווח {term.scoreImprovement} (בנקודות אחוז)",
@@ -5199,8 +5180,7 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.sidebar_nav.body": "בסרגל הצד עוברים בין הדפים. לחיצה על ‎⌘K או Ctrl+K מכל מקום פותחת חיפוש שקופץ לכל דף, פעולה או הגדרה.",
   "tutorial.step.sidebar_nav.title": "התמצאות באפליקציה",
   "tutorial.step.tagger_modes.body": "כברירת מחדל ה-AI עובד על אוטופיילוט: אחרי ראיון קצר הוא מתייג את כל השורות לבד ומסמן לבדיקה את המקרים שבהם התלבט. בקו-פיילוט הוא מתייג סבב ראשון ואתם מאשרים כל תווית, ובמצב ידני כל החלטה נשארת אצלכם. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
-  "tutorial.step.tagger_setup.body": "אופטימיזציה לומדת מדוגמאות שיש להן תשובה נכונה. כשיש רק טקסטים בלי תשובות, מתייגים אותם כאן. בדוגמה ניקח אימיילים ונתייג כל אחד לפי סוג. מעלים קובץ CSV, ‏JSON או Excel, בוחרים דאטאסט שמור או יוצרים דאטאסט סינתטי מתוך ראיון קצר, ומסמנים את עמודת הטקסט לתיוג.",
-  "tutorial.step.tagger_setup.body_manual": "אופטימיזציה לומדת מדוגמאות שיש להן תשובה נכונה. כשיש רק טקסטים בלי תשובות, מתייגים אותם כאן. בדוגמה ניקח אימיילים ונתייג כל אחד לפי סוג. מעלים קובץ CSV, ‏JSON או Excel או בוחרים דאטאסט שמור, ומסמנים את עמודת הטקסט לתיוג.",
+  "tutorial.step.tagger_setup.body": "אופטימיזציה לומדת מדוגמאות שיש להן תשובה נכונה. כשיש רק טקסטים בלי תשובות, מתייגים אותם כאן. בדוגמה ניקח אימיילים ונתייג כל אחד לפי סוג. מעלים קובץ CSV, ‏JSON או Excel או בוחרים דאטאסט שמור, ומסמנים את עמודת הטקסט לתיוג.",
   "tutorial.step.tagger_setup.title": "מתחילים מהנתונים",
   "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך (בדוגמה: spam, ‏important או promotional) או תשובה כתובה. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
   "tutorial.step.tagger_task.title": "הגדרת המשימה",

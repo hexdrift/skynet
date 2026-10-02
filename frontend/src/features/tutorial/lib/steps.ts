@@ -370,12 +370,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
     id: "dd-tagger-setup",
     stage: "data",
     title: msg("tutorial.step.tagger_setup.title"),
-    // The synthetic-dataset option only renders with AI assist on.
-    get description() {
-      return queryTutorialHook("taggerAssistAvailable") === false
-        ? msg("tutorial.step.tagger_setup.body_manual")
-        : msg("tutorial.step.tagger_setup.body");
-    },
+    description: msg("tutorial.step.tagger_setup.body"),
     target: "[data-tutorial='tagger-data']",
     placement: "auto",
     beforeShow: async () => {

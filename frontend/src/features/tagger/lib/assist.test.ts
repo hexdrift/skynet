@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEFAULT_SYNTHETIC_ROWS, initialAssistState, pendingDatasetSpec } from "./assist.ts";
 import { prefillFreetextPredictions } from "./freetext-prefill.ts";
 
 test("prefills generated free-text labels for a restored review round", () => {
@@ -29,24 +28,4 @@ test("does not replace a human edit or insert an empty prediction", () => {
   );
 
   assert.equal(annotations, original);
-});
-
-test("a synthetic session launches from the interview's dataset spec", () => {
-  const spec = { brief: "Bank support chats", columns: ["text"], rows: 50 };
-  assert.equal(pendingDatasetSpec({ ...initialAssistState("copilot"), datasetSpec: spec }), spec);
-});
-
-test("falls back to the user's answers when the interview returned no spec", () => {
-  const assist = initialAssistState("autopilot");
-  assist.interview.turns = [
-    { role: "assistant", content: "What data do you need?" },
-    { role: "user", content: " Hotel reviews " },
-    { role: "user", content: "In Hebrew" },
-  ];
-  assert.deepEqual(pendingDatasetSpec(assist), {
-    brief: "Hotel reviews\nIn Hebrew",
-    columns: [],
-    rows: DEFAULT_SYNTHETIC_ROWS,
-  });
-  assert.equal(pendingDatasetSpec(initialAssistState("copilot")), null);
 });

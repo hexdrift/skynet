@@ -132,7 +132,7 @@ export interface TutorialQueries {
   hasDashboardData: () => boolean;
   /** Check if the tagger setup has data loaded. */
   hasTaggerData: () => boolean;
-  /** Whether the tagger setup offers AI assist (mode picker, synthetic data). */
+  /** Whether the tagger setup offers AI assist (mode picker). */
   taggerAssistAvailable: () => boolean;
   /** The guide currently running, or null when none is. */
   activeTutorialTrack: () => TutorialTrack | null;
