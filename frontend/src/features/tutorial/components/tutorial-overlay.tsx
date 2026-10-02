@@ -496,8 +496,9 @@ export function TutorialOverlay() {
       else nextStep();
     };
 
-    document.addEventListener("click", onClick);
-    return () => document.removeEventListener("click", onClick);
+    // Capture phase, so a handler that stops propagation can't swallow it.
+    window.addEventListener("click", onClick, true);
+    return () => window.removeEventListener("click", onClick, true);
   }, [
     state.isVisible,
     stepReady,
