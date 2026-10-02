@@ -15,6 +15,7 @@ import type {
   PaginatedJobsResponse,
   OptimizationPayloadResponse,
   OptimizationSummaryResponse,
+  OptimizationDatasetResponse,
 } from "@/shared/types/api";
 import type {
   DashboardAnalytics,
@@ -31,28 +32,112 @@ import { TUTORIAL_DEMO_RUN_MS } from "./tutorial-timing";
 export const DEMO_OPTIMIZATION_ID = "a7e3b291-4d2f-4f8c-b142-9d5e6f8a1c3b";
 export const DEMO_GRID_OPTIMIZATION_ID = "c3f9d215-8a47-4e6b-a1d3-7b2f9c58e4a1";
 
+function demoCategories() {
+  return {
+    spam: msg("tutorial.demo.category.spam"),
+    important: msg("tutorial.demo.category.important"),
+    promotional: msg("tutorial.demo.category.promotional"),
+  };
+}
+
+function demoCategoryParams() {
+  const { spam, important, promotional } = demoCategories();
+  return { p1: spam, p2: important, p3: promotional };
+}
+
 /**
  * The emails the quick start tags and then optimizes. The tagger shows their
  * text and the wizard loads them with labels, so both screens show the same rows.
  */
-export const DEMO_EMAIL_ROWS: ReadonlyArray<{ email_text: string; category: string }> = [
-  { email_text: "Click here to win $1000 now!", category: "spam" },
-  { email_text: "Meeting moved to 3pm tomorrow", category: "important" },
-  { email_text: "50% off all items this weekend only", category: "promotional" },
-  { email_text: "Your quarterly report is ready for review", category: "important" },
-  { email_text: "Free gift card waiting for you", category: "spam" },
-  { email_text: "Team standup notes from Monday", category: "important" },
-];
+export const DEMO_EMAIL_ROWS: ReadonlyArray<{ email_text: string; category: string }> = perLocale(
+  () => {
+    const c = demoCategories();
+    return [
+      { email_text: msg("tutorial.demo.email.1"), category: c.spam },
+      { email_text: msg("tutorial.demo.email.2"), category: c.important },
+      { email_text: msg("tutorial.demo.email.3"), category: c.promotional },
+      { email_text: msg("tutorial.demo.email.4"), category: c.important },
+      { email_text: msg("tutorial.demo.email.5"), category: c.spam },
+      { email_text: msg("tutorial.demo.email.6"), category: c.important },
+    ];
+  },
+);
 
-export const DEMO_SIGNATURE_CODE = `class EmailClassifier(dspy.Signature):
-    """Classify an email into a category: spam, important, or promotional."""
+/** The labeled emails the demo result's Data tab lists, by split. */
+export function getDemoDataTabDataset(): OptimizationDatasetResponse {
+  const c = demoCategories();
+  const rows = [
+    ["tutorial.demo.email.1", c.spam],
+    ["tutorial.demo.email.2", c.important],
+    ["tutorial.demo.email.3", c.promotional],
+    ["tutorial.demo.email.7", c.spam],
+    ["tutorial.demo.email.8", c.important],
+    ["tutorial.demo.email.9", c.promotional],
+    ["tutorial.demo.email.10", c.important],
+    ["tutorial.demo.email.11", c.spam],
+    ["tutorial.demo.email.12", c.important],
+    ["tutorial.demo.email.13", c.promotional],
+    ["tutorial.demo.email.6", c.important],
+    ["tutorial.demo.email.14", c.spam],
+  ] as const;
+  const indexed = rows.map(([key, category], index) => ({
+    index,
+    row: { email_text: msg(key), category },
+  }));
+  return {
+    total_rows: indexed.length,
+    splits: { train: indexed.slice(0, 7), val: indexed.slice(7, 9), test: indexed.slice(9) },
+    column_mapping: { inputs: { email_text: "email_text" }, outputs: { category: "category" } },
+    split_counts: { train: 7, val: 2, test: 3 },
+  };
+}
+
+/** Baseline vs optimized answers for the Data tab's validation and test rows. */
+export function getDemoDataTabResults(): Record<
+  "optimized" | "baseline",
+  Record<number, { index: number; outputs: { category: string }; score: number; pass: boolean }>
+> {
+  const c = demoCategories();
+  const result = (index: number, category: string, pass: boolean) => ({
+    index,
+    outputs: { category },
+    score: pass ? 1 : 0,
+    pass,
+  });
+  return {
+    optimized: {
+      7: result(7, c.spam, true),
+      8: result(8, c.important, true),
+      9: result(9, c.promotional, true),
+      10: result(10, c.promotional, false),
+      11: result(11, c.spam, true),
+    },
+    baseline: {
+      7: result(7, c.promotional, false),
+      8: result(8, c.important, true),
+      9: result(9, c.spam, false),
+      10: result(10, c.important, true),
+      11: result(11, c.promotional, false),
+    },
+  };
+}
+
+export function getDemoSignatureCode(): string {
+  return `class EmailClassifier(dspy.Signature):
+    """${msg("tutorial.demo.signature.doc", demoCategoryParams())}"""
 
     # inputs
-    email_text: str = dspy.InputField(desc="The email content to classify")
+    email_text: str = dspy.InputField(desc="${msg("tutorial.demo.signature.input_desc")}")
 
     # outputs
-    category: str = dspy.OutputField(desc="One of: spam, important, promotional")
+    category: str = dspy.OutputField(desc="${msg("tutorial.demo.signature.output_desc", demoCategoryParams())}")
 `;
+}
+
+/** Plain-language summary of the demo task, as the serve panel shows it. */
+export function getDemoServeInstructions(): string {
+  return msg("tutorial.demo.signature.doc", demoCategoryParams());
+}
 
 export const DEMO_METRIC_CODE = `def metric(example: dspy.Example, prediction: dspy.Prediction, trace: bool = None) -> float:
     return float(example.category.strip().lower() == prediction.category.strip().lower())
@@ -63,7 +148,7 @@ export function buildDemoOptimizationPayload(): OptimizationPayloadResponse {
     optimization_id: DEMO_OPTIMIZATION_ID,
     optimization_type: "run",
     payload: {
-      signature_code: DEMO_SIGNATURE_CODE,
+      signature_code: getDemoSignatureCode(),
       metric_code: DEMO_METRIC_CODE,
     },
   };
@@ -627,24 +712,24 @@ function buildDone(start: Date): OptimizationStatusResponse {
       },
       program_artifact: {
         program_state_json: {
-          "predict.signature.instructions":
-            "Classify each email as spam, important, or promotional. Use the message's intent, urgency, and requested action; do not classify from isolated keywords alone.",
+          "predict.signature.instructions": formatMsg(
+            "tutorial.demo.instructions",
+            demoCategoryParams(),
+          ),
         },
         optimized_prompt: {
           predictor_name: "EmailClassifier",
           signature_name: "EmailClassifier",
-          instructions:
-            "Classify each email as spam, important, or promotional. Use the message's intent, urgency, and requested action; do not classify from isolated keywords alone.",
+          instructions: formatMsg("tutorial.demo.instructions", demoCategoryParams()),
           input_fields: ["email_text"],
           output_fields: ["category"],
           demos: [
             {
-              inputs: { email_text: "Your quarterly report is ready for review" },
-              outputs: { category: "important" },
+              inputs: { email_text: msg("tutorial.demo.email.4") },
+              outputs: { category: demoCategories().important },
             },
           ],
-          formatted_prompt:
-            "Classify each email as spam, important, or promotional. Use the message's intent, urgency, and requested action; do not classify from isolated keywords alone.\n\nInput: {email_text}\nOutput: {category}",
+          formatted_prompt: `${formatMsg("tutorial.demo.instructions", demoCategoryParams())}\n\nInput: {email_text}\nOutput: {category}`,
         },
       },
     },
@@ -793,7 +878,7 @@ export function getDemoDatasets(): DatasetSummary[] {
   return [
     {
       id: DEMO_DATASET_ID,
-      name: "emails",
+      name: msg("tutorial.demo.dataset_name"),
       source: "upload",
       row_count: 1200,
       column_count: 3,

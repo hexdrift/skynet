@@ -2523,6 +2523,28 @@ export type MessageKey =
   | "tutorial.concepts.tagging.start.body"
   | "tutorial.concepts.tagging.start.title"
   | "tutorial.concepts.tagging.title"
+  | "tutorial.demo.category.important"
+  | "tutorial.demo.category.promotional"
+  | "tutorial.demo.category.spam"
+  | "tutorial.demo.dataset_name"
+  | "tutorial.demo.email.1"
+  | "tutorial.demo.email.10"
+  | "tutorial.demo.email.11"
+  | "tutorial.demo.email.12"
+  | "tutorial.demo.email.13"
+  | "tutorial.demo.email.14"
+  | "tutorial.demo.email.2"
+  | "tutorial.demo.email.3"
+  | "tutorial.demo.email.4"
+  | "tutorial.demo.email.5"
+  | "tutorial.demo.email.6"
+  | "tutorial.demo.email.7"
+  | "tutorial.demo.email.8"
+  | "tutorial.demo.email.9"
+  | "tutorial.demo.instructions"
+  | "tutorial.demo.signature.doc"
+  | "tutorial.demo.signature.input_desc"
+  | "tutorial.demo.signature.output_desc"
   | "tutorial.stage.aria"
   | "tutorial.stage.data"
   | "tutorial.stage.optimize"
@@ -3956,9 +3978,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "auto.features.tutorial.lib.demo.data.literal.5": "מתחילים אופטימיזציה: סיווג אימיילים",
   "auto.features.tutorial.lib.demo.data.literal.6": "מתחילים אופטימיזציה: סיווג אימיילים",
   "auto.features.tutorial.lib.demo.data.literal.7": "סיווג אימיילים",
-  "auto.features.tutorial.lib.demo.data.literal.8": "סיווג אימיילים לקטגוריות: spam, important, promotional",
+  "auto.features.tutorial.lib.demo.data.literal.8": "סיווג אימיילים לקטגוריות: ספאם, חשוב, פרסומת",
   "auto.features.tutorial.lib.demo.data.literal.9": "ניתוח סנטימנט",
-  "auto.features.tutorial.lib.demo.data.template.1": "{p1} לסיווג אימיילים לקטגוריות: spam, important, promotional",
+  "auto.features.tutorial.lib.demo.data.template.1": "{p1} לסיווג אימיילים לקטגוריות: ספאם, חשוב, פרסומת",
   "auto.features.tutorial.lib.demo.data.template.2": "סריקת {p1}: ארבעה {p2} {p3}/{p4} על אותה {p5}",
   "auto.features.tutorial.lib.demo.data.template.3": "סריקת {p1}: ארבעה {p2} {p3}/{p4} על אותה {p5}",
   "auto.features.tutorial.lib.steps.literal.20": "פרומפט (Signature)",
@@ -5181,6 +5203,28 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.concepts.tagging.start.body": "בדף התיוג מעלים קובץ CSV, ‏JSON או Excel, או בוחרים דאטאסט שמור מהספרייה, ומסמנים את עמודות הטקסט לתיוג. אחר כך מגדירים את המשימה: שאלת כן/לא, בחירה מתוך קטגוריות שהגדרתם, או תשובה כתובה.",
   "tutorial.concepts.tagging.start.title": "מאיפה מתחילים",
   "tutorial.concepts.tagging.title": "תיוג הנתונים",
+  "tutorial.demo.category.important": "חשוב",
+  "tutorial.demo.category.promotional": "פרסומת",
+  "tutorial.demo.category.spam": "ספאם",
+  "tutorial.demo.dataset_name": "אימיילים",
+  "tutorial.demo.email.1": "לחצו כאן וזכו ב-1,000 ₪ עכשיו!",
+  "tutorial.demo.email.10": "תזכורת: תור לרופא השיניים ביום חמישי",
+  "tutorial.demo.email.11": "זכיתם באייפון חינם! לחצו כאן לקבלה",
+  "tutorial.demo.email.12": "עדכון מדיניות החברה, בתוקף מיום שני",
+  "tutorial.demo.email.13": "לזמן מוגבל: קנו אחד וקבלו את השני חינם",
+  "tutorial.demo.email.14": "מזל טוב! נבחרתם לזכות בפרס",
+  "tutorial.demo.email.2": "הפגישה נדחתה למחר ב-15:00",
+  "tutorial.demo.email.3": "50% הנחה על כל המוצרים, רק בסוף השבוע",
+  "tutorial.demo.email.4": "הדוח הרבעוני מוכן לבדיקה",
+  "tutorial.demo.email.5": "כרטיס מתנה חינם מחכה לכם",
+  "tutorial.demo.email.6": "סיכום ישיבת הצוות מיום שני",
+  "tutorial.demo.email.7": "החשבון שלכם נפרץ! פעלו עכשיו!",
+  "tutorial.demo.email.8": "סקירת התקציב לרבעון השלישי מצורפת לאישורכם",
+  "tutorial.demo.email.9": "מבצע בזק: 70% הנחה על מוצרי חשמל, היום בלבד",
+  "tutorial.demo.instructions": "סווגו כל אימייל כ{p1}, {p2} או {p3}. התבססו על הכוונה של ההודעה, על הדחיפות שלה ועל הפעולה שהיא מבקשת, ולא על מילות מפתח בודדות.",
+  "tutorial.demo.signature.doc": "סיווג אימייל לאחת הקטגוריות: {p1}, {p2} או {p3}.",
+  "tutorial.demo.signature.input_desc": "תוכן האימייל לסיווג",
+  "tutorial.demo.signature.output_desc": "אחת מהקטגוריות: {p1}, {p2}, {p3}",
   "tutorial.stage.aria": "השלב בתהליך",
   "tutorial.stage.data": "נתונים",
   "tutorial.stage.optimize": "אופטימיזציה",
@@ -5216,9 +5260,9 @@ export const UI_MESSAGES: Record<MessageKey, string> = {
   "tutorial.step.tagger_setup.body": "אופטימיזציה לומדת מדוגמאות שיש להן תשובה נכונה. כשיש רק טקסטים בלי תשובות, מתייגים אותם כאן. בדוגמה ניקח אימיילים ונתייג כל אחד לפי סוג. מעלים קובץ CSV, ‏JSON או Excel, בוחרים דאטאסט שמור או יוצרים דאטאסט סינתטי מתוך ראיון קצר, ומסמנים את עמודת הטקסט לתיוג.",
   "tutorial.step.tagger_setup.body_manual": "אופטימיזציה לומדת מדוגמאות שיש להן תשובה נכונה. כשיש רק טקסטים בלי תשובות, מתייגים אותם כאן. בדוגמה ניקח אימיילים ונתייג כל אחד לפי סוג. מעלים קובץ CSV, ‏JSON או Excel או בוחרים דאטאסט שמור, ומסמנים את עמודת הטקסט לתיוג.",
   "tutorial.step.tagger_setup.title": "מתחילים מהנתונים",
-  "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך (בדוגמה: spam, ‏important או promotional) או תשובה כתובה. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
+  "tutorial.step.tagger_task.body": "בוחרים איך עונים על כל שורה: שאלת כן/לא, אחת מהקטגוריות שלך (בדוגמה: ספאם, חשוב או פרסומת) או תשובה כתובה. בסוף שומרים את התיוג בספריית הדאטאסטים, ומשם הוא ממשיך לאופטימיזציה.",
   "tutorial.step.tagger_task.title": "הגדרת המשימה",
-  "tutorial.step.tagging_live.body": "כל אימייל מוצג בנפרד, ולוחצים על הקטגוריה שמתאימה לו: spam, ‏important או promotional. מקשי 1 עד 3 בוחרים קטגוריה, והחצים עוברים בין אימיילים. פס ההתקדמות מראה כמה כבר תויגו, ו-U קופץ לאימייל הבא שעוד מחכה לתווית. בדוגמה שלושה אימיילים כבר תויגו, ואנחנו ברביעי.",
+  "tutorial.step.tagging_live.body": "כל אימייל מוצג בנפרד, ולוחצים על הקטגוריה שמתאימה לו: ספאם, חשוב או פרסומת. מקשי 1 עד 3 בוחרים קטגוריה, והחצים עוברים בין אימיילים. פס ההתקדמות מראה כמה כבר תויגו, ו-U קופץ לאימייל הבא שעוד מחכה לתווית. בדוגמה שלושה אימיילים כבר תויגו, ואנחנו ברביעי.",
   "tutorial.step.tagging_live.title": "ככה נראה תיוג",
   "tutorial.track.advanced.desc": "ההתחלה המהירה בגרסה המלאה: תיוג בפועל, חלוקת הדאטאסט, עומק החיפוש, ובסוף גרף הציון ועץ המועמדים.",
   "tutorial.track.advanced.name": "מדריך מתקדם",

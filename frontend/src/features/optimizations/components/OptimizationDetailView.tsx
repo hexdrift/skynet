@@ -65,6 +65,7 @@ import {
   buildDemoOptimizationPayload,
   buildGridDemoJob,
   finishDemoSimulation,
+  getDemoServeInstructions,
   resetDemoSimulation,
   startDemoSimulation,
 } from "@/features/tutorial/lib/demo-data";
@@ -284,7 +285,8 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
   // counts the moment it flips to success. Demo runs are excluded.
   const resultsViewedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!id || isAnyDemoMode || job?.status !== "success" || resultsViewedFor.current === id) return;
+    if (!id || isAnyDemoMode || job?.status !== "success" || resultsViewedFor.current === id)
+      return;
     resultsViewedFor.current = id;
     track(TelemetryEvent.ResultsViewed, {
       optimization_type: job.optimization_type,
@@ -611,7 +613,7 @@ export function OptimizationDetailView({ shareData }: { shareData?: SharedOptimi
         model_name: "gpt-4o-mini",
         input_fields: ["email_text"],
         output_fields: ["category"],
-        instructions: "Classify an email into a category: spam, important, or promotional.",
+        instructions: getDemoServeInstructions(),
         demo_count: 3,
       });
     }

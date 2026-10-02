@@ -98,7 +98,7 @@ test("the demo result includes the source code highlighted by the guide", () => 
   const demo = readFileSync(DEMO_DATA_PATH, "utf8");
   const detail = readFileSync(DETAIL_VIEW_PATH, "utf8");
 
-  assert.match(demo, /signature_code: DEMO_SIGNATURE_CODE/);
+  assert.match(demo, /signature_code: getDemoSignatureCode\(\)/);
   assert.match(demo, /metric_code: DEMO_METRIC_CODE/);
   assert.match(detail, /setPayload\(buildDemoOptimizationPayload\(\)\)/);
 });

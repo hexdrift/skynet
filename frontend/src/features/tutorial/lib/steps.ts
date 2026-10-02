@@ -12,11 +12,11 @@ import {
   DEMO_EMAIL_ROWS,
   DEMO_METRIC_CODE,
   DEMO_OPTIMIZATION_ID,
-  DEMO_SIGNATURE_CODE,
   getCachedDemoDashboardAnalytics,
   getCachedDemoDashboardJobs,
   getCachedDemoExplorePoints,
   getDemoDatasets,
+  getDemoSignatureCode,
 } from "./demo-data";
 import { TERMS } from "@/shared/lib/terms";
 import { formatMsg, msg } from "@/shared/lib/messages";
@@ -365,7 +365,7 @@ function injectSampleDataset() {
   callTutorialHook("setParsedDataset", DEMO_PARSED_DATASET);
   callTutorialHook("setColumnRoles", DEMO_COLUMN_ROLES);
   callTutorialHook("setDatasetFileName", "emails_sample.csv");
-  callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
+  callTutorialHook("setSignatureCode", getDemoSignatureCode());
   callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
 }
 
@@ -506,7 +506,7 @@ const tutorialSteps: TutorialStep[] = perLocale(() => [
       showWizardSubstep("evaluation", "code-editors");
       callTutorialHook("setCodeAssistMode", "auto");
       callTutorialHook("chooseModule", "predict");
-      callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
+      callTutorialHook("setSignatureCode", getDemoSignatureCode());
       callTutorialHook("setMetricCode", DEMO_METRIC_CODE);
       await waitForElement("[data-tutorial='code-editors']");
     },
