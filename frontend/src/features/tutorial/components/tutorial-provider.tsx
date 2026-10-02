@@ -226,6 +226,7 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
       // one-shot) so a fresh tour run gets a fresh splash, not the leftover
       // state from the previous run.
       steps.resetTutorialOneShotState();
+      steps.warmTrackRoutes(track);
       dispatch({ type: "START_TRACK", track });
     });
   }, []);

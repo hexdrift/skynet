@@ -175,6 +175,25 @@ function showSubmitSplash(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, TUTORIAL_SUBMIT_SPLASH_MS));
 }
 
+// The pages each guide visits, in order. Warmed when the guide starts so its
+// route changes land on an already-loaded page instead of waiting on one.
+const TRACK_ROUTES: Record<TutorialTrack, readonly string[]> = {
+  quick: ["/tagger", "/submit", `/optimizations/${DEMO_OPTIMIZATION_ID}`],
+  data: ["/datasets", "/tagger"],
+  results: [`/optimizations/${DEMO_OPTIMIZATION_ID}`],
+  workspace: ["/", "/explore"],
+};
+
+export function warmTrackRoutes(track: TutorialTrack): void {
+  for (const path of TRACK_ROUTES[track]) {
+    if (path === window.location.pathname) continue;
+    callTutorialHook("routerPrefetch", path);
+    // The dev server compiles a route on its first request (seconds each) and
+    // router.prefetch is a no-op in development, so request the page itself.
+    if (process.env.NODE_ENV === "development") void fetch(path).catch(() => {});
+  }
+}
+
 export function resetTutorialOneShotState(): void {
   // Reserved for future per-tour ephemeral flags. Currently a no-op:
   // the submit splash now keys off path transition (not a one-shot flag),
@@ -297,18 +316,19 @@ function injectDemoTaggerData(targetStep: number) {
   callTutorialHook("setTaggerStep", targetStep);
 }
 
+// One shared object per tour, so re-injecting on every wizard step is a no-op
+// state update rather than a "new upload" that re-stages and re-profiles it.
+const DEMO_PARSED_DATASET = {
+  columns: ["email_text", "category"],
+  rows: DEMO_EMAIL_ROWS.map((row) => ({ ...row })),
+  rowCount: DEMO_EMAIL_ROWS.length,
+};
+const DEMO_COLUMN_ROLES = { email_text: "input", category: "output" } as const;
+
 /** Inject sample dataset + code into the wizard for the tutorial */
 function injectSampleDataset() {
-  const rows = DEMO_EMAIL_ROWS.map((row) => ({ ...row }));
-  callTutorialHook("setParsedDataset", {
-    columns: ["email_text", "category"],
-    rows,
-    rowCount: rows.length,
-  });
-  callTutorialHook("setColumnRoles", {
-    email_text: "input",
-    category: "output",
-  });
+  callTutorialHook("setParsedDataset", DEMO_PARSED_DATASET);
+  callTutorialHook("setColumnRoles", DEMO_COLUMN_ROLES);
   callTutorialHook("setDatasetFileName", "emails_sample.csv");
   callTutorialHook("setSignatureCode", DEMO_SIGNATURE_CODE);
   callTutorialHook("setMetricCode", DEMO_METRIC_CODE);

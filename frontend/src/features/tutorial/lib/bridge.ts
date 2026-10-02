@@ -74,6 +74,8 @@ export interface TutorialHooks {
   showTutorialSplash: () => void;
   /** Navigate via next/router without a full page reload. */
   routerPush: (path: string) => void;
+  /** Prefetch a route so a later navigation to it is instant. */
+  routerPrefetch: (path: string) => void;
   /** Inject demo jobs into the dashboard table when empty. */
   setDemoJobs: (data: PaginatedJobsResponse) => void;
   /** Inject demo analytics into the dashboard charts when empty. */
