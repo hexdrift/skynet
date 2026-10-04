@@ -23,11 +23,11 @@
     src: url("frontend/public/fonts/heebo-latin-wght-normal.woff2") format("woff2");
   }
   @font-face {
-    font-family: "Inter Variable";
+    font-family: "Geist Variable";
     font-style: normal;
     font-weight: 100 900;
     font-display: swap;
-    src: url("frontend/public/fonts/inter-latin-wght-normal.woff2") format("woff2");
+    src: url("frontend/public/fonts/geist-latin-wght-normal.woff2") format("woff2");
   }
   @font-face {
     font-family: "JetBrains Mono Variable";
@@ -141,7 +141,7 @@
     margin-bottom: 2rem;
   }
   header.doc-header .eyebrow {
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
     font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
@@ -150,7 +150,7 @@
     margin: 0 0 0.5rem;
   }
   h1, h2, h3 {
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
     font-weight: 700;
   }
   header.doc-header h1 {
@@ -183,7 +183,7 @@
   section > .sub { color: var(--text-2); margin: 0 0 1.25rem; max-width: 60ch; }
   h3 { font-size: 1.05rem; margin: 1.75rem 0 0.5rem; }
   h4 {
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
     font-size: 0.85rem;
     margin: 1.25rem 0 0.4rem;
     color: var(--text-2);
@@ -218,7 +218,7 @@
     font-weight: 600;
     font-size: 13px;
     color: var(--text-1);
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
   }
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover { background: var(--accent); }
@@ -262,7 +262,7 @@
     font-size: 14px;
   }
   .callout .label {
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
@@ -312,7 +312,7 @@
     box-shadow: var(--shadow-card);
   }
   .flow .step .num {
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
     font-size: 11px;
     font-weight: 700;
     color: var(--blue);
@@ -377,7 +377,7 @@
     background: var(--muted);
     border: 1px solid var(--border);
     border-radius: 8px;
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.01em;
@@ -464,7 +464,7 @@
   .seg-row .os-toggle { margin-top: 0; }
   .seg-group { display: flex; flex-direction: column; gap: 0.4rem; }
   .seg-label {
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
@@ -484,7 +484,7 @@
     background: var(--muted);
     border: 1px solid var(--border);
     border-radius: 8px;
-    font-family: "Inter Variable", "Heebo Variable", system-ui, sans-serif;
+    font-family: "Geist Variable", "Heebo Variable", system-ui, sans-serif;
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.01em;
@@ -718,7 +718,7 @@
 <section id="overview">
   <h2><a class="anchor" href="#overview">§</a>Overview</h2>
   <p data-deploy="k8s">Skynet runs as two pods (frontend + backend) plus an in-cluster migration Job, fronted by the OpenShift router. Every external dependency below resolves inside the air gap — your job is to point the chart at the right internal hosts.</p>
-  <p data-deploy="compose">Skynet runs as a backend API container plus a bundled <code>postgres:16-alpine</code> Postgres on a single host via Docker Compose — the fastest way to stand the app up inside the air gap. Every external dependency below still resolves internally; you point the backend's <code>.env</code> at the right internal hosts instead of a Helm values file. Start at <a href="#compose">Single-Host (Docker Compose)</a>.</p>
+  <p data-deploy="compose">Skynet runs as a backend API container, a Next.js frontend container, and a bundled <code>postgres:16-alpine</code> Postgres on a single host via Docker Compose — the fastest way to stand the app up inside the air gap. Every external dependency below still resolves internally; you point the backend's <code>.env</code> (and the frontend's <code>.env.local</code>) at the right internal hosts instead of a Helm values file. Start at <a href="#compose">Single-Host (Docker Compose)</a>.</p>
 
   <figure class="arch" data-deploy="k8s">
     <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc">
@@ -736,18 +736,18 @@
         </marker>
         <style>
           .zone { fill: rgba(240, 235, 228, 0.34); stroke: #ddd6cc; stroke-width: 1.1; }
-          .zone-title { font: 700 10px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #7c6350; letter-spacing: 0.08em; }
+          .zone-title { font: 700 10px "Geist Variable", "Heebo Variable", system-ui, sans-serif; fill: #7c6350; letter-spacing: 0.08em; }
           .node { fill: #fffdf9; stroke: #c8b9a8; stroke-width: 1.1; }
           .node-core { stroke: #3d2e22; stroke-width: 1.35; }
           .node-int { fill: #f5f1ec; }
           .node-opt { stroke-dasharray: 4 3; }
-          .node-title { font: 700 12px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #1c1612; }
+          .node-title { font: 700 12px "Geist Variable", "Heebo Variable", system-ui, sans-serif; fill: #1c1612; }
           .node-sub { font: 11px "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
           .lane { stroke-linecap: round; stroke-linejoin: round; fill: none; }
           .edge-required { stroke: #3d2e22; stroke-width: 1.35; marker-end: url(#arch-arrow-required); }
           .edge-optional { stroke: #8c7a6b; stroke-width: 1.15; stroke-dasharray: 4 4; marker-end: url(#arch-arrow-optional); }
           .edge-deploy { stroke: #9a6a10; stroke-width: 1.15; stroke-dasharray: 2 4; marker-end: url(#arch-arrow-deploy); }
-          .legend-label { font: 600 10.5px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
+          .legend-label { font: 600 10.5px "Geist Variable", "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
         </style>
       </defs>
 
@@ -828,7 +828,7 @@
   <figure class="arch" data-deploy="compose">
     <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title-c arch-desc-c">
       <title id="arch-title-c">Skynet single-host (Docker Compose) architecture</title>
-      <desc id="arch-desc-c">A Docker Compose host runs the backend and a bundled Postgres, connecting to internal model, directory, notification, package-mirror, and certificate services.</desc>
+      <desc id="arch-desc-c">A Docker Compose host runs the backend, the frontend and a bundled Postgres, connecting to internal model, directory, notification, package-mirror, and certificate services.</desc>
       <defs>
         <marker id="arch-arrow-required-c" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
           <path d="M0,0 L9,4.5 L0,9 z" fill="#3d2e22"/>
@@ -845,18 +845,18 @@
              non-marker classes are identical to the k8s figure's — harmless to
              redefine, and robust whichever figure is hidden. */
           .zone { fill: rgba(240, 235, 228, 0.34); stroke: #ddd6cc; stroke-width: 1.1; }
-          .zone-title { font: 700 10px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #7c6350; letter-spacing: 0.08em; }
+          .zone-title { font: 700 10px "Geist Variable", "Heebo Variable", system-ui, sans-serif; fill: #7c6350; letter-spacing: 0.08em; }
           .node { fill: #fffdf9; stroke: #c8b9a8; stroke-width: 1.1; }
           .node-core { stroke: #3d2e22; stroke-width: 1.35; }
           .node-int { fill: #f5f1ec; }
           .node-opt { stroke-dasharray: 4 3; }
-          .node-title { font: 700 12px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #1c1612; }
+          .node-title { font: 700 12px "Geist Variable", "Heebo Variable", system-ui, sans-serif; fill: #1c1612; }
           .node-sub { font: 11px "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
           .lane { stroke-linecap: round; stroke-linejoin: round; fill: none; }
           .edge-required-c { stroke: #3d2e22; stroke-width: 1.35; marker-end: url(#arch-arrow-required-c); }
           .edge-optional-c { stroke: #8c7a6b; stroke-width: 1.15; stroke-dasharray: 4 4; marker-end: url(#arch-arrow-optional-c); }
           .edge-deploy-c { stroke: #9a6a10; stroke-width: 1.15; stroke-dasharray: 2 4; marker-end: url(#arch-arrow-deploy-c); }
-          .legend-label { font: 600 10.5px "Inter Variable", "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
+          .legend-label { font: 600 10.5px "Geist Variable", "Heebo Variable", system-ui, sans-serif; fill: #5c4d40; }
         </style>
       </defs>
 
@@ -875,6 +875,10 @@
       <text x="110" y="198" class="node-title" text-anchor="middle">Reverse proxy</text>
       <text x="110" y="215" class="node-sub" text-anchor="middle">BYO TLS → :8000</text>
 
+      <rect class="node node-core" x="196" y="176" width="124" height="52" rx="7"/>
+      <text x="258" y="198" class="node-title" text-anchor="middle">Frontend</text>
+      <text x="258" y="215" class="node-sub" text-anchor="middle">Next.js · :3001</text>
+
       <rect class="node" x="48" y="262" width="272" height="52" rx="7"/>
       <text x="184" y="284" class="node-title" text-anchor="middle">docker compose · .env</text>
       <text x="184" y="301" class="node-sub" text-anchor="middle">backend/docker-compose.yml</text>
@@ -883,9 +887,10 @@
       <text x="430" y="62" class="zone-title">INTERNAL DEPENDENCIES</text>
 
       <path class="lane edge-required-c" d="M172 113 L196 113"/>
+      <path class="lane edge-required-c" d="M210 176 C204 160 182 150 166 144"/>
       <path class="lane edge-required-c" d="M172 102 C330 70 470 82 594 104"/>
       <path class="lane edge-optional-c" d="M172 124 C290 150 360 186 438 186"/>
-      <path class="lane edge-optional-c" d="M172 134 C320 235 480 222 594 192"/>
+      <path class="lane edge-optional-c" d="M172 136 C240 158 330 158 380 200 S540 236 594 204"/>
       <path class="lane edge-deploy-c" d="M320 286 C440 278 510 266 594 262"/>
       <path class="lane edge-deploy-c" d="M320 300 C360 305 400 309 438 309"/>
 
@@ -917,28 +922,31 @@
         <text x="152" y="4" class="legend-label">build / trust setup</text>
       </g>
     </svg>
-    <figcaption>Single host: <code>docker compose</code> runs the backend and a bundled <code>postgres:16-alpine</code> Postgres. Solid arrows are required at runtime, dashed are optional integrations, amber dotted are build-time / trust-bundle setup. The Next.js frontend and SSO are a separate concern.</figcaption>
+    <figcaption>Single host: <code>docker compose</code> runs the backend, the Next.js frontend and a bundled <code>postgres:16-alpine</code> Postgres. Solid arrows are required at runtime, dashed are optional integrations, amber dotted are build-time / trust-bundle setup. SSO (OIDC) is configured separately in the frontend's <code>.env.local</code>.</figcaption>
   </figure>
 </section>
 
 <section id="compose" data-deploy="compose">
   <h2><a class="anchor" href="#compose">§</a>Single-Host (Docker Compose)</h2>
-  <p>The fastest path inside the air gap: one backend API container plus a bundled <code>postgres:16-alpine</code> Postgres, defined in <code>backend/docker-compose.yml</code>. No Helm, no cluster, no separate migration Job — the backend creates its own schema on first boot. This brings up the <strong>backend service and its database</strong>; the Next.js frontend and SSO are a separate concern not covered by this compose file.</p>
+  <p>The fastest path inside the air gap: one backend API container (<code>api</code>), the Next.js frontend (<code>frontend</code>, built from <code>../frontend</code>) and a bundled <code>postgres:16-alpine</code> Postgres (<code>db</code>), all defined in <code>backend/docker-compose.yml</code>. No Helm, no cluster, no separate migration Job — the backend creates and migrates its own schema on boot. SSO is optional and configured in the frontend's <code>.env.local</code>; without it the frontend offers the dev login (see the warning under <a href="#must-change">Secrets You Must Change</a>).</p>
 
   <div class="callout">
     <span class="label">Prerequisites</span>
-    <p>Docker Engine with the Compose v2 plugin (<code>docker compose version</code>). Everything else — the <code>postgres:16-alpine</code> image and the backend image's build dependencies — comes from your internal mirrors via the build args below, so nothing touches Docker Hub or public PyPI.</p>
+    <p>Docker Engine with the Compose v2 plugin (<code>docker compose version</code>). Everything else — the <code>postgres:16-alpine</code> image and the backend and frontend images' build dependencies — comes from your internal mirrors via the build args below, so nothing touches Docker Hub, public PyPI or the public npm registry.</p>
   </div>
 
   <h3>1 · Configure <code>.env</code></h3>
   <p>Copy the template and change the placeholders (see <a href="#must-change">Secrets You Must Change</a>):</p>
-<pre><span data-os="unix">cd backend
-cp .env.example .env            <span class="c"># then edit .env</span></span><span data-os="win">cd backend
+<pre><span data-os="unix">cp frontend/.env.example frontend/.env.local   <span class="c"># then edit frontend/.env.local</span>
+cd backend
+cp .env.example .env            <span class="c"># then edit .env</span></span><span data-os="win">copy frontend\.env.example frontend\.env.local   <span class="c">REM then edit frontend\.env.local</span>
+cd backend
 copy .env.example .env          <span class="c">REM then edit .env</span></span></pre>
+  <p>Both files are required: Compose refuses to start without <code>backend/.env</code> or <code>frontend/.env.local</code>. In <code>.env.local</code> set <code>AUTH_SECRET</code>, the same <code>BACKEND_AUTH_SECRET</code> as the backend, and the <code>AUTH_SSO_*</code> values for your IdP. Compose sets the frontend's <code>BACKEND_INTERNAL_URL</code> to <code>http://api:8000</code> for you; <code>API_URL</code> (browser-reachable backend, default <code>http://localhost:8000</code>) and <code>AUTH_URL</code> (default <code>http://localhost:3001</code>) follow the <code>FRONTEND_API_URL</code> / <code>FRONTEND_URL</code> shell variables.</p>
   <p>At minimum set <code>POSTGRES_PASSWORD</code> (the bundled DB refuses to start without it), point <code>OPENAI_API_BASE</code> and the agent <code>*_BASE_URL</code> at your internal gateway, and set <code>OPENAI_API_KEY</code> to the token it expects. The exact model-id prefix and base-URL suffix depend on your gateway flavor — pick it with the <strong>LLM gateway</strong> selector above and copy the matching block from <a href="#egress">Runtime Egress</a>. Compose passes <code>.env</code> to the backend verbatim and composes <code>REMOTE_DB_URL</code> for you against the bundled <code>db</code> service, so you never hand-write a database URL.</p>
 
   <h3>2 · Point the build + image pulls at internal mirrors</h3>
-  <p>Set these before <code>up</code> so neither the Postgres image nor the backend build reaches a public registry:</p>
+  <p>Set these before <code>up</code> so neither the Postgres image nor the backend build reaches a public registry (the frontend build needs one extra step, below):</p>
 <pre><span data-os="unix">export REGISTRY_PREFIX=artifactory.example.com/docker-remote
 export DEBIAN_MIRROR=https://artifactory.example.com/debian-remote
 export PIP_INDEX_URL=https://artifactory.example.com/api/pypi/pypi-remote/simple
@@ -950,14 +958,15 @@ set DENO_DOWNLOAD_BASE=https://artifactory.example.com/github-remote/denoland/de
 set NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/</span></pre>
   <p><code>REGISTRY_PREFIX</code> prefixes the <code>postgres:16-alpine</code> image and the backend base image; <code>DEBIAN_MIRROR</code> / <code>PIP_INDEX_URL</code> feed the backend build. The image installs from <code>uv.lock</code> via <code>uv</code> by default — the <em>Installer · uv</em> selection.<span data-pkg="pip"> To build the pip path instead, add <code>PKG_MANAGER: pip</code> under <code>services.api.build.args</code> in <code>docker-compose.yml</code>; the compose file does not forward it by default.</span></p>
   <p>Every backend image, on either installer path, bakes in a Deno runtime and a warm <code>npm:pyodide</code> cache so the <em>Flex</em> module can execute its generated Python in a WASM sandbox at serve time. Behind an air-gap, point its two extra build-args at internal mirrors so the build fetches nothing public: <code>DENO_DOWNLOAD_BASE</code> at a mirror of the Deno GitHub release zips (default <code>https://github.com/denoland/deno/releases/download</code>) and <code>NPM_CONFIG_REGISTRY</code> at your npm proxy (for the ~14&nbsp;MB <code>pyodide</code> package). Compose forwards both from the environment, as in the block above. There is no build option that skips this layer.</p>
+  <p>The <code>frontend</code> service's build forwards only <code>NEXT_PUBLIC_SITE_URL</code> (from <code>FRONTEND_URL</code>). Add <code>BASE_IMAGE: artifactory.example.com/docker-remote/node:20-alpine</code> and <code>NPM_REGISTRY: https://artifactory.example.com/api/npm/npm-remote/</code> under <code>services.frontend.build.args</code> in <code>docker-compose.yml</code>, or that build pulls <code>node:20-alpine</code> from Docker Hub and packages from <code>registry.npmjs.org</code>.</p>
 
   <h3>3 · Bring it up</h3>
 <pre>docker compose up --build</pre>
-  <p>Add <code>-d</code> to run detached. On first connect the backend bootstraps its full schema under a Postgres advisory lock (<code>Base.metadata.create_all</code>), so a fresh database needs <strong>no</strong> manual migration.</p>
+  <p>Add <code>-d</code> to run detached. On every start the backend, under a Postgres advisory lock, creates any missing tables (<code>Base.metadata.create_all</code>) and then runs <code>alembic upgrade head</code>, so a fresh database needs <strong>no</strong> manual migration.</p>
 
   <h3>4 · Smoke test</h3>
 <pre><span data-os="unix">curl -f http://localhost:8000/health</span><span data-os="win">curl.exe -f http://localhost:8000/health</span></pre>
-  <p>The API listens on host port <code>8000</code>, Postgres on <code>5432</code>. The backend serves plain HTTP — put your own reverse proxy in front of <code>:8000</code> if you need TLS; Compose terminates none.</p>
+  <p>The API listens on host port <code>8000</code>, the frontend on <code>3001</code>, Postgres on <code>5432</code>. Both serve plain HTTP — put your own reverse proxy in front of <code>:8000</code> and <code>:3001</code> if you need TLS; Compose terminates none.</p>
 
   <h3>Search backend on Compose</h3>
   <ul>
@@ -966,11 +975,8 @@ set NPM_CONFIG_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/</spa
   </ul>
 
   <h3>Upgrades &amp; persistence</h3>
-  <p>Data lives in the named volume <code>skynet-pgdata</code>. The first-boot bootstrap only <em>creates</em> missing tables (current as of the running image) — it records no Alembic version and never alters an existing schema. To track it for future delta migrations, stamp it once at the head the image already built, then upgrade through new revisions when you move to a newer image:</p>
-<pre><span class="c"># one-time: adopt the auto-created schema into Alembic</span>
-docker compose run --rm api alembic stamp head
-
-<span class="c"># later, after pulling a newer backend image:</span>
+  <p>Data lives in the named volume <code>skynet-pgdata</code>. Because every boot runs <code>alembic upgrade head</code> after the table bootstrap, the database is recorded at the image's head (currently <code>0002_drop_agent_memory</code>) automatically, and a newer image applies its pending revisions on its first start — no manual <code>stamp</code>. To run the migration explicitly before the new image starts serving:</p>
+<pre><span class="c"># after pulling a newer backend image:</span>
 docker compose run --rm api alembic upgrade head
 docker compose up --build -d</pre>
   <p>Take a <code>pg_dump</code> (or snapshot the <code>skynet-pgdata</code> volume) before every upgrade — some revisions are destructive, and the pre-upgrade dump is the only real recovery path.</p>
@@ -983,10 +989,11 @@ docker compose up --build -d</pre>
   <table>
     <thead><tr><th style="width:22%">Value</th><th style="width:22%">Ships as</th><th>Set it to / failure mode</th></tr></thead>
     <tbody>
-      <tr><td><code>POSTGRES_PASSWORD</code></td><td><code>replace-me</code></td><td>A strong random string. Compose's <code>db</code> refuses to start without it; on Helm it backs the <code>skynet-db-password</code> Secret.</td></tr>
-      <tr><td><code>OPENAI_API_KEY</code></td><td><code>replace-me</code></td><td>The bearer token your internal LLM gateway expects (any non-empty placeholder like <code>not-needed</code> for an unauthenticated gateway — an <em>empty</em> value can break client init).</td></tr>
-      <tr><td><code>BACKEND_AUTH_SECRET</code></td><td><code>change-me-in-production</code></td><td>One <code>openssl rand -base64 32</code>, <strong>byte-identical</strong> in the backend and frontend. Mismatch ⇒ every admin API call returns <code>401</code>; unset on the backend ⇒ <code>500 auth.not_configured</code>. Rotating it needs a coordinated restart of both.</td></tr>
-      <tr><td><code>AUTH_SECRET</code></td><td><code>change-me-in-production</code></td><td>A separate <code>openssl rand -base64 32</code> for NextAuth session signing (frontend, from <code>frontend/.env.example</code>). Generate your own; don't ship the placeholder.</td></tr>
+      <tr><td><code>POSTGRES_PASSWORD</code></td><td><code>change-me</code></td><td>A strong random string. Compose's <code>db</code> refuses to start without it; on Helm it backs the <code>skynet-db-password</code> Secret.</td></tr>
+      <tr><td><code>OPENAI_API_KEY</code></td><td><code>change-me</code></td><td>The bearer token your internal LLM gateway expects (any non-empty placeholder like <code>not-needed</code> for an unauthenticated gateway — an <em>empty</em> value can break client init).</td></tr>
+      <tr><td><code>BACKEND_AUTH_SECRET</code></td><td><code>change-me</code></td><td>One <code>openssl rand -base64 32</code>, <strong>byte-identical</strong> in the backend and frontend. Mismatch ⇒ every admin API call returns <code>401</code>; unset on the backend ⇒ <code>500 auth.not_configured</code>. Rotating it needs a coordinated restart of both.</td></tr>
+      <tr><td><code>AUTH_SECRET</code></td><td><code>change-me</code></td><td>A separate <code>openssl rand -base64 32</code> for NextAuth session signing (frontend, from <code>frontend/.env.example</code>). Generate your own; don't ship the placeholder.</td></tr>
+      <tr><td><code>BYOK_VAULT_KEY</code></td><td><code>change-me</code></td><td>A Fernet key (<code>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>) that encrypts users' saved provider keys at rest. The placeholder is not a valid Fernet key, so saving a key fails; unset, saving returns <code>503 byok.not_configured</code>. Changing it later makes stored keys unreadable.</td></tr>
     </tbody>
   </table>
 
@@ -1293,7 +1300,8 @@ scripts\airgap_migrate.bat push-images</span></pre>
 docker build frontend \
   -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 \
   --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine \
-  --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
+  --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ \
+  --build-arg NEXT_PUBLIC_SITE_URL=https://skynet.apps.cluster.internal
 
 docker push artifactory.example.com/skynet/skynet/backend:2026.04.30
 docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span><span data-os="win">docker build backend ^
@@ -1309,7 +1317,8 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span><spa
 docker build frontend ^
   -t artifactory.example.com/skynet/skynet/frontend:2026.04.30 ^
   --build-arg BASE_IMAGE=artifactory.example.com/docker-remote/node:20-alpine ^
-  --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/
+  --build-arg NPM_REGISTRY=https://artifactory.example.com/api/npm/npm-remote/ ^
+  --build-arg NEXT_PUBLIC_SITE_URL=https://skynet.apps.cluster.internal
 
 docker push artifactory.example.com/skynet/skynet/backend:2026.04.30
 docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span></pre>
@@ -1328,6 +1337,7 @@ docker push artifactory.example.com/skynet/skynet/frontend:2026.04.30</span></pr
     <li><strong>Python packages:</strong> pass <code>PIP_INDEX_URL</code> and <code>PIP_TRUSTED_HOST</code>. The backend image installs from <code>uv.lock</code> via <code>uv</code> by default; add <code>--build-arg PKG_MANAGER=pip</code> to install the equivalent pinned <code>requirements.txt</code> with <code>pip</code> instead. Both resolve to the same wheel set.</li>
     <li><strong>Deno and Pyodide (backend):</strong> the backend image always installs a Deno binary and caches <code>npm:pyodide</code> for the <em>Flex</em> sandbox. Pass <code>DENO_DOWNLOAD_BASE</code> pointing at a mirror of the Deno GitHub release zips and <code>NPM_CONFIG_REGISTRY</code> pointing at your npm proxy, or the backend build reaches <code>github.com</code> and <code>registry.npmjs.org</code>.</li>
     <li><strong>npm packages:</strong> pass <code>NPM_REGISTRY</code>; the Dockerfile sets <code>replace-registry-host=always</code> so lockfile tarball hosts are rewritten to the mirror.</li>
+    <li><strong>Frontend build-time values:</strong> Next.js inlines <code>NEXT_PUBLIC_SITE_URL</code> (the public origin used in page metadata, <code>robots.txt</code> and <code>sitemap.xml</code>) and <code>NEXT_PUBLIC_FEATURE_GENERALIST_AGENT</code> at build time, so pass them as <code>--build-arg</code>; <code>build-images</code> does not forward them. The generalist agent panel ships enabled when the flag is unset — pass <code>NEXT_PUBLIC_FEATURE_GENERALIST_AGENT=0</code> to build an image without it.</li>
     <li><strong>Helm images:</strong> set <code>global.imageRegistry</code> and <code>global.imagePullSecrets</code> in the generated values file. That prefixes backend, frontend, and <code>postgres</code> images.</li>
   </ul>
 </section>
@@ -1536,7 +1546,7 @@ BACKEND_AUTH_SECRET</pre>
 <span class="c">REM wrote offline migration SQL: .\migration.sql</span></span></pre>
 
   <p>Under the hood this calls <code>alembic upgrade head --sql</code> against the same <code>alembic/env.py</code> the Job uses, so the offline output is byte-for-byte the DDL the cluster will run. Review <code>./migration.sql</code>, then proceed to <code>build-images</code> / <code>install</code>.</p>
-  <p>The chain is a single schema-creation revision with <strong>no data backfills</strong>, so the offline dump is the complete DDL — what you review in <code>migration.sql</code> is exactly what the in-cluster Job executes.</p>
+  <p>The chain is two revisions — the <code>0001_onprem</code> schema baseline and <code>0002_drop_agent_memory</code>, which drops the removed agent memory tables (<code>DROP TABLE IF EXISTS</code>) — with <strong>no data backfills</strong>, so the offline dump is the complete DDL — what you review in <code>migration.sql</code> is exactly what the in-cluster Job executes.</p>
 
   <h3>In-cluster migration Job</h3>
   <p>The Helm chart runs a pre-install/pre-upgrade Job:</p>
@@ -1698,7 +1708,7 @@ helm upgrade --install skynet deploy\helm\skynet ^
       <tr><td><code>TAGGER_ASSIST_BASE_URL</code> (optional)</td><td><code>TAGGER_ASSIST_MODEL</code> (optional)</td></tr>
     </tbody>
   </table>
-  <p>Both agent model ids default to the <strong>inert alias</strong> <code>openai/on-prem-default</code> (<code>DEFAULT_AGENT_MODEL_ID</code>) — no gateway serves it, so unconfigured agents fail fast instead of silently reaching a public provider. Set every base URL to your internal gateway; the <code>*_MODEL</code> ids must exactly match models your gateway serves (the <code>gpt-5</code> value in the generated values file is only a placeholder). <code>TAGGER_ASSIST_MODEL</code> / <code>TAGGER_ASSIST_BASE_URL</code> are optional — left empty, the tagging assist reuses the generalist pair, so it stays internal automatically.</p>
+  <p>Both agent model ids default to the <strong>inert alias</strong> <code>openai/on-prem-default</code> (<code>DEFAULT_AGENT_MODEL_ID</code>) — no gateway serves it, so unconfigured agents fail fast instead of silently reaching a public provider. Set every base URL to your internal gateway (an empty agent <code>*_BASE_URL</code> falls back to <code>OPENAI_API_BASE</code>); the <code>*_MODEL</code> ids must exactly match models your gateway serves (the <code>gpt-5</code> value in the generated values file is only a placeholder). <code>TAGGER_ASSIST_MODEL</code> / <code>TAGGER_ASSIST_BASE_URL</code> are optional — left empty, the tagging assist reuses the generalist pair, so it stays internal automatically.</p>
 
   <div class="callout">
     <span class="label">TODO · On-premise</span>
@@ -1752,7 +1762,22 @@ OPENAI_API_KEY=<span class="s">&lt;resource api-key&gt;</span></pre>
     <li>Backend (and the pre-install migration Job) to Postgres — the cluster/service network for the bundled DB, or the managed DB endpoint on port <code>5432</code>.</li>
     <li>Backend to AD / LDAP, only when the optional LDAP user search is configured.</li>
   </ul>
-  <p>Notifications are <strong>email-only</strong>; there is no outbound notification webhook.</p>
+  <p>The only <strong>required</strong> runtime dependencies are the on-prem OpenAI-compatible LLM gateway and Postgres. There are no sandbox services to run: the <em>Flex</em> module's Python executes in-process through the Deno/Pyodide layer baked into the backend image.</p>
+
+  <h4>Off by default — outbound only when you set it</h4>
+  <table>
+    <thead><tr><th style="width:34%">Setting</th><th>Reaches</th></tr></thead>
+    <tbody>
+      <tr><td><code>POSTHOG_PROJECT_API_KEY</code></td><td>PostHog at <code>POSTHOG_HOST</code>, which defaults to the EU cloud (<code>https://eu.i.posthog.com</code>). Unset keeps telemetry entirely in Postgres; if you enable it, point <code>POSTHOG_HOST</code> at an internal instance.</td></tr>
+      <tr><td><code>LOG_SHIP_URL</code> (+ <code>LOG_SHIP_TOKEN</code>)</td><td>An HTTP log-ingest endpoint. Unset, logs go to stdout only.</td></tr>
+      <tr><td><code>ALERT_WEBHOOK_URL</code></td><td>A Slack-compatible chat webhook for operational alerts (unhandled 500s, a dead worker). Unset, alerts stay in the logs.</td></tr>
+      <tr><td><code>SMTP_HOST</code> (+ <code>SMTP_PORT</code>, <code>SMTP_USERNAME</code>, <code>SMTP_PASSWORD</code>, <code>SMTP_FROM</code>, <code>SMTP_STARTTLS</code>)</td><td>The internal SMTP relay, for notification emails and <code>ALERT_EMAIL</code> alerts. Unset, no email is sent.</td></tr>
+      <tr><td><code>AD_LDAP_URL</code></td><td>AD / LDAP, for the optional directory search (see <a href="#ldap">LDAP / AD User Search</a>).</td></tr>
+      <tr><td><code>AUTH_SSO_ISSUER</code> (frontend)</td><td>The OIDC issuer (see <a href="#oidc">ADFS / OIDC Setup</a>).</td></tr>
+      <tr><td><code>LITELLM_PROXY_URL</code></td><td>An optional operator-run LiteLLM proxy for managed calls.</td></tr>
+      <tr><td>Public provider keys (<code>ANTHROPIC_API_KEY</code>, <code>FIREWORKS_AI_API_KEY</code>, <code>GROQ_API_KEY</code>, <code>GEMINI_API_KEY</code>, <code>MISTRAL_API_KEY</code>, …)</td><td>On boot the model catalog calls the public <code>/models</code> endpoint of most providers whose key is set (e.g. <code>GET https://api.groq.com/openai/v1/models</code>). Leave them all unset. <code>OPENAI_API_KEY</code> is probed against <code>OPENAI_API_BASE</code> when that is set, and against <code>api.openai.com</code> only when it is not.</td></tr>
+    </tbody>
+  </table>
 
   <div data-deploy="k8s">
   <h4>Egress slots the chart supports</h4>
@@ -1770,9 +1795,11 @@ OPENAI_API_KEY=<span class="s">&lt;resource api-key&gt;</span></pre>
   <p>When <code>postgres.enabled=false</code>, you <strong>must</strong> set <code>networkPolicy.dbEgress</code>. Without it, default-deny blocks both the backend connection pool and the pre-install migration Job from reaching the managed DB, so the install aborts on the migration hook and the backend pods crash-loop. Set <code>DB_EGRESS_CIDR</code> before running <code>values</code> to emit it.</p>
   </div>
 
-  <h4>Known risky endpoint by design</h4>
+  <h4>Known risky endpoints by design</h4>
   <ul>
     <li><code>POST /models/discover</code> accepts a user-supplied <code>base_url</code> so operators can discover models from an internal OpenAI-compatible gateway. In an air gap, enforce egress with NetworkPolicy/firewall rules.</li>
+    <li><code>POST /mcp/probe</code> and ReAct runs that name an MCP server connect to a user-supplied <code>mcp_url</code>.</li>
+    <li>BYOK provider connections saved under Settings (<code>/byok/keys</code>) call the provider or custom endpoint the user entered, directly — they bypass <code>LITELLM_PROXY_URL</code>.</li>
   </ul>
 
   <p data-deploy="k8s">The generated values file sets these slots to placeholders. Tighten every one to exact internal CIDRs.</p>
@@ -1789,8 +1816,9 @@ OPENAI_API_KEY=<span class="s">&lt;resource api-key&gt;</span></pre>
   <ul>
     <li><strong>Both agents</strong> default to the inert alias <code>openai/on-prem-default</code> (<code>DEFAULT_AGENT_MODEL_ID</code>), which no provider serves — unconfigured agents fail fast rather than phoning a public API. Override <code>CODE_AGENT_MODEL</code> + <code>CODE_AGENT_BASE_URL</code> <em>and</em> <code>GENERALIST_AGENT_MODEL</code> + <code>GENERALIST_AGENT_BASE_URL</code> to your internal gateway (see the <a href="#egress">gateway-flavor blocks</a>). <code>TAGGER_ASSIST_MODEL</code> / <code>TAGGER_ASSIST_BASE_URL</code> may stay empty — they fall back to the generalist pair.</li>
     <li><strong><code>DISCOVER_ALLOW_PRIVATE</code> is the counterintuitive one.</strong> If you use <code>POST /models/discover</code> to enumerate models from an internal gateway on a private (RFC1918, e.g. <code>10.x</code>) address, set <code>DISCOVER_ALLOW_PRIVATE=true</code> — the default <code>false</code> blocks it as SSRF protection, so discovery against your own gateway fails closed. Loopback (Ollama on <code>localhost</code>) always works; cloud-metadata IPs (<code>169.254.169.254</code>) stay blocked regardless.</li>
-    <li><strong>Leave <code>ANTHROPIC_API_KEY</code> / <code>FIREWORKS_AI_API_KEY</code> unset.</strong> They only matter for public providers; an empty <code>*_BASE_URL</code> paired with one of these set is how the agent (and the grounding scorer) silently reach a public API.</li>
-    <li><strong>Already handled for you:</strong> <code>LITELLM_LOCAL_MODEL_COST_MAP=True</code> is baked into the backend image and chart, so LiteLLM uses its bundled cost map instead of fetching it from GitHub on import, and LiteLLM telemetry is off. Don't unset them.</li>
+    <li><strong>Leave every public provider key unset</strong> (<code>ANTHROPIC_API_KEY</code>, <code>FIREWORKS_AI_API_KEY</code>, <code>GROQ_API_KEY</code>, …). They only matter for public providers: with one set, the model catalog may probe that provider on boot, and an empty <code>*_BASE_URL</code> (with <code>OPENAI_API_BASE</code> also unset) paired with it is how an agent silently reaches a public API. Set <code>OPENAI_API_BASE</code> whenever <code>OPENAI_API_KEY</code> is set, or the catalog probes <code>api.openai.com</code>.</li>
+    <li><strong>Keep the other exports off</strong> — <code>POSTHOG_PROJECT_API_KEY</code>, <code>LOG_SHIP_URL</code>, <code>ALERT_WEBHOOK_URL</code> — or point them at internal hosts. Note <code>POSTHOG_HOST</code> defaults to the public EU cloud (see <a href="#egress">Runtime Egress</a>).</li>
+    <li><strong>Already handled for you:</strong> <code>LITELLM_LOCAL_MODEL_COST_MAP=True</code> is baked into the backend image and chart, so LiteLLM uses its bundled cost map instead of fetching it from GitHub on import. Don't unset it.</li>
   </ul>
 </section>
 
@@ -1887,7 +1915,7 @@ kubectl -n skynet exec deploy/skynet-skynet-frontend -- ^
     <li>Scalar API docs are vendored under <code>backend/core/api/static/scalar/</code>.</li>
     <li>Fonts are bundled through npm packages, not Google Fonts. Notification emails no longer reference Google Fonts either — they use self-hosted or system-fallback fonts only.</li>
     <li>Explore search defaults to <strong>lexical</strong> (<code>SEARCH_BACKEND=lexical</code>) on a <strong>vanilla Postgres with no extensions</strong> — the migrate Job never runs <code>CREATE EXTENSION</code>, so the default deployment needs no extension. <code>SEARCH_BACKEND=bm25</code> adds ranked lexical search via <code>pg_search</code> (ILIKE fallback).</li>
-    <li>LiteLLM telemetry is disabled in backend configuration, and <code>LITELLM_LOCAL_MODEL_COST_MAP</code> pins it to its bundled cost map so it does not fetch the cost map from GitHub on import.</li>
+    <li><code>LITELLM_LOCAL_MODEL_COST_MAP</code> pins LiteLLM to its bundled cost map so it does not fetch the cost map from GitHub on import.</li>
     <li>Storage is Postgres; there is no S3/GCS/Azure Blob dependency.</li>
     <li>Auth is Credentials plus generic OIDC; no Google/GitHub OAuth provider is configured.</li>
   </ul>
@@ -1901,7 +1929,7 @@ kubectl -n skynet exec deploy/skynet-skynet-frontend -- ^
     <li>Creating Kubernetes Secrets and rotating credentials.</li>
     <li>Supplying exact NetworkPolicy CIDRs for IdP, LLM gateway, LDAP, and DB.</li>
     <li>Backing up and restoring Postgres.</li>
-    <li>Choosing internal model IDs exposed by your LLM gateway. The generated values default <code>CODE_AGENT_MODEL</code> and <code>GENERALIST_AGENT_MODEL</code> to <code>gpt-5</code>; change them if your gateway exposes different names. Leaving <code>CODE_AGENT_BASE_URL</code> / <code>GENERALIST_AGENT_BASE_URL</code> empty leaves the inert <code>openai/on-prem-default</code> alias in place — agent calls fail until both pairs point at your gateway.</li>
+    <li>Choosing internal model IDs exposed by your LLM gateway. The generated values default <code>CODE_AGENT_MODEL</code> and <code>GENERALIST_AGENT_MODEL</code> to <code>gpt-5</code>; change them if your gateway exposes different names. An empty <code>CODE_AGENT_BASE_URL</code> / <code>GENERALIST_AGENT_BASE_URL</code> falls back to <code>OPENAI_API_BASE</code>; an empty <code>CODE_AGENT_MODEL</code> / <code>GENERALIST_AGENT_MODEL</code> leaves the inert <code>openai/on-prem-default</code> alias in place — agent calls fail until both pairs point at your gateway.</li>
   </ul>
 </section>
 
