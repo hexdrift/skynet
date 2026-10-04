@@ -59,6 +59,8 @@ services:
       context: ../frontend
       dockerfile: Dockerfile
       args:
+        BASE_IMAGE: ${REGISTRY_PREFIX:-docker.io}/node:20-alpine
+        NPM_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}
         NEXT_PUBLIC_SITE_URL: ${FRONTEND_URL:-http://localhost:3001}
     ports:
       - "3001:3001"
