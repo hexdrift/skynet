@@ -202,7 +202,7 @@ more-itertools==11.1.0
     # via
     #   jaraco-classes
     #   jaraco-functools
-multidict==6.9.0
+multidict==7.0.0
     # via
     #   aiohttp
     #   yarl
