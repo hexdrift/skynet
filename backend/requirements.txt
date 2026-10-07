@@ -35,9 +35,9 @@ backports-tarfile==1.2.0 ; python_full_version < '3.12'
     # via jaraco-context
 beartype==0.22.9
     # via py-key-value-aio
-boto3==1.43.98
+boto3==1.43.108
     # via litellm
-botocore==1.43.98
+botocore==1.43.108
     # via
     #   boto3
     #   s3transfer
@@ -45,7 +45,7 @@ cachetools==7.2.0
     # via
     #   dspy
     #   py-key-value-aio
-caio==0.12.4
+caio==0.12.9
     # via aiofile
 certifi==2026.7.22
     # via
@@ -54,7 +54,7 @@ certifi==2026.7.22
     #   requests
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
     # via cryptography
-charset-normalizer==3.5.1
+charset-normalizer==3.5.2
     # via requests
 click==8.5.0
     # via
@@ -66,7 +66,7 @@ cloudpickle==3.1.2
     # via dspy
 colorama==0.4.6 ; sys_platform == 'win32'
     # via tqdm
-cryptography==50.0.1
+cryptography==50.0.2
     # via
     #   authlib
     #   joserfc
@@ -82,13 +82,13 @@ dnspython==2.8.0
     # via email-validator
 docstring-parser==0.18.0
     # via cyclopts
-dspy==3.3.1
+dspy==3.4.0
     # via skynet
 email-validator==2.3.0
     # via pydantic
 exceptiongroup==1.3.1
     # via fastmcp-slim
-fastapi==0.141.1
+fastapi==0.142.2
     # via
     #   scalar-fastapi
     #   skynet
@@ -112,7 +112,7 @@ gepa==0.1.4
     #   skynet
 greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
-griffelib==2.0.2
+griffelib==2.3.0
     # via fastmcp-slim
 h11==0.16.0
     # via
@@ -166,7 +166,7 @@ joserfc==1.7.5
     # via
     #   authlib
     #   fastmcp-slim
-json-repair==0.63.4
+json-repair==0.63.5
     # via dspy
 jsonref==1.1.0
     # via fastmcp-slim
@@ -182,15 +182,15 @@ keyring==25.7.0
     # via py-key-value-aio
 ldap3==2.9.1
     # via skynet
-litellm==1.102.0
+litellm==1.104.0
     # via
     #   dspy
     #   skynet
-mako==1.4.1
+mako==1.4.3
     # via alembic
 markdown-it-py==4.2.0
     # via rich
-markupsafe==3.0.3
+markupsafe==3.0.4
     # via
     #   jinja2
     #   mako
@@ -214,9 +214,9 @@ openai==2.24.0
     # via
     #   dspy
     #   litellm
-openapi-pydantic==0.5.1
+openapi-pydantic==0.6.0
     # via fastmcp-slim
-opentelemetry-api==1.44.0
+opentelemetry-api==1.45.0
     # via fastmcp-slim
 orjson==3.12.0
     # via dspy
@@ -226,7 +226,7 @@ packaging==26.3
     #   huggingface-hub
 pathable==0.6.0
     # via jsonschema-path
-platformdirs==4.11.11
+platformdirs==4.12.3
     # via fastmcp-slim
 prometheus-client==0.26.0
     # via
@@ -240,7 +240,7 @@ propcache==0.5.4
     #   yarl
 psycopg2-binary==2.9.13
     # via skynet
-py-key-value-aio==0.4.4
+py-key-value-aio==0.4.6
     # via fastmcp-slim
 pyasn1==0.6.4
     # via ldap3
@@ -258,7 +258,7 @@ pydantic==2.13.5
     #   pydantic-settings
     #   scalar-fastapi
     #   skynet
-pydantic-core==2.46.5
+pydantic-core==2.49.0
     # via pydantic
 pydantic-settings==2.15.0
     # via
@@ -270,13 +270,13 @@ pygments==2.21.0
     # via
     #   rich
     #   rich-rst
-pyjwt==2.14.0
+pyjwt==2.15.1
     # via mcp
 pyperclip==1.11.0
     # via fastmcp-slim
 python-dateutil==2.9.0.post0
     # via botocore
-python-dotenv==1.2.3
+python-dotenv==1.2.4
     # via
     #   fastmcp-slim
     #   litellm
@@ -302,7 +302,7 @@ referencing==0.37.0
     #   jsonschema
     #   jsonschema-path
     #   jsonschema-specifications
-regex==2026.9.10
+regex==2026.9.29
     # via
     #   dspy
     #   tiktoken
@@ -316,15 +316,15 @@ rich==15.0.0
     #   cyclopts
     #   fastmcp-slim
     #   rich-rst
-rich-rst==2.1.0
+rich-rst==2.2.0
     # via cyclopts
-rpds-py==2026.6.3
+rpds-py==2026.9.1
     # via
     #   jsonschema
     #   referencing
 s3transfer==0.19.2
     # via boto3
-scalar-fastapi==1.9.0
+scalar-fastapi==1.9.1
     # via skynet
 scipy==1.17.1
     # via skynet
@@ -334,13 +334,13 @@ six==1.17.0
     # via python-dateutil
 sniffio==1.3.1
     # via openai
-sqlalchemy==2.0.54
+sqlalchemy==2.1.3
     # via
     #   alembic
     #   skynet
-sse-starlette==3.4.11
+sse-starlette==3.5.0
     # via mcp
-starlette==1.6.0
+starlette==1.7.0
     # via
     #   fastapi
     #   fastmcp-slim
@@ -391,18 +391,18 @@ urllib3==2.8.0
     # via
     #   botocore
     #   requests
-uvicorn==0.53.0
+uvicorn==0.54.0
     # via
     #   fastmcp-slim
     #   mcp
     #   skynet
-watchfiles==1.2.0
+watchfiles==1.3.0
     # via fastmcp-slim
-websockets==17.1
+websockets==17.2
     # via fastmcp-slim
 yarl==1.25.1
     # via aiohttp
-zipp==4.1.0
+zipp==4.1.1
     # via importlib-metadata
 # Pinned dependency set for the pip install path (PKG_MANAGER=pip) — the
 # lockfile-equivalent of uv.lock. uv.lock remains the source of truth. The
