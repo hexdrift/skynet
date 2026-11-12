@@ -98,7 +98,7 @@ fastmcp-slim==3.4.7
     # via fastmcp
 fastuuid==0.14.0
     # via litellm
-filelock==3.28.0
+filelock==4.0.4
     # via huggingface-hub
 frozenlist==1.8.0
     # via
