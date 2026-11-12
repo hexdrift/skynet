@@ -92,7 +92,7 @@ fastapi==0.141.1
     # via
     #   scalar-fastapi
     #   skynet
-fastmcp==3.4.7
+fastmcp==4.0.10
     # via skynet
 fastmcp-slim==3.4.7
     # via fastmcp
