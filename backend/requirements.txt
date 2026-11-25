@@ -140,7 +140,7 @@ idna==3.20
     #   httpx
     #   requests
     #   yarl
-importlib-metadata==8.5.0
+importlib-metadata==10.2.0
     # via
     #   keyring
     #   litellm
